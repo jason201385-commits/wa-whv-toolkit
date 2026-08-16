@@ -151,6 +151,58 @@ ok("稅永遠不超過收入本身",
   [1, 1000, 45000, 46000, 135000, 200000].every(
     y => sandbox.whmTaxCents(c(y), true) <= c(y) && sandbox.whmTaxCents(c(y), false) <= c(y)));
 
+/* ---------------------------------------------------------------------------
+   第三、四級距。這一段是 2026-08-16 的回歸測試，成因寫在下面，不要刪。
+
+   舊的 whmTaxCents() 兩條 return 都以 `+ Math.max(0, annualCents - b2)` 結尾——
+   超過 $135,000 的部分被「原封不動加進稅裡」，也就是**邊際稅率 100%**。
+   時薪 $40 × 每週 70 小時（護欄是 80，所以進得來）年化 $145,600：
+   站上算 $44,350，ATO 是 $33,750 + $10,600×0.37 = $37,672，一年多扣 $6,678。
+
+   上面那條「稅永遠不超過收入本身」的斷言涵蓋了 y=200000，**而且是綠的**——
+   $98,750 ≤ $200,000 成立。斷言蓋到了出錯的區間卻沒有鑑別力，比沒有更糟：
+   它讓人以為那一段測過了。所以這裡改測邊際稅率，不測「小於收入」。
+   --------------------------------------------------------------------------- */
+console.log("\n— 第三、四級距與邊際稅率（回歸：曾經是 100%）—");
+const TOP = C.tax.r4;
+for (const reg of [true, false]) {
+  const label = reg ? "有登記" : "沒登記";
+  let worst = 0, worstAt = 0;
+  for (let y = 1000; y <= 260000; y += 1000) {
+    const mr = (sandbox.whmTaxCents(c(y + 1000), reg) - sandbox.whmTaxCents(c(y), reg)) / c(1000);
+    if (mr > worst) { worst = mr; worstAt = y; }
+  }
+  ok(`${label}：邊際稅率全程不超過法定最高 ${TOP * 100}%`,
+    worst <= TOP + 1e-9, `最高 ${(worst * 100).toFixed(1)}% 出現在 $${worstAt.toLocaleString()}`);
+  ok(`${label}：稅額單調遞增，不會多賺反而多拿`,
+    [46000, 135000, 136000, 190000, 191000, 250000].every(
+      y => sandbox.whmTaxCents(c(y), reg) > sandbox.whmTaxCents(c(y - 1000), reg)));
+}
+/* 級距端點的累計金額直接抄 ATO 表，不是從程式推回來的。 */
+for (const [y, want] of [[135000, 33750], [145600, 37672], [190000, 54100], [200000, 58600]]) {
+  ok(`有登記 $${y.toLocaleString()} → $${want.toLocaleString()}（ATO 2025–26）`,
+    sandbox.whmTaxCents(c(y), true) === c(want),
+    "實得 " + sandbox.whmTaxCents(c(y), true) / 100);
+}
+for (const [y, want] of [[135000, 40500], [190000, 60850], [200000, 65350]]) {
+  ok(`沒登記 $${y.toLocaleString()} → $${want.toLocaleString()}（外國居民表）`,
+    sandbox.whmTaxCents(c(y), false) === c(want),
+    "實得 " + sandbox.whmTaxCents(c(y), false) / 100);
+}
+ok("沒登記在任何收入下都不會比有登記划算",
+  [1, 45000, 135000, 145600, 190000, 250000].every(
+    y => sandbox.whmTaxCents(c(y), false) >= sandbox.whmTaxCents(c(y), true)));
+
+/* 從 UI 進得去的那一格：護欄放行 80 小時，所以高時薪一定會跨到第三級距。 */
+(function () {
+  const r = runCost({ rate: 40, hours: 70, reg: "reg" });
+  const want = (Math.round(c(37672) / 52) / 100).toFixed(2);   /* $724.46／週 */
+  ok("$40×70h 走 UI 進來，預扣稅要對得上第三級距（$" + want + "／週）",
+    r.html.includes(want),
+    "畫面上找不到 " + want + "；判定「" + r.verdict + "」");
+  ok("$40×70h 的預扣比例不得再被印成 15%", !r.clip.includes("WHM 15%"), r.clip.split("\n")[1]);
+})();
+
 /* ---------------------------------------------------------------- 輸入護欄 */
 console.log("\n— 護欄：算不出來就不要硬算 —");
 t("沒填時薪不判定", { hours: 38 }, { tone: "warn", verdictHas: "請先填時薪" });
@@ -244,7 +296,14 @@ console.log("\n— 每一項換算成「要工作幾小時」—");
 (function () {
   const r = runCost({ rate: 30, hours: 40, rent: 200, food: 100 });
   ok("每一筆支出都附上工時", (r.html.match(/你要工作 <strong>/g) || []).length === 2);
-  ok("有總計「其中幾小時是在付這些」", r.html.includes("小時</strong>是在付這三項"));
+  ok("有總計「其中幾小時是在付這 N 項」", r.html.includes("小時</strong>是在付這 2 項"));
+  /* 舊版不管填幾項都寫「這三項」。只填房租的人看到「這三項」會以為工具算錯。 */
+  const one = runCost({ rate: 30, hours: 40, rent: 200 });
+  ok("只填一項時要指名那一項，不得說「這三項」",
+    one.html.includes("是在付房租") && !one.html.includes("這三項"),
+    (one.html.match(/是在付[^<）]*/) || [""])[0]);
+  const three = runCost({ rate: 30, hours: 40, rent: 200, food: 100, trans: "cash" });
+  ok("三項都填才會出現「這 3 項」", three.html.includes("是在付這 3 項"));
 })();
 
 /* ---------------------------------------------------------------- 退休金 */
@@ -267,7 +326,12 @@ t("結餘為負時不得給「N 週可存到」",
 (function () {
   const r = runCost({ rate: 30, hours: 40, rent: 200, goal: 5000 });
   ok("有目標就要算週數", /存到 .* 需要 \d+ 週/.test(r.html.replace(/<[^>]+>/g, "")));
-  ok("要提醒斷工，並給一個加了緩衝的數字", r.html.includes("週去抓比較接近現實"));
+  ok("要提醒農場會斷工", r.html.includes("整週不算"));
+  /* 舊版印「用 N×1.3 週去抓比較接近現實」。1.3 沒有出處卻被印成具體週數——
+     站上每個數字都要有來源，這一個沒有。改成把比例交給使用者自己填。 */
+  ok("不得再印沒有出處的緩衝倍數",
+    !r.html.includes("週去抓比較接近現實") && r.html.includes("站上不猜"));
+  ok("換算示範要用除的，不是乘一個猜來的倍數", r.html.includes("除以你這一行實際有工作的週數比例"));
   const n = runCost({ rate: 30, hours: 40, rent: 200 });
   ok("沒填目標就不要講存錢", !n.html.includes("存到"));
 })();
@@ -329,8 +393,72 @@ ok("SmartRider 折扣就是 9 折與 8 折",
 ok("每一筆來源都有查核日", C.src.every(s => /^\d{4}-\d{2}-\d{2}$/.test(s.as)));
 ok("每一筆來源都標了查證與否", C.src.every(s => typeof s.v === "boolean"));
 ok("旗標數量沒有被誤刪", C.flags.length >= 5);
-ok("這一區不得寫死任何「每週生活費大約多少」的金額",
-  !JSON.stringify(C.save).match(/每週.{0,6}\$\d/) && !JSON.stringify(C.band).match(/每週.{0,6}\$\d/));
+ok("稅級距的四個端點與兩張表的基底彼此對得上",
+  C.tax.b2 < C.tax.b3 && C.tax.r2 < C.tax.r3 && C.tax.r3 < C.tax.r4 &&
+  Math.round(C.tax.base2 + (C.tax.b2 - C.tax.b1) * C.tax.r2) === C.tax.base3 &&
+  Math.round(C.tax.base3 + (C.tax.b3 - C.tax.b2) * C.tax.r3) === C.tax.base4 &&
+  Math.round(C.tax.b2 * C.tax.unreg) === C.tax.unregBase3 &&
+  Math.round(C.tax.unregBase3 + (C.tax.b3 - C.tax.b2) * C.tax.r3) === C.tax.unregBase4);
+ok("來源筆數與待核筆數要被釘住（README 的對帳表靠這個）",
+  C.src.length === 13 && C.src.filter(s => s.v === false).length === 2,
+  `實得 ${C.src.length} 筆／待核 ${C.src.filter(s => s.v === false).length} 筆——`
+  + "數字變了就回去改 public/README.md 的對帳表，不要只改這一行");
+
+/* 2026-08-16：站上曾經寫「ALDI 的門市與大多數亞超面積在門檻以下，法規不強制它們標」。
+   ACCC 的 Unit Pricing Code 頁面從頭到尾沒有點名任何一家，門檻算的也是「陳列雜貨的
+   樓地板面積」而不是店面總面積——沒有人量得到某一家連鎖店的那個數字。
+   這是一句對具名公司的無來源合規宣稱，正是這個站說好不做的事。這條防它長回來。 */
+ok("不得宣稱任何具名連鎖店不受 Unit Pricing Code 規範",
+  !/(ALDI|Coles|Woolworths|IGA)[^。]{0,40}(不強制|不適用|門檻以下|免標)/.test(HTML),
+  (HTML.match(/(ALDI|Coles|Woolworths|IGA)[^。]{0,40}(不強制|不適用|門檻以下|免標)/) || [])[0]);
+ok("門檻要寫成『陳列雜貨的樓地板面積』，不得再寫成『賣場面積』",
+  HTML.includes("陳列雜貨的樓地板面積") && !/賣場面積超過 1,000/.test(HTML));
+
+/* ---------------------------------------------------------------------------
+   這個站最大聲的那條承諾：/cost 不存任何「今天多少錢」。
+
+   舊版只掃 C.save 與 C.band、正則寫死「每週」二字，所以三種東西它都看不到：
+   markup 裡的 placeholder、寫成「一週」或「$120／週」的行情、C.flags 裡的金額。
+   2026-08-16 的獨立 QA 把「Perth 一週菜錢大約 $120」塞進 C.band，68 個案例全綠。
+   現在改成掃整個 DATA.cost **加上** /cost 那一段 markup。
+   --------------------------------------------------------------------------- */
+(function () {
+  /* 「一日票」是 Transperth 的產品名，不是週期詞，所以「一」那一支不收「日」與「月」。 */
+  const PERIOD = "(?:每(?:週|周|星期|月|個月|天|日)|一(?:週|周|星期|個月))";
+  const MONEY = "\\$\\s?\\d";
+  const RE = new RegExp(PERIOD + "[^$]{0,8}?" + MONEY + "|" + MONEY + "[\\d,.]*\\s*(?:／|/)\\s*(?:週|周|月|天|日)");
+
+  const costMarkup = (HTML.match(/<section class="tool" id="cost">[\s\S]*?<\/section>/) || [""])[0];
+  ok("抓得到 /cost 那一段 markup（抓不到的話下面兩條等於沒測）", costMarkup.length > 500);
+
+  ok("DATA.cost 不得出現任何「每週／一週 …… $金額」的行情",
+    !RE.test(JSON.stringify(C)), (JSON.stringify(C).match(RE) || [""])[0]);
+  ok("/cost 的 markup 也不得出現（placeholder 曾經寫死 200 與 120）",
+    !RE.test(costMarkup), (costMarkup.match(RE) || [""])[0]);
+
+  /* 上面兩條是「不要有」，很容易寫成永遠通過。這裡證明它真的會紅。 */
+  const canary = [
+    'Perth 一週菜錢大約 $120，兩個人 $200 上下。',
+    '房租 $180／週起跳',
+    '每個月伙食抓 $500',
+  ];
+  ok("守門正則對三種寫法都會紅（不是永遠通過的假斷言）",
+    canary.every(s => RE.test(s)), canary.filter(s => !RE.test(s)).join(" ｜ "));
+
+  /* placeholder 是灰字，看起來不像資料，但對「不知道要填多少」的人就是錨點。 */
+  for (const [id, why] of [["crent", "每週房租"], ["cfood", "每週伙食費"]]) {
+    const tag = (costMarkup.match(new RegExp('<input[^>]*id="' + id + '"[^>]*>')) || [""])[0];
+    const ph = (tag.match(/placeholder="([^"]*)"/) || [, ""])[1];
+    ok(`#${id}（${why}）的 placeholder 不得是數字`,
+      ph !== "" && !/\d/.test(ph), `實得 placeholder="${ph}"`);
+  }
+  /* 時薪那格是唯一允許數字的，但必須從 DATA 灌，不能在 markup 抄第二份。 */
+  const rateTag = (costMarkup.match(/<input[^>]*id="crate"[^>]*>/) || [""])[0];
+  ok("#crate 的 placeholder 不得在 markup 寫死法定時薪",
+    !/placeholder="[\d.]+"/.test(rateTag), rateTag);
+  ok("index.html 有從 DATA.wage.casualMin 灌 #crate 的 placeholder",
+    /#crate[\s\S]{0,120}placeholder\s*=\s*DATA\.wage\.casualMin/.test(HTML));
+})();
 
 console.log(`\n${fail === 0 ? "全數通過" : "有失敗"}：${pass} 過 / ${fail} 失敗`);
 process.exit(fail === 0 ? 0 : 1);

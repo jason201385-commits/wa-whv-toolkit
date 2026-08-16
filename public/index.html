@@ -479,7 +479,11 @@ footer a{color:var(--accent)}
   <div class="body">
     <div class="ask">
       <label for="crate">時薪（澳幣，稅前）</label>
-      <input type="number" id="crate" inputmode="decimal" step="0.01" min="0" placeholder="33.05">
+      <!-- placeholder 不寫死數字：33.05 是法定地板，抄第二份在這裡明年七月會靜默過期。
+           開檔時由 DATA.wage.casualMin 灌進去（見檔案底部的 costgo 綁定處）。
+           注意：這個檔案的 markup 裡不要出現字面的 script 標籤，
+           README 那條抽 JS 出來做 node --check 的指令是用正則抓第一個 script 區塊。 -->
+      <input type="number" id="crate" inputmode="decimal" step="0.01" min="0" placeholder="時薪">
       <input type="number" id="chours" inputmode="decimal" step="0.5" min="0" placeholder="每週工時" aria-label="每週工時">
 
       <label for="creg">你的雇主有沒有向 ATO 登記為「WHM 雇主」（決定被扣 15% 還是 30%）</label>
@@ -490,7 +494,9 @@ footer a{color:var(--accent)}
       </select>
 
       <label for="crent">每週房租（澳幣。澳洲房租一律以「週」報價，看到月租要先除以 4.33）</label>
-      <input type="number" id="crent" inputmode="decimal" step="1" min="0" placeholder="200">
+      <!-- 這一格與伙食費那一格的 placeholder 不准放數字：沒有來源、會過期，
+           而且對「不知道要填多少」的人就是錨點。這一頁的規則是金額由使用者填。 -->
+      <input type="number" id="crent" inputmode="decimal" step="1" min="0" placeholder="你實際付的週租">
       <select id="cbills" aria-label="房租含不含水電網路">
         <option value="inc">含水電網路</option>
         <option value="exc">不含，另外算</option>
@@ -508,7 +514,7 @@ footer a{color:var(--accent)}
       <input type="number" id="ccar" inputmode="decimal" step="1" min="0" placeholder="開車的話：每週油錢" aria-label="每週油錢">
 
       <label for="cfood">每週伙食費（含外食。不知道就先填你上一週實際花的）</label>
-      <input type="number" id="cfood" inputmode="decimal" step="1" min="0" placeholder="120">
+      <input type="number" id="cfood" inputmode="decimal" step="1" min="0" placeholder="你上一週實際花的">
       <input type="number" id="cgoal" inputmode="decimal" step="100" min="0" placeholder="想存到的目標金額（可留空）" aria-label="存錢目標">
 
       <button class="btn" id="costgo">算</button>
@@ -1092,9 +1098,14 @@ const DATA = {
     tax: {
       b1: 45000, r1: 0.15,
       b2: 135000, r2: 0.30, base2: 6750,
+      /* 第三、四級距（37c／45c）兩張表完全一樣，只有累計基底不同。
+         不寫的話高薪那一段會靜默算錯——曾經真的算錯過，見 public/README.md。 */
+      b3: 190000, r3: 0.37, base3: 33750,
+      r4: 0.45, base4: 54100,
       /* 雇主沒向 ATO 登記為 WHM 雇主 → 依法必須改用外國居民稅率，
-         ATO 自己的例子寫的是「starting at 30%」。 */
-      unreg: 0.30,
+         ATO 自己的例子寫的是「starting at 30%」。外國居民表沒有 15% 那一級，
+         0–135,000 一路 30c，$135,000 時累計 $40,500、$190,000 時 $60,850。 */
+      unreg: 0.30, unregBase3: 40500, unregBase4: 60850,
       weeksPerYear: 52
     },
 
@@ -1120,7 +1131,7 @@ const DATA = {
       lead: "這一段沒有任何一筆金額，因為金額會過期。它記的是<b>週期</b>與<b>法規</b>——這兩樣一年也不會動一次，而它們決定你在同一家店、買同一樣東西，付的是不是同一個價錢。",
       items: [
         {k:"貨架上那行小字是法律規定的，不是店家好心",
-         v:"《Competition and Consumer Act 2010》底下的 <strong>Unit Pricing Code</strong> 是強制性產業規範：賣場面積超過 1,000 平方公尺的實體超市，以及線上超市，<strong>必須</strong>標示單位價格（每 100g、每 1L）。<br><b>在 Coles、Woolworths 看價格，要看小字那行，不要看大字。</b>「$5 兩件」跟「$2.80 一件」哪個便宜，大字看不出來，小字直接告訴你。<br>反過來也要記住：ALDI 的門市與大多數亞超、雜貨店面積在門檻以下，<strong>法規不強制它們標</strong>。那些地方要自己算——下面有換算器。"},
+         v:"《Competition and Consumer Act 2010》底下的 <strong>Unit Pricing Code</strong> 是強制性產業規範。ACCC 寫的適用條件是兩個都要成立：<b>①</b>店裡賣麵包、早餐穀片、奶油、蛋、麵粉、生鮮蔬果、鮮奶、肉、米、糖與其他包裝食品——<strong>這些品類全都要有</strong>；<b>②</b>用來陳列雜貨的樓地板面積<strong>超過 1,000 平方公尺</strong>（是雜貨陳列面積，不是店面總面積；線上店沒有面積門檻，但品類條件一樣要成立）。<br><b>在 Coles、Woolworths 看價格，要看小字那行，不要看大字。</b>「$5 兩件」跟「$2.80 一件」哪個便宜，大字看不出來，小字直接告訴你。<br>反過來也要記住 ACCC 自己寫的那句：<strong>不是每一家賣食品的店都會標</strong>。面積在門檻以下的店是「可以自願標」，品類不齊的店根本不在範圍內。<b>哪一家連鎖店適不適用，這裡不猜</b>——沒有人量得到它的雜貨陳列面積。<strong>判準用你看得到的：貨架標籤上沒有那行小字，就自己算</strong>，下面有換算器。"},
         {k:"ALDI 每週三、六換一批 Special Buys",
          v:"官方頁面的標題就是「New Range Every Wednesday &amp; Saturday」，實際列表也是週三／週六交替上架。這批是<strong>限量、賣完不補</strong>的非食品類（家電、工具、露營、工作服）。<br><b>要買工作靴、防曬工作服、露營裝備、電熱毯，先看這週的 Special Buys 再決定要不要去別家。</b>錯過就是等下一輪，不會補貨。"},
         {k:"空瓶空罐每個 10¢，這是西澳立法的",
@@ -1173,7 +1184,7 @@ const DATA = {
       {t:"Transperth — CAT 巴士免費（Perth CBD、Joondalup、Surf CAT 至 Scarborough）", u:"https://www.transperth.wa.gov.au/Timetables/CAT-Timetables", as:"2026-08-16", v:true},
       {t:"Transperth — SmartRider Autoload（低於 $6 自動扣款，八折）", u:"https://www.transperth.wa.gov.au/SmartRider/Autoload", as:"2026-08-16", v:true},
       {t:"Containers for Change WA — 每個容器退 10¢，150ml–3L", u:"https://www.containersforchange.com.au/wa/", as:"2026-08-16", v:true},
-      {t:"ACCC — Unit Pricing Code 為強制性產業規範（>1,000 m² 超市與線上超市適用）", u:"https://www.accc.gov.au/business/industry-codes/unit-pricing-code", as:"2026-08-16", v:false},
+      {t:"ACCC — Unit Pricing Code 為強制性產業規範（適用門檻：販售法定全部品類，且雜貨陳列面積 >1,000 m²；線上店無面積門檻）", u:"https://www.accc.gov.au/business/industry-codes/unit-pricing-code", as:"2026-08-16", v:true},
       {t:"ALDI Australia — Special Buys「New Range Every Wednesday & Saturday」", u:"https://www.aldi.com.au/special-buys/", as:"2026-08-16", v:true},
       {t:"AIHW — 住房壓力的 30/40 rule 定義", u:"https://www.aihw.gov.au/reports/australias-welfare/housing-affordability", as:"2026-08-16", v:false},
       {t:"REIWA — Perth 各區租金中位數（本站不抄數字，請自行查當期）", u:"https://reiwa.com.au/the-wa-market/perth-metro/", as:"2026-08-16", v:false}
@@ -2387,6 +2398,10 @@ function checkRate(){
    它刻意不內建任何「Perth 一週生活費大約多少」的預設值——所有金額都由使用者填。
    這一頁能自己算出來的只有三種東西：法定的稅、官方公告的車資、以及比例。
    ========================================================================== */
+/* 時薪那一格的 placeholder 從 DATA 灌，不要在 markup 抄第二份法定數字。
+   這一格是全頁唯一允許出現數字 placeholder 的地方，因為它有來源（見 /wage）。 */
+(function(){ const n = $("#crate"); if(n) n.placeholder = DATA.wage.casualMin.toFixed(2); })();
+
 $("#costgo").addEventListener("click", checkCost);
 ["#crate", "#chours", "#crent", "#cbills", "#ctrans", "#ccar", "#cfood", "#cgoal"].forEach(s=>{
   const n = $(s); if(n) n.addEventListener("keydown", e=>{ if(e.key === "Enter") checkCost(); });
@@ -2399,14 +2414,20 @@ $("#ugo").addEventListener("click", comparePrice);
 /* 週稅前 → 年稅（整數分）。ATO 的 WHM 級距是年度制，所以先年化再回推。 */
 function whmTaxCents(annualCents, registered){
   const T = DATA.cost.tax;
-  const b1 = T.b1 * 100, b2 = T.b2 * 100;
-  /* 雇主沒登記：依法改用外國居民稅率，ATO 自己的例子是 30% 起跳。
-     這裡只算到第二級距上限——打工度假者年收超過 $135,000 的情況，
-     這個試算機本來就不該替他判斷。 */
-  if(!registered) return Math.round(Math.min(annualCents, b2) * T.unreg) + Math.max(0, annualCents - b2);
+  const b1 = T.b1 * 100, b2 = T.b2 * 100, b3 = T.b3 * 100;
+  /* 兩張表在 $135,000 以上完全重疊（37c 然後 45c），只有累計基底不同，
+     所以上半段共用。$32.45／小時 × 80 小時就會年化到這裡——不是罕見輸入。 */
+  const upper = (base3, base4) => annualCents <= b3
+    ? Math.round(base3 * 100 + (annualCents - b2) * T.r3)
+    : Math.round(base4 * 100 + (annualCents - b3) * T.r4);
+  /* 雇主沒登記：依法改用外國居民稅率。那張表沒有 15% 那一級，第一元起就 30c。 */
+  if(!registered){
+    if(annualCents <= b2) return Math.round(annualCents * T.unreg);
+    return upper(T.unregBase3, T.unregBase4);
+  }
   if(annualCents <= b1) return Math.round(annualCents * T.r1);
-  return Math.round(T.base2 * 100 + (Math.min(annualCents, b2) - b1) * T.r2)
-       + Math.max(0, annualCents - b2);
+  if(annualCents <= b2) return Math.round(T.base2 * 100 + (annualCents - b1) * T.r2);
+  return upper(T.base3, T.base4);
 }
 
 function checkCost(){
@@ -2463,6 +2484,10 @@ function checkCost(){
   /* 判準一：房租佔稅前收入的比例（ABS／AIHW 的 30/40 rule）。 */
   const rentPct = pct(rentW, grossW);
   const overStress = rentW > 0 && rentW > grossW * C.stress;
+  /* 判定用的是嚴格大於 30%，顯示的百分比卻四捨五入到小數一位。$300.01／$1000
+     會印出「30%」再說「超過 30%」——同一句話自打嘴巴。踩線的情形一律改用文字。 */
+  const hairline = overStress && rentPct <= C.stress * 100;
+  const rentPctText = hairline ? "剛好壓在 30% 的線上" : rentPct + "%";
 
   /* 判準二：每一項要工作幾小時才付得起。這是全頁唯一不會過期的表達方式——
      時薪漲、物價漲，這個比值仍然是對的。 */
@@ -2476,8 +2501,10 @@ function checkCost(){
     clip = "🛑 每週短少 $" + (-leftW / 100).toFixed(2);
   } else if(overStress){
     tone = "warn";
-    verdict = "⚠️ 撐得住，但房租吃掉稅前收入的 " + rentPct + "%";
-    clip = "⚠️ 房租佔稅前 " + rentPct + "%（超過 30% 的官方判準）";
+    verdict = hairline ? "⚠️ 撐得住，但房租剛好壓在 30% 的線上"
+                       : "⚠️ 撐得住，但房租吃掉稅前收入的 " + rentPct + "%";
+    clip = hairline ? "⚠️ 房租剛好壓在稅前收入 30% 的線上（官方判準是超過 30%）"
+                    : "⚠️ 房租佔稅前 " + rentPct + "%（超過 30% 的官方判準）";
   } else if(reg === "unreg"){
     /* 錢是夠用，但整年被多扣稅。這種情況不該給一個乾淨的 ✅——
        ✅ 會讓人以為沒事要處理，實際上要處理的是雇主的登記狀態。 */
@@ -2488,6 +2515,17 @@ function checkCost(){
     tone = "ok";
     verdict = "✅ 每週結餘 " + m(leftW);
     clip = "✅ 每週結餘 $" + (leftW / 100).toFixed(2);
+  }
+
+  /* 上面四支只會中一支，但「雇主沒登記」跟「錢夠不夠」是兩個各自獨立的問題。
+     前兩支中了就會把它整句蓋掉，標題只講一半——所以在後面補回去。 */
+  if(reg === "unreg" && (leftW < 0 || overStress)){
+    verdict += "，而且被多扣稅";
+    clip += "（雇主未登記為 WHM 雇主，被扣 30%）";
+  }
+  /* 「不知道」是以有登記估的。給乾淨的 ✅ 會讓人以為稅那一欄已經查證過。 */
+  if(reg === "unknown" && tone === "ok"){
+    verdict += '<small style="font-weight:400">（稅以「雇主有登記」估）</small>';
   }
 
   let d = "";
@@ -2526,8 +2564,10 @@ function checkCost(){
          + (r[2] ? '。' + r[2] : '') + '</span></li>';
     });
     d += '</ul>';
+    /* 「這三項」只有在真的填了三項時才成立——只填房租的人看到「這三項」會以為算錯了。 */
     d += '<p><strong>' + (leftW < 0 ? '每週短少' : '每週剩下') + '</strong> ' + m(Math.abs(leftW))
-       + '　（工作 ' + hours + ' 小時，其中 <strong>' + hrs(spendW) + ' 小時</strong>是在付這三項）</p>';
+       + '　（工作 ' + hours + ' 小時，其中 <strong>' + hrs(spendW) + ' 小時</strong>是在付'
+       + (rows.length === 1 ? rows[0][0] : '這 ' + rows.length + ' 項') + '）</p>';
   } else {
     d += '<p style="margin-top:12px">你沒有填任何支出，所以上面的結餘就等於稅後週薪。'
        + '<strong>填房租那一格才是這個工具真正有用的地方</strong>——房租是這個族群唯一真正大的固定支出。</p>';
@@ -2535,11 +2575,18 @@ function checkCost(){
 
   /* --- 房租判準 --- */
   if(rentW > 0){
-    d += '<p style="margin-top:12px"><strong>房租佔稅前收入 ' + rentPct + '%。</strong>'
+    /* 建議工時要無條件進位：40.1333 印成 40.1 之後，40.1 小時仍然踩在線上。 */
+    const needHours = Math.ceil(rentW / C.stress / (rate * 100) * 10) / 10;
+    d += '<p style="margin-top:12px"><strong>房租佔稅前收入 ' + rentPctText + '。</strong>'
        + (overStress
           ? '澳洲統計口徑（ABS／AIHW）的 30/40 rule 是<strong>超過 30% 即為 housing stress</strong>，你在線上。'
             + '<br>能動的只有兩邊：<strong>房租降到 ' + m(Math.floor(grossW * C.stress)) + ' 以下</strong>，'
-            + '或<strong>每週工時提高到 ' + (rentW / C.stress / (rate * 100)).toFixed(1) + ' 小時以上</strong>。'
+            /* 站上自己在 /wage 說長工時有安全與加班費問題，就不該在這裡建議一個
+               連自己的護欄都不接受的數字（>80 會被擋掉，等於叫人去做算不出來的事）。 */
+            + (needHours > 80
+               ? '或者——但要提高到<strong>每週 ' + needHours + ' 小時</strong>才壓得下來，'
+                 + '那不是這個房租的解法，<strong>那是這個房租不合理</strong>。'
+               : '或<strong>每週工時提高到 ' + needHours + ' 小時以上</strong>。')
           : '低於 30% 的 housing stress 判準（ABS／AIHW 的 30/40 rule），這個房租配得上這份工作。')
        + '</p>';
     if(bills === "exc"){
@@ -2569,10 +2616,18 @@ function checkCost(){
          + '每週是負的，缺口只會越來越大。要動的是房租或工時，不是省吃。</p>';
     } else {
       const weeks = Math.ceil(goal / leftW);
+      /* 這裡曾經印「用 weeks × 1.3 週去抓」。1.3 沒有任何出處，卻被印成一個具體週數，
+         讀起來像有依據——正是這個站說好不做的事。改成把算式交給使用者：
+         他知道自己這行有幾週會歸零，站上不知道，也不該猜。 */
       d += '<p style="margin-top:12px"><strong>存到 ' + m(goal) + ' 需要 ' + weeks + ' 週</strong>'
-         + '（約 ' + (weeks / 4.33).toFixed(1) + ' 個月），前提是每週都有 ' + hours + ' 小時的工。'
-         + '<br>農場工作有淡旺季，雨天、機器壞掉、貨櫃沒到都會讓那一週歸零。'
-         + '<strong>用 ' + Math.ceil(weeks * 1.3) + ' 週去抓比較接近現實</strong>。</p>';
+         + '（約 ' + (weeks / C.monthToWeek).toFixed(1) + ' 個月），前提是<strong>每一週</strong>都有 '
+         + hours + ' 小時的工。'
+         + '<br>農場工作有淡旺季，雨天、機器壞掉、貨櫃沒到都會讓那一週歸零，而歸零的那一週'
+         + '<strong>不是慢一點，是整週不算</strong>。'
+         + '<br>要抓實際時間，把「' + weeks + ' 週」除以你這一行實際有工作的週數比例：'
+         + '十週裡有一週沒工作就是 ' + Math.ceil(weeks / 0.9) + ' 週，'
+         + '五週裡有一週沒工作就是 ' + Math.ceil(weeks / 0.8) + ' 週。'
+         + '<strong>這個比例只有你自己問得到，站上不猜。</strong></p>';
     }
   }
 
@@ -2584,8 +2639,13 @@ function checkCost(){
 
   copyRow(box,
     "時薪 $" + rate.toFixed(2) + " × 每週 " + hours + " 小時 → " + clip +
+    /* 這裡曾經寫死「WHM 15%」。年收跨過 $45,000 之後畫面顯示的是 21.9%、39.2%，
+       貼進群組的那份卻說 15%——同一次計算兩個數字，而群組看到的是錯的那個。
+       改成印實際算出來的比例，標籤只講稅表是哪一張。 */
     "\n稅前 $" + (grossW / 100).toFixed(2) + "／週，扣稅 $" + (taxW / 100).toFixed(2) +
-    "（" + (reg === "unreg" ? "雇主未登記，外國居民稅率 30% 起" : "WHM 15%") + "）" +
+    "（約 " + taxPct + "%，" + (reg === "unreg" ? "雇主未登記，用外國居民稅率"
+                             : reg === "unknown" ? "以「雇主有登記」估的 WHM 稅率"
+                             : "WHM 稅率") + "）" +
     "，稅後 $" + (netW / 100).toFixed(2) +
     (rentW > 0 ? "\n房租 $" + (rentW / 100).toFixed(2) + "／週 ＝ 稅前的 " + rentPct + "%"
        + (overStress ? "（超過 30% 的 housing stress 判準）" : "") : "") +
@@ -2594,8 +2654,11 @@ function checkCost(){
 }
 
 /* ---- 單位價格：兩個包裝哪個真的便宜 ----
-   大超市依法必須標單位價格，但 ALDI 門市與多數亞超面積在門檻以下，不強制標。
-   這支就是給那些地方用的。 */
+   這裡曾經點名某幾家連鎖店，說它們面積在門檻以下所以可以不標。ACCC 的頁面從頭到尾
+   沒有點名任何一家，站上也量不到任何一家的雜貨陳列面積——那是一句無來源的品牌宣稱，已刪。
+   （cost.test.js 有一條正則在防它長回來，所以這則註解不能照抄原句。）
+   法規門檻是「陳列雜貨的樓地板面積 >1,000 m²」＋販售法規列的全部品類（見 /cost 的來源列）。
+   判準改成使用者看得見的那個：貨架標籤上沒有小字，就用這支自己算。 */
 function comparePrice(){
   const box = $("#uans");
   box.hidden = false;
@@ -2604,8 +2667,10 @@ function comparePrice(){
   const unit = $("#uunit").value;
 
   const bad = h => { box.className = "ans warn"; box.innerHTML = '<div class="verdict">' + h + '</div>'; };
-  if(![pa, qa, pb, qb].every(x => isFinite(x)) || qa <= 0 || qb <= 0 || pa < 0 || pb < 0){
-    return bad("四格都要填，而且容量不能是 0");
+  /* 價格也必須 > 0。$0 過得了舊的 `pa < 0` 護欄，然後下面的差價百分比會除以零，
+     畫面上印出「A 比較便宜，每 100g 差 Infinity%」。 */
+  if(![pa, qa, pb, qb].every(x => isFinite(x)) || pa <= 0 || qa <= 0 || pb <= 0 || qb <= 0){
+    return bad("四格都要填，而且價格和容量都不能是 0");
   }
 
   /* 換算基準：固體用每 100g，液體用每 1L，計數用每 1 個 */
@@ -2633,8 +2698,8 @@ function comparePrice(){
   }
   box.className = "ans " + tone;
   box.innerHTML = '<div class="verdict">' + verdict + '</div><div class="detail">' + extra
-    + '<p class="note">賣場面積超過 1,000 平方公尺的超市與線上超市，依 Unit Pricing Code 本來就<strong>必須</strong>在貨架標籤上標這個數字——'
-    + '在 Coles、Woolworths 直接看小字那行就好，不用自己算。這個工具是給不強制標示的店家用的。</p></div>';
+    + '<p class="note">依 Unit Pricing Code，<strong>陳列雜貨的樓地板面積超過 1,000 平方公尺</strong>的實體店與線上雜貨店（且法規列的品類全都有賣）本來就<strong>必須</strong>在貨架標籤上標這個數字——'
+    + '在 Coles、Woolworths 直接看小字那行就好，不用自己算。<strong>看不到那行小字的店，才需要這個工具。</strong></p></div>';
 }
 
 /* ---- 押金身分 ---- */

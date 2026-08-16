@@ -82,27 +82,32 @@ node test/wage.test.js
 node test/cost.test.js
 ```
 
-零相依套件，合計 96 個案例（時薪 28、生活成本 68）。兩支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
+零相依套件，合計 125 個案例（時薪 28、生活成本 97）。兩支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
 
 **動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`。**
 
 只有這兩條路徑有測試，因為只有它們會主動對使用者說出會改變他行為的話：
 
 - `wage.test.js` — 「你的雇主違法」。涵蓋輸入護欄、浮點數邊界、入門級分類的假指控情境、兩套勞資系統、計件三分支、剪貼簿文字必須與畫面判定同一個符號、每條路徑都要有退休金提醒。
-- `cost.test.js` — 「你的雇主沒登記所以你每週被多扣 $XXX」「你的房租超過官方判準」「存到目標要 N 週」。涵蓋 ATO 五個稅級距邊界、未登記雇主的 30% 分支、30/40 rule 的踩線與越線、票價必須來自 `DATA.cost.fares` 不能寫死、支出剛好等於收入時不得印出 `$-0.00`、以及「這一區不得出現寫死的生活費金額」這條設計約束本身。
+- `cost.test.js` — 「你的雇主沒登記所以你每週被多扣 $XXX」「你的房租超過官方判準」「存到目標要 N 週」。涵蓋 ATO 兩張稅表的四個級距邊界、未登記雇主改用外國居民稅率的分支、30/40 rule 的踩線與越線、票價必須來自 `DATA.cost.fares` 不能寫死、支出剛好等於收入時不得印出 `$-0.00`、以及「這一區不得出現寫死的生活費金額」這條設計約束本身。
+  另外三組是 2026-08-16 事故後補的，都是**回歸測試而不是新功能的測試**：
+  **①邊際稅率掃描**——從 $1,000 掃到 $260,000，兩張稅表都不准出現高於法定最高 45% 的邊際稅率，也不准出現「多賺反而少拿」（這裡曾經是 100%，見 `public/README.md`）。
+  **②placeholder 守門**——`#crent`、`#cfood` 的 placeholder 不得是數字，`#crate` 不得在 markup 寫死法定時薪、必須由 `DATA.wage.casualMin` 灌進去。
+  **③無來源宣稱守門**——不得宣稱任何具名連鎖店不受 Unit Pricing Code 規範。
+  ①②③ 三組都自帶 canary（故意餵它應該要紅的字串，確認守門正則不是永遠通過的假斷言）。
 
 ### 語法與旗標檢查
 
 ```bash
 node -e "const fs=require('fs');const m=fs.readFileSync('public/index.html','utf8').match(/<script>([\s\S]*)<\/script>/);fs.writeFileSync('chk.js',m[1])" && node --check chk.js
-grep -o 'v:false[},]' public/index.html | wc -l    # 目前 22
+grep -o 'v:false[},]' public/index.html | wc -l    # 目前 21
 grep -o 'pending:true' public/index.html | wc -l   # 目前 1
 ```
 
 後兩條數的是「待核」旗標，而**站上有兩種標記法**：`v:false` 標單一來源，`pending:true` 標整張卡（`/cost` 的卡片渲染器已經把 `v` 用在別的地方，所以卡層另開一個旗標）。**兩個數字加起來要等於瀏覽器裡的 `document.querySelectorAll('.pending').length`**：
 
 ```js
-document.querySelectorAll('.pending').length   // 要等於 22 + 1 = 23
+document.querySelectorAll('.pending').length   // 要等於 21 + 1 = 22
 ```
 
 對不上就代表有 renderer 讀不到旗標，畫面上會有一筆沒標「待核」的未查證資料。這個 bug 真的發生過。
