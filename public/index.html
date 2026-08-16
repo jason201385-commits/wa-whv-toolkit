@@ -348,6 +348,7 @@ footer a{color:var(--accent)}
     <li><a href="#ask"><span class="u">/ask</span><b>出門前先問</b><span>別為了一則失效貼文白跑</span></a></li>
     <li><a href="#landing"><span class="u">/landing</span><b>落地清單</b><span>前 72 小時要辦什麼</span></a></li>
     <li><a href="#pr"><span class="u">/pr</span><b>年齡與點數</b><span>你的門什麼時候關</span></a></li>
+    <li><a href="#settle"><span class="u">/settle</span><b>定居的兩個時鐘</b><span>PR 之後會自己到期的東西</span></a></li>
   </ul>
 </nav>
 
@@ -826,6 +827,49 @@ footer a{color:var(--accent)}
       <ul id="prflags"></ul>
     </div>
     <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="prsrc"></ul></details>
+  </div>
+</section>
+
+<section class="tool" id="settle">
+  <header>
+    <h2>定居：兩個時鐘<span class="slug">/settle</span></h2>
+    <p class="q">/pr 算的是「進不進得去」。這一區算的是<strong>進去那天起，哪些東西會在你沒注意的時候到期</strong>。四件事分屬兩個起點不同的時鐘——<b>離開台灣那天</b>管戶籍與健保，<b>PR 核准那天</b>管駕照、Medicare 與超級年金。把兩個時鐘混在一起，是這一區最常見的誤解。</p>
+  </header>
+  <div class="body">
+    <div class="ask">
+      <label for="sout">你離開台灣的日期</label>
+      <input type="date" id="sout" autocomplete="off">
+      <label for="spr">PR 核准日（還沒有就填預計）</label>
+      <input type="date" id="spr" autocomplete="off">
+      <button class="btn" id="sgo">算</button>
+    </div>
+    <p class="hint">兩個都可以只填一個。日期只留在你自己的瀏覽器裡。<strong>算的是法規寫死的期限，不是你辦得完辦不完</strong>——期限本身沒有彈性，但你什麼時候開始辦有。</p>
+    <div class="ans" id="sans" hidden></div>
+
+    <div class="flags rule">
+      <b>駕照：換照的義務是 PR 帶來的，不是落地帶來的</b>
+      <ul id="sdrive"></ul>
+    </div>
+
+    <h3 style="margin:30px 0 0;font-size:17px">台灣人換西澳駕照，2025-11-01 之後多花多少</h3>
+    <p class="hint" style="margin-top:4px">同一個人、同一本台灣駕照，只差在有沒有趕上 2025-10-31。下表是官方費用表的必要項目，<strong>不含任何一次重考</strong>。</p>
+    <div id="sfee"></div>
+
+    <div class="flags rule">
+      <b>健保：「出國停保」這個制度已經不存在了</b>
+      <ul id="snhi"></ul>
+    </div>
+
+    <div class="flags rule">
+      <b>超級年金：這一整區唯一不可逆的一格</b>
+      <ul id="ssupr"></ul>
+    </div>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="sflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="settlesrc"></ul></details>
   </div>
 </section>
 
@@ -1736,7 +1780,11 @@ const DATA = {
     ],
     /* 每一題的 o 是 [顯示文字, 分數]。分數全部來自官方表，不自己插值。 */
     q: [
-      { k:"visa", q:"你要走哪一類簽證", o:[["189 技術獨立（無提名）",0],["190 州擔保（西澳提名）",5],["491 偏遠地區（州提名或親屬擔保）",15]] },
+      /* 這一題問的是「已經拿到什麼」，不是「打算走哪條路」。官方那一格的條件是
+         已被提名且提名未撤回（<i>the nominating State or Territory government agency
+         has not withdrawn the nomination</i>）——它是全表單筆最大的 15 分，
+         照「我想走 491」去勾就會白拿 15 分，算出來的總分整個是假的。 */
+      { k:"visa", q:"你已經取得的提名（還沒拿到就選第一項）", o:[["還沒有提名，或走 189 技術獨立",0],["已獲 190 州提名，且提名未被撤回",5],["已獲 491 州提名，或符合資格的親屬擔保",15]] },
       { k:"eng",  q:"英文能力", o:[["Competent",0],["Proficient",10],["Superior",20]] },
       { k:"edu",  q:"最高學歷（只採計一項）", o:[["都不是",0],["澳洲文憑或技職資格",10],["評估機構認可的資格",10],["學士以上",15],["博士",20]] },
       { k:"ovs",  q:"海外技術工作年資（受邀前 10 年內）", o:[["不到 3 年",0],["3 年以上、未滿 5 年",5],["5 年以上、未滿 8 年",10],["8 年以上",15]] },
@@ -1751,6 +1799,12 @@ const DATA = {
     /* 官方明文：海外＋澳洲工作年資合計上限 20 分。這個上限很容易被試算工具漏掉，
        漏掉的人會以為自己有 35 分的工作分。 */
     empCap: 20,
+    /* 西澳官方在「Step 1: Lodge an expression of interest」底下列的 EOI 必要內容之一：
+       <i>&ldquo;A score of at least 65 points in the Home Affairs points test&rdquo;</i>。
+       這是**投 EOI 求西澳提名的門檻**，不是「幾分會被邀請」的那條線——兩件事不能混。
+       站上不寫後者是對的，但把前者一起吞掉就過頭了：算出 55 分的人會看到一個
+       什麼訊號都沒有的畫面，而他連門檻都還沒到。 */
+    eoiFloor: 65,
     whv: [
       "<strong>不是「在澳洲上過班」就算技術工作年資。</strong>官方原文寫得很死：只有當那份工作是<b>你申報的那個職業，或密切相關的技術職業</b>時才能計分（<i>&ldquo;only claim points for employment if the employment was in your nominated skilled occupation or a closely related skilled occupation&rdquo;</i>）。餐廳、農場、倉庫如果不是你要申報的職業，時數再多都是 0 分。",
       "<strong>工時門檻是每週 20 小時。</strong>官方對「受僱」的定義是 <i>&ldquo;engaged in an occupation for remuneration for at least 20 hours a week&rdquo;</i>。低於這個時數的期間不算數。",
@@ -1777,6 +1831,70 @@ const DATA = {
       { t:"移民部 — 190 州擔保簽證 積分表（州提名 5 分）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-nominated-190/points-table", as:"2026-08-17", v:true },
       { t:"移民部 — 491 偏遠地區簽證 積分表（州提名或親屬擔保 15 分）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-work-regional-provisional-491/points-table", as:"2026-08-17", v:true },
       { t:"西澳 Migration WA — State Nominated Migration Program（190 加 5 分、491 加 15 分；WASMOL／GOL；僱傭合約與 ABN 排除；Graduate stream 87 週與 25% 線上課程上限）", u:"https://migration.wa.gov.au/our-services-support/state-nominated-migration-program", as:"2026-08-17", v:true }
+    ]
+  },
+
+  /* ---------------- 定居：PR 前後會自己到期的四件事 ----------------
+     跟 /pr 的分工：/pr 算「進不進得去」，這一區算「進去那天起，哪些東西會在你
+     沒注意的時候到期」。四件事分屬**兩個起點不同的時鐘**，混在一起是這一區最常
+     見的誤解，所以介面上是兩個獨立欄位：
+       離開台灣那天  → 戶籍（出境滿 2 年）、健保
+       PR 核准那天   → 駕照（3 個月）、Medicare、超級年金領回資格
+     台灣人特有的兩個坑都在這裡：台灣 2025-11-01 起不再是西澳承認的駕照國家、
+     台灣不在 Medicare 互惠協定的 11 國名單裡。 */
+  settle: {
+    /* 費用一律存「分」，跟站上其他金額同一套。來源：Transport WA 換照頁費用表。 */
+    fee: {
+      ctt:        2240,   /* 學習許可電腦筆試 CTT */
+      cttResit:   1920,   /* 筆試重考 */
+      xferTest:  15080,   /* 換照申請（需路考）——台灣現在走這條 */
+      xferNoTest: 6350,   /* 換照申請（免路考）——2025-10-31 前的台灣走這條 */
+      pdaResit:  12050,   /* 路考重考，每次 */
+      renew1:     4940,
+      renew5:    17200
+    },
+    drive: [
+      "<strong>還是打工度假、學生或觀光身分的話，什麼都不用辦。</strong>官方原文：<i>&ldquo;If you are a visitor to WA, such as a tourist or someone studying or working temporarily in WA, you do not need to transfer your overseas licence&rdquo;</i>。台灣駕照只要還在效期內就能一直開。<b>換照的義務是 PR 帶來的，不是落地帶來的。</b>",
+      "<strong>PR 或公民身分下來之後，只剩 3 個月。</strong>官方原文：<i>&ldquo;you can drive in Western Australia for up to 3 months using your overseas licence&rdquo;</i>，而且<i>&ldquo;After this 3-month period you cannot legally drive on your overseas licence, even if it is current and valid&rdquo;</i>——台灣駕照沒過期也一樣不能開。",
+      "<strong>台灣在 2025-11-01 被移出承認名單，換照現在要考筆試＋路考。</strong>西澳公告原文：<i>&ldquo;From 1 November 2025, the Experienced Driver Recognised Country or Region category no longer exists&rdquo;</i>，名單上的 16 個國家／地區包含 Taiwan，而且<i>&ldquo;did not apply for a WA car or motorcycle driver's licence on or before 31 October 2025, you will now need to pass a theory test and Practical Driving Assessment&rdquo;</i>。<b>沒有趕上 2025-10-31 那班車的人，就是要考。</b>",
+      "<strong>官網自己還沒改乾淨，不要被它安慰到。</strong>「Moving from overseas」頁面上的國家查詢器，查 Taiwan 仍然跳出舊文案「is an experienced driver recognised country」——但同一筆資料的分類旗標是 <code>0</code>（未承認），跟日本、紐西蘭的 <code>1</code> 不同，點下去也是連到<b>未承認國家</b>的流程頁。被取消的那 16 個全部都是 <code>0</code>，殘留的只有描述文字。<b>以流程頁與公告為準。</b>",
+      "<strong>先過筆試才能考路考</strong>（<i>&ldquo;You must pass the theory test before you can take the practical driving assessment&rdquo;</i>）。筆試不用預約，多數 metro 服務中心直接去就能考，但<b>所有測驗必須在下午 3:45 前開始</b>。路考要用 DoTDirect 線上預約。",
+      "<strong>用自排車考，拿到的就是自排限定駕照。</strong>官方原文：<i>&ldquo;If you take the practical driving assessment in an automatic vehicle, you will be issued with a driver's licence for an automatic vehicle only&rdquo;</i>。這件事沒有補救，只能重考。",
+      "<strong>台灣駕照要附英文翻譯。</strong>翻譯只接受 NAATI 認證譯者（未承認國家的流程<b>排除</b> Recognised Practising 級）、大學以上學歷譯者、OMI 名單上的 2007 年前永久認證譯者、內政部移民署 Free Translating Service，或領事館／大使館。另外：<b>2018-01-01 之後由 NAATI 認證譯者做的翻譯不被接受</b>（2007 年前永久認證者除外）——這條反過來，是舊的才收。",
+      "<strong>台灣駕照過期超過 12 個月就沒有「換照」這回事了</strong>，要照「在西澳第一次考駕照」的完整流程走。人還在澳洲、台灣駕照快到期的人，這一條比換照本身更急。"
+    ],
+    nhi: [
+      "<strong>「出國停保」這個制度已經不存在了。</strong>健保署問答集寫得很明確：<i>「自 113 年 12 月 23 日起(含)，不受理停保申請」</i>（＝2024-12-23）。依據是憲法法庭 111 年憲判字第 19 號判決——舊的停復保規定沒有法律明確授權，違反法律保留原則，施行細則第 37、39 條已經刪除。<b>還在教人「出國前記得去辦停保」的資訊，全部是舊的。</b>",
+      "<strong>戶籍還在台灣，人在澳洲也要繼續繳健保費。</strong>官方原文：<i>「自符合加保資格之日起，都應持續依適法身分加保及繳納保險費」</i>。長住國外的人建議辦金融機構或信用卡自動轉帳（約需 45 個工作天生效），否則人在澳洲很難按時繳。",
+      "<strong>真正讓你停繳的是戶籍遷出，不是停保。</strong>依戶籍法，<i>「出境 2 年以上，應為戶籍遷出登記」</i>；戶籍一旦遷出國外，<b>就喪失健保投保資格、應予退保</b>，不必再繳，但同時<b>不再有任何健保給付</b>。這是一個要自己權衡的交換，不是行政手續。",
+      "<strong>遷出的代價在「回台灣那天」才算給你看。</strong>退保後想重新加保：退保日<b>2 年內</b>恢復戶籍 → 自戶籍恢復當日加保；退保日<b>2 年後</b>恢復、或返國初設戶籍 → 要等<b>戶籍恢復滿 6 個月</b>才能加保。<b>唯一的例外是「有一定雇主之受僱者，自受僱日加保」</b>——回台灣先找到工作，那 6 個月的空窗就不存在。",
+      "<strong>眷屬會被一起帶走。</strong>官方原文：<i>「如當事人有眷屬依附投保，該眷屬亦於同日轉出」</i>。依附你投保的家人要另外找適法身分銜接，不會自動留著。",
+      "<strong>沒停保、也沒遷戶籍的人，在國外看病可以核退，但有上限。</strong>不可預期的緊急傷病或緊急分娩，在<b>就診當日或出院日起 6 個月內</b>檢據申請；核退標準<b>以國內特約醫院診所平均費用為上限，每季公告</b>。在澳洲看急診的實際帳單通常遠高於這個上限——<b>它是補貼，不是保險。</b>",
+      "<strong>2024-12-22 以前已經辦過停保的人另有過渡條款</strong>（施行細則第 36 條之 1）：那一次停保如果出國達 6 個月以上，效力持續到返國入境日、當天要辦復保；如果出國未達 6 個月就回台，該次停保要註銷並補繳保費。"
+    ],
+    supr: [
+      "<strong>拿到 PR 的那一刻，超級年金的離境提領（DASP）資格就永久消失。</strong>ATO 的四項條件是<b>全部都要成立</b>，其中一項寫的是：<i>&ldquo;you're not an Australian or New Zealand citizen, or a permanent resident of Australia&rdquo;</i>。這是這一整區裡<b>唯一不可逆</b>的一格——駕照可以補考，健保可以再加保，這個不行。",
+      "<strong>其他三項條件同樣要成立：</strong>錢是在臨時簽證期間工作累積的、<b>簽證已失效</b>、<b>你人已經離開澳洲而且沒有其他有效澳洲簽證</b>。所以「趁還沒拿 PR 先領出來」在實務上不成立——你得先離境。ATO 自己的建議是離境前就把資料備齊：<i>&ldquo;It may be difficult for you to start the process once you have left&rdquo;</i>。",
+      "<strong>真的領回來，稅率是懲罰性的。</strong>打工度假簽證持有人（WHM）的 DASP 稅率：taxable component <b>65%</b>（taxed 與 untaxed 都是）。非 WHM 是 taxed element 35%、untaxed element 45%。免稅部分為 Nil。<b>「回台灣可以把 super 領回來」是真的，但拿回來的是三分之一。</b>",
+      "<strong>放著不管不會不見，但會換一個地方放。</strong>離開澳洲滿 6 個月且簽證已失效，基金會把錢當作 unclaimed super 轉給 ATO。之後仍可以用 DASP 申請，也可以在成為 PR 之後轉回澳洲的 super 帳戶——<b>但轉回去那一刻起，它就是要等到退休才能動的錢。</b>",
+      "<strong>所以這一格要在拿 PR 之前想清楚：</strong>65% 的稅拿回三分之一、現在就能用；或是整筆留在澳洲複利到退休。<b>沒有第三個選項，而且 PR 核准之後就沒得選了。</b>"
+    ],
+    flags: [
+      "<strong>「先辦停保再出國」——這句話在 2024-12-23 之後就是錯的。</strong>照著做只會發現公所不受理。真正的岔路是「戶籍要不要遷出」，那是完全不同的一件事、不同的機關、不同的後果。",
+      "<strong>「台灣駕照可以直接換西澳駕照」——2025-11-01 之後不成立。</strong>寫這句話的中文文章、影片、群組訊息多數都是那天之前寫的，而且沒有人回去改。看到這句話先確認發文日期。",
+      "<strong>「有 Medicare 就不用買保險」——PR 下來之前你沒有 Medicare。</strong>互惠醫療協定只有 11 個國家（Belgium、Finland、Italy、Malta、Netherlands、New Zealand、Norway、Ireland、Slovenia、Sweden、United Kingdom），<b>沒有台灣</b>。打工度假、學生、482 這些臨時簽證期間，醫療費用是自己的事。",
+      "<strong>「反正回台灣還有健保」——遷出戶籍的人回台要等 6 個月。</strong>除非你回去當天就有雇主。把這 6 個月當成遷出戶籍的隱藏成本去算，不要等到需要看病那天才發現。",
+      "<strong>這一區的每個數字都會變，而且變的時候不會通知你。</strong>換照費用每年 7 月 1 日調、健保規定跟著修法走、DASP 稅率跟著預算案走。下面每一條都附了官方連結與查核日期——<b>要做決定之前自己點進去看一次</b>，這個站只負責告訴你該看哪一頁。"
+    ],
+    src: [
+      { t:"Transport WA — Moving from overseas（PR／公民 3 個月換照期限、國家查詢器、台灣分類旗標）", u:"https://www.transport.wa.gov.au/licensing/drivers-licence/visit-move-wa/moving-from-overseas", as:"2026-08-17", v:true },
+      { t:"Transport WA — 承認制度變更公告（2025-11-01 起取消 Experienced Driver Recognised 類別，16 國名單含 Taiwan）", u:"https://www.transport.wa.gov.au/changes-to-recognition-of-overseas-licences-now-in-place", as:"2026-08-17", v:true },
+      { t:"Transport WA — 未承認國家換照流程（筆試＋路考、翻譯規定、各項費用）", u:"https://www.transport.wa.gov.au/licensing/drivers-licence/visit-move-wa/moving-from-overseas/non-recognised-country", as:"2026-08-17", v:true },
+      { t:"Transport WA — 承認國家換照流程（免試 A$63.50 的那條路，台灣 2025-10-31 前適用，留作對照）", u:"https://www.transport.wa.gov.au/licensing/drivers-licence/visit-move-wa/moving-from-overseas/transfer-recognised-country", as:"2026-08-17", v:true },
+      { t:"健保署 — 停復保規定變革專區（取消停復保，發布 113-12-19）", u:"https://www.nhi.gov.tw/ch/np-3873-1.html", as:"2026-08-17", v:true },
+      { t:"健保署 — 取消停復保規定相關問答集 PDF（113-12-22；停保受理終止日、戶籍遷出退保、返國加保等待期）", u:"https://www.nhi.gov.tw/ch/dl-80326-3e4b2b57624145da8397510cb55ad9c8-1.pdf", as:"2026-08-17", v:true },
+      { t:"Services Australia — 互惠醫療協定：來澳訪客（11 國名單，不含台灣）", u:"https://www.servicesaustralia.gov.au/when-reciprocal-health-care-agreements-apply-and-you-visit-australia", as:"2026-08-17", v:true },
+      { t:"ATO — 離境澳洲超級年金給付 DASP（四項資格條件、PR 不符資格、WHM 65% 稅率；頁面更新日 2026-04-21）", u:"https://www.ato.gov.au/individuals-and-families/super-for-individuals-and-families/super/temporary-residents-and-superannuation/departing-australia-superannuation-payment-dasp", as:"2026-08-17", v:true }
     ]
   },
 
@@ -1946,6 +2064,10 @@ flags("#landflags", DATA.landing.flags);
 flags("#prflags", DATA.pr.flags);
 flags("#prwhv", DATA.pr.whv);
 flags("#prwa", DATA.pr.wa);
+flags("#sdrive", DATA.settle.drive);
+flags("#snhi", DATA.settle.nhi);
+flags("#ssupr", DATA.settle.supr);
+flags("#sflags", DATA.settle.flags);
 
 /* ---- 來源 ---- */
 function sources(id, arr){
@@ -1968,6 +2090,7 @@ sources("#scamsrc", DATA.scam.src);
 sources("#aftersrc", DATA.after.src);
 sources("#landsrc", DATA.landing.src);
 sources("#prsrc", DATA.pr.src);
+sources("#settlesrc", DATA.settle.src);
 
 /* ---- 閘門式清單 ---- */
 function buildGate(key, items, unlockedMsg){
@@ -3002,7 +3125,23 @@ function comparePrice(){
    整段刻意不碰 Date 的月份加減。年齡用 (年,月,日) 三元組直接比大小算，
    天數差一律走 Date.UTC——本地時區的日光節約會讓「相差幾天」在換日那天差一天，
    而這個工具整個賣點就是日期要準。西澳現在不實施日光節約，但使用者不一定在西澳看。 */
-const ymd = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? [+m[1], +m[2], +m[3]] : null; };
+/* 只驗格式會讓 2000-02-31 過關，然後畫面印出「2033-02-31」這種不存在的日期。
+   原生 <input type="date"> 吐不出這種值，但貼上、自動填入、瀏覽器差異都可以。 */
+const ymd = s => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+  if(!m) return null;
+  const d = [+m[1], +m[2], +m[3]];
+  const t = new Date(Date.UTC(d[0], d[1]-1, d[2]));
+  return (t.getUTCFullYear() === d[0] && t.getUTCMonth()+1 === d[1] && t.getUTCDate() === d[2]) ? d : null;
+};
+/* 曆法正規化：[2033,2,29] 不存在，JS 會算成 2033-03-01。
+   dayGap 與 ageOn 走的都是 Date.UTC，**事實上早就一致採 3/1**，只有畫面上那串字
+   還停在 2/29——宣稱不猜、實際猜了、印出來的又是不存在的日期，三邊各說各話。
+   與其如此，不如顯示也拉到同一邊，然後在畫面上明說採的是哪一邊。 */
+function norm(d){
+  const t = new Date(Date.UTC(d[0], d[1]-1, d[2]));
+  return [t.getUTCFullYear(), t.getUTCMonth()+1, t.getUTCDate()];
+}
 const dayGap = (a, b) => Math.round((Date.UTC(b[0], b[1]-1, b[2]) - Date.UTC(a[0], a[1]-1, a[2])) / 86400000);
 /* 滿幾歲：生日還沒到就減一歲。不用 getTime 相減除以 365.25——那會在閏年附近錯一天。 */
 function ageOn(b, on){ let a = on[0] - b[0]; if(on[1] < b[1] || (on[1] === b[1] && on[2] < b[2])) a--; return a; }
@@ -3011,7 +3150,10 @@ const fmtD = d => d[0] + "-" + String(d[1]).padStart(2,"0") + "-" + String(d[2])
 /* 「還有 N 天」對超過一年的距離沒有感覺，換算成年又幾個月才讀得懂。 */
 function human(days){
   if(days < 60) return days + " 天";
-  const y = Math.floor(days / 365), m = Math.round((days - y*365) / 30.44);
+  let y = Math.floor(days / 365), m = Math.round((days - y*365) / 30.44);
+  /* 餘數落在 351–364 天時 m 會被四捨五入成 12，年沒有跟著進位，
+     就會印出「1 年 12 個月」——讀者分不出那是 1 年還是 2 年。 */
+  if(m >= 12){ y += 1; m -= 12; }
   if(y <= 0) return m + " 個月";
   return m > 0 ? y + " 年 " + m + " 個月" : y + " 年";
 }
@@ -3019,8 +3161,15 @@ function human(days){
 function checkAge(){
   const box = $("#bans"), b = ymd(($("#bday").value || "").trim());
   box.hidden = false;
-  const bail = (h, d, tone) => { box.className = "ans " + (tone || "warn");
-    box.innerHTML = '<div class="verdict">' + h + '</div><div class="detail">' + d + '</div>'; };
+  /* 走 bail 就代表這次算不出有效的年齡級距。上一次的結果如果留在點數表那一格，
+     使用者把生日改成 45 歲以上之後，總分還會拿舊分數繼續加——那是靜默的錯誤總分，
+     而且畫面上同時顯示著「這張表沒有你的級距」，兩邊互相打架。 */
+  const bail = (h, d, tone) => {
+    box.className = "ans " + (tone || "warn");
+    box.innerHTML = '<div class="verdict">' + h + '</div><div class="detail">' + d + '</div>';
+    const s = document.querySelector('[data-pk="age"]');
+    if(s && s.value){ s.value = ""; s.dispatchEvent(new Event("change")); }
+  };
 
   if(!b){ return bail("先填出生日期", "格式是年－月－日。這個欄位不會離開你的瀏覽器。"); }
   const t = new Date(), now = [t.getFullYear(), t.getMonth()+1, t.getDate()];
@@ -3038,7 +3187,7 @@ function checkAge(){
   }
   if(a < 18){
     return bail("還未滿 18 歲",
-      "點數表從「至少 18 歲」起算。你的第一個級距會在 " + fmtD([b[0]+18, b[1], b[2]]) + " 開始，那天起是 25 分。");
+      "點數表從「至少 18 歲」起算。你的第一個級距會在 " + fmtD(norm([b[0]+18, b[1], b[2]])) + " 開始，那天起是 25 分。");
   }
 
   const band = bandOf(a);
@@ -3049,7 +3198,7 @@ function checkAge(){
   let prevP = band.p;
   [25, 33, 40, 45].forEach(k => {
     if(k <= a) return;
-    const d = [b[0]+k, b[1], b[2]], nb = bandOf(k), p = nb ? nb.p : null;
+    const d = norm([b[0]+k, b[1], b[2]]), nb = bandOf(k), p = nb ? nb.p : null;
     marks.push({ k:k, d:d, days:dayGap(now, d), p:p, delta: p === null ? null : p - prevP });
     if(p !== null) prevP = p;
   });
@@ -3074,8 +3223,10 @@ function checkAge(){
      + '（原文寫的是 most，不是 all——例如婚姻狀況變動那一項，官方明說不以受邀當下認定）。'
      + '所以 EOI 掛在系統上等待的那段期間，年齡照走；跨過上面任何一個日期，你當初填的分數就不再成立。</p>';
   if(leapEdge){
-    h += '<p class="note">你的生日是 2 月 29 日。非閏年的生日該算 2/28 還是 3/1，各地法律規定不同，'
-       + '<strong>移民部怎麼認定我沒有查到明文，所以這裡不猜</strong>——上表的日期只是把月日照抄。差一天會影響你的請以官方認定為準。</p>';
+    h += '<p class="note">你的生日是 2 月 29 日。非閏年沒有這一天，該算 2/28 還是 3/1 各地法律規定不同，'
+       + '<strong>移民部怎麼認定我沒有查到明文</strong>。上表落在非閏年的日期一律顯示 <strong>3 月 1 日</strong>——'
+       + '這不是查到的答案，是這個工具算天數時實際採用的那一邊，寫出來是為了讓你知道差的是哪一天。'
+       + '如果官方認的是 2/28，上面每個日期都要往前挪一天；差這一天會影響你的話，請以官方認定為準。</p>';
   }
   h += '</div>';
   box.className = "ans " + tone;
@@ -3154,13 +3305,167 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
       h += '<p class="note">你的海外與澳洲工作年資合計是 ' + (val("ovs") + val("aus")) + ' 分，'
          + '但官方對工作年資有 <strong>' + DATA.pr.empCap + ' 分上限</strong>，超過的部分不計。上表已經砍過。</p>';
     }
+    /* 門檻與「幾分會被邀請」是兩條不同的線，畫面上必須分開講。
+       前者是西澳官方寫死的、可以查證的數字；後者每輪都在動，這個站不寫。
+       色調只反映前者——沒到門檻是一個確定的事實，值得一個看得見的訊號。 */
+    const floor = DATA.pr.eoiFloor, short = floor - sum;
+    h += '<p class="note"><strong>西澳州提名的 EOI 門檻是 ' + floor + ' 分。</strong>'
+       + '西澳官方在「Step 1: Lodge an expression of interest」列出的 EOI 必要內容裡直接寫著'
+       + '<i>&ldquo;A score of at least ' + floor + ' points in the Home Affairs points test&rdquo;</i>。'
+       + (sum >= floor
+            ? '你算出來的 <b>' + sum + ' 分</b>過了這個門檻。'
+            : '你算出來的 <b>' + sum + ' 分</b><strong>還差 ' + short + ' 分</strong>，'
+              + '這個分數投不了西澳提名的 EOI——不是機率低，是不符合它列的必要條件。')
+       + '注意這是<b>投 EOI 的門檻</b>，<strong>不是「幾分會被邀請」的那條線</strong>，兩件事常被講成同一件。</p>';
     h += '<p class="note"><strong>這是你自己宣稱的分數，不是移民部認可的分數。</strong>'
        + '每一項都要拿得出文件；學歷與職業能不能對上，是職業評估機構認定的，不是自己填了就算。'
-       + '而且——<strong>這張表沒有告訴你幾分會被邀請</strong>。那條線由每一輪邀請的實際狀況與你的職業決定，會變，'
+       + '而且——<strong>過了門檻不代表會被邀請</strong>。實際受邀的線由每一輪邀請的狀況與你的職業決定，會變，'
        + '所以這個站不寫那個數字。看到有人說「今年 X 分穩上」，那是他的猜測。</p></div>';
-    box.hidden = false; box.className = "ans ok";
+    box.hidden = false;
+    box.className = "ans " + (sum >= floor ? "ok" : "warn");
     box.innerHTML = h;
   }
+})();
+
+/* max 如果寫死年份，明年就是一個沒人會想起來改的殘留值。
+   生日不可能在未來，所以直接綁今天，不必維護。 */
+(function(){
+  const b = $("#bday"); if(!b) return;
+  const t = new Date();
+  b.max = fmtD([t.getFullYear(), t.getMonth()+1, t.getDate()]);
+})();
+
+/* ================= 定居：兩個時鐘 =================
+   跟上面的年齡時鐘共用 ymd／norm／dayGap／fmtD／human，刻意不另寫一套。
+   兩個欄位各自獨立：只填一個也要算得出來，因為多數人手上就只有一個日期。 */
+(function settle(){
+  const S = DATA.settle;
+  const aud = c => "A$" + (c/100).toFixed(2);
+
+  /* 加月份：2026-11-30 加 3 個月，曆法上沒有 2027-02-30。夾到當月最後一天，
+     並且在畫面上明說這一天是夾出來的——官方只寫「3 months」，沒有寫月底怎麼算，
+     猜一個看起來很精確的日期，比承認這裡有不確定更糟。 */
+  function addMonths(d, n){
+    const y = d[0] + Math.floor((d[1] - 1 + n) / 12);
+    const m = ((d[1] - 1 + n) % 12 + 12) % 12 + 1;
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { d: [y, m, Math.min(d[2], last)], clamped: d[2] > last };
+  }
+
+  /* ---- 費用對照：同一個人、同一本台灣駕照，只差在有沒有趕上 2025-10-31 ---- */
+  (function fee(){
+    const w = $("#sfee"); if(!w) return;
+    const now = S.fee.ctt + S.fee.xferTest, was = S.fee.xferNoTest, gap = now - was;
+    const rows = [
+      ["2025-11-01 起（台灣現在走這條）：筆試 " + aud(S.fee.ctt) + " ＋ 換照申請含路考 " + aud(S.fee.xferTest), aud(now)],
+      ["2025-10-31 前（台灣當時走這條）：換照申請免路考", aud(was)],
+      ["差額", "＋" + aud(gap)]
+    ];
+    const u = el("ul","kv");
+    rows.forEach(r => {
+      const li = el("li");
+      li.appendChild(el("span", null, esc(r[0])));
+      li.appendChild(el("span", null, esc(r[1])));
+      u.appendChild(li);
+    });
+    w.appendChild(u);
+    const p = el("p","note");
+    p.innerHTML = '這只是<strong>一次就過</strong>的價錢。筆試每重考一次 ' + aud(S.fee.cttResit)
+      + '、路考每重考一次 <strong>' + aud(S.fee.pdaResit) + '</strong>——重考費比第一次的筆試貴'
+      + Math.round(S.fee.pdaResit / S.fee.ctt) + ' 倍以上，所以這件事不適合抱著「先去考考看」的心情。'
+      + '拿到之後另計牌照效期費用：1 年 ' + aud(S.fee.renew1) + '、5 年 ' + aud(S.fee.renew5)
+      + '（兩條路都要繳，所以不算進上面的差額）。<b>費用每年 7 月 1 日調整，以官方頁面為準。</b>';
+    w.appendChild(p);
+  })();
+
+  /* ---- 兩個時鐘 ---- */
+  const box = $("#sans"), go = $("#sgo");
+  if(!box || !go) return;
+
+  function run(){
+    const t = new Date(), now = [t.getFullYear(), t.getMonth()+1, t.getDate()];
+    const out = ymd(($("#sout").value || "").trim());
+    const pr  = ymd(($("#spr").value  || "").trim());
+    box.hidden = false;
+
+    if(!out && !pr){
+      box.className = "ans warn";
+      box.innerHTML = '<div class="verdict">兩個欄位至少填一個</div><div class="detail">'
+        + '只有離台日 → 算戶籍與健保那個時鐘。只有 PR 核准日 → 算駕照那個時鐘。'
+        + '兩個都填 → 兩條一起排出來。</div>';
+      return;
+    }
+
+    const rows = [], notes = [];
+    let clamped = false;
+
+    if(out){
+      /* 戶籍法：出境 2 年以上應為戶籍遷出登記。這是「應辦」不是「會自動」，
+         所以它是一個到期日，不是一個通知。 */
+      const a = addMonths(out, 24); clamped = clamped || a.clamped;
+      rows.push({ d:a.d, days:dayGap(now, a.d),
+        k:"出境滿 2 年 — 依戶籍法應為戶籍遷出登記",
+        v:"遷出之後喪失健保投保資格、應予退保：不必再繳費，也不再有任何給付。眷屬同日轉出。" });
+      /* 回台加保的等待期綁的是「退保日」，不是離台日；退保日取決於何時遷出戶籍，
+         所以這裡不算它的日期，只把規則講清楚。 */
+      notes.push('健保的第二個時鐘從<b>退保那天</b>起算，不是從離台那天：退保日 <b>2 年內</b>恢復戶籍，'
+        + '自戶籍恢復當日加保；<b>2 年後</b>恢復、或返國初設戶籍，要等<strong>戶籍恢復滿 6 個月</strong>。'
+        + '唯一的例外是<strong>有一定雇主之受僱者，自受僱日加保</strong>——回台灣先找到工作，這 6 個月的空窗就不存在。');
+    }
+
+    if(pr){
+      /* Transport WA 原文只寫 up to 3 months，起點是「成為公民或 PR」。 */
+      const a = addMonths(pr, 3); clamped = clamped || a.clamped;
+      rows.push({ d:a.d, days:dayGap(now, a.d),
+        k:"PR 核准滿 3 個月 — 台灣駕照在西澳失效",
+        v:"官方原文：<i>&ldquo;After this 3-month period you cannot legally drive on your overseas licence, even if it is current and valid&rdquo;</i>——台灣駕照沒過期也一樣。而且台灣自 2025-11-01 起不在承認名單上，換照要考筆試＋路考，這 3 個月要塞得下預約、考試與可能的重考。" });
+      rows.push({ d:norm(pr), days:dayGap(now, norm(pr)),
+        k:"PR 核准當天 — 超級年金離境提領（DASP）資格消失",
+        v:"ATO 的資格條件之一是<i>&ldquo;you're not an Australian or New Zealand citizen, or a permanent resident of Australia&rdquo;</i>。<strong>這一格不可逆</strong>：駕照可以重考，健保可以再加保，這個不行。同一天起你才開始有 Medicare——台灣不在互惠協定的 11 國名單裡，在那之前沒有。" });
+    }
+
+    rows.sort((x,y) => x.days - y.days);
+
+    /* 色調看最急的那一條：已經過了 → bad；90 天內 → warn；其餘 ok。
+       「已經過了」在這一區是真的有法律後果的狀態，不是提醒。 */
+    const soonest = rows.reduce((m,r) => Math.min(m, r.days), Infinity);
+    const tone = soonest < 0 ? "bad" : soonest <= 90 ? "warn" : "ok";
+    const verdict = soonest < 0 ? "有期限已經過了"
+      : soonest <= 90 ? "90 天內有期限到期"
+      : "目前沒有 90 天內到期的期限";
+
+    let h = '<div class="detail"><ul class="kv">';
+    rows.forEach(r => {
+      const when = r.days < 0 ? "已過 " + human(-r.days) : "還有 " + human(r.days);
+      h += '<li><span>' + esc(fmtD(r.d)) + '　' + esc(r.k) + '</span><span>' + esc(when) + '</span></li>';
+    });
+    h += '</ul>';
+    rows.forEach(r => { h += '<p class="note"><b>' + esc(fmtD(r.d)) + '</b>：' + r.v + '</p>'; });
+    notes.forEach(n => { h += '<p class="note">' + n + '</p>'; });
+    if(clamped){
+      h += '<p class="note">上面有日期被<strong>夾到當月最後一天</strong>：你填的日子在目標月份不存在'
+         + '（例如 31 日加到只有 30 天的月份）。<strong>官方只寫「3 個月」「2 年」，沒有寫月底怎麼算</strong>，'
+         + '所以這裡採當月最後一天並且告訴你——不是查到的答案。差這一天會影響你的話，請直接問承辦單位。</p>';
+    }
+    /* 這一區的使用者很多是「PR 已經拿到一段時間了」才來查的，
+       他們的每一條都會顯示「已過」。工具不知道你辦過沒有，所以要講出這件事，
+       否則一個早就換好照的人會被自己的紅色嚇一跳，然後就不信這個站了。 */
+    if(soonest < 0){
+      h += '<p class="note"><strong>已經辦好的那幾條請直接忽略。</strong>'
+         + '這個工具只知道你填的兩個日期，不知道你辦過什麼——它算的是「法規上這一天已經到了」，'
+         + '不是「你出事了」。真正要處理的是還沒辦、而日期已經過去的那幾條。</p>';
+    }
+    h += '<p class="note"><strong>這些是法規寫死的期限，不是辦理時間。</strong>'
+       + '路考要線上預約、翻譯要找對的譯者、戶政與健保各是不同機關——把上面每個日期往前抓幾週，才是你該動手的那天。</p></div>';
+
+    box.className = "ans " + tone;
+    box.innerHTML = '<div class="verdict">' + verdict + '</div>' + h;
+  }
+
+  go.addEventListener("click", run);
+  ["#sout","#spr"].forEach(id => {
+    $(id).addEventListener("keydown", e => { if(e.key === "Enter") run(); });
+  });
 })();
 </script>
 </body>

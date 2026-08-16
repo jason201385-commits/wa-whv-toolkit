@@ -3,7 +3,7 @@
 **線上：https://wa-whv.pages.dev**
 
 一個靜態單頁。給人在西澳（Perth 及周邊）的台灣人，在**付錢或答應之前**查清楚。
-主要讀者是打工度假者；`/pr` 那一段是給已經開始想「要不要留下來」的人用的。
+主要讀者是打工度假者；`/pr` 與 `/settle` 那兩段是給已經開始想「要不要留下來」的人用的。
 
 非營利。沒有廣告、沒有推薦回饋、沒有合作仲介、沒有任何導流分潤。
 
@@ -18,9 +18,10 @@
 /landing   剛落地：TFN、Medicare、稅
 /ask       在群裡問之前，先問對問題
 /pr        留下來：年齡時鐘與技術移民點數試算
+/settle    定居的兩個時鐘：離台日算戶籍與健保，PR 核准日算駕照與超級年金
 ```
 
-十個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
+十一個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
 
 ---
 
@@ -64,6 +65,7 @@ test/
   wage.test.js        時薪判定的回歸測試
   cost.test.js        生活成本試算的回歸測試（稅級距、房租佔比、單位價格）
   pr.test.js          年齡時鐘與點數試算的回歸測試（官方點數表逐格對照）
+  settle.test.js      定居兩個時鐘的回歸測試（換照費用、期限算術、四句不准退版的事實）
   flags.test.js       旗標對帳：標了「待核」的資料一定要真的印得出「待核」
 ```
 
@@ -85,14 +87,15 @@ python -m http.server 8787 --bind 127.0.0.1 --directory public
 node test/wage.test.js
 node test/cost.test.js
 node test/pr.test.js
+node test/settle.test.js
 node test/flags.test.js
 ```
 
-零相依套件，合計 194 個案例（時薪 28、生活成本 100、點數 51、旗標對帳 15）。四支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
+零相依套件，合計 278 個案例（時薪 28、生活成本 100、點數 71、定居 64、旗標對帳 15）。五支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
 
-**動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`；動過 `checkAge()`、點數試算或 `DATA.pr` 一定要跑 `pr.test.js`；動過任何 renderer 或加了新的來源清單一定要跑 `flags.test.js`。**
+**動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`；動過 `checkAge()`、點數試算或 `DATA.pr` 一定要跑 `pr.test.js`；動過 `/settle` 的任何日期算術或文案、或 `DATA.settle` 一定要跑 `settle.test.js`；動過任何 renderer 或加了新的來源清單一定要跑 `flags.test.js`。**
 
-前三支對應的是會主動對使用者說出改變他行為的話的路徑：
+前四支對應的是會主動對使用者說出改變他行為的話的路徑：
 
 - `wage.test.js` — 「你的雇主違法」。涵蓋輸入護欄、浮點數邊界、入門級分類的假指控情境、兩套勞資系統、計件三分支、剪貼簿文字必須與畫面判定同一個符號、每條路徑都要有退休金提醒。
 - `cost.test.js` — 「你的雇主沒登記所以你每週被多扣 $XXX」「你的房租超過官方判準」「存到目標要 N 週」。涵蓋 ATO 兩張稅表的四個級距邊界、未登記雇主改用外國居民稅率的分支、30/40 rule 的踩線與越線、票價必須來自 `DATA.cost.fares` 不能寫死、支出剛好等於收入時不得印出 `$-0.00`、以及「這一區不得出現寫死的生活費金額」這條設計約束本身。
@@ -114,6 +117,22 @@ node test/flags.test.js
   WASMOL／GOL 的職業清單不准抄進站裡（清單會變，抄了就是製造過期資訊）。
   **不可以被改掉的三句**：每次試算都要講「以受邀當下認定」、要標明官方原文寫的是 most 不是 all、
   要明說 EOI 掛著等的期間年齡照走。
+  另有一組 2026-08-17 補的：**EOI 門檻 65 分**是官方頁面白紙黑字寫的**投件必要條件**
+  （`migration.wa.gov.au` 的 Step 1：*"A score of at least 65 points in the Home Affairs points test"*），
+  測試釘住「算出來低於 65 要說還差幾分、而且要說這是不符合必要條件不是機率低」、
+  「65 分以上不得暗示就會被邀請」、以及**這兩件事必須在同一段裡被區分開來**——
+  投件門檻與獲邀分數線是兩條線，網路上幾乎都寫成同一條。
+- `settle.test.js` — 「你的台灣駕照 N 天後在西澳失效」「你出境滿 2 年了」。
+  這一區的錯不是算得不準，是**無照上路**或**永久失去一筆錢**，所以測試連文案都鎖：
+  Transport WA 的七格費用逐格對表並驗算出 A$109.70 的差額、
+  兩個時鐘的起點不准混（離台日 +24 個月只出戶籍那條，PR 核准日 +3 個月只出駕照那條）、
+  月底夾值（11-30 加 3 個月）必須夾到當月最後一天**並且在畫面上承認這是夾出來的**、
+  印出來的每個日期都要在曆法上真的存在、以及四句**不准退回舊版本**的事實
+  （2025-11-01 台灣被移出承認名單、2024-12-23 台灣停保制度廢止、
+  台灣不在 Medicare 互惠協定的 11 國內、DASP 資格在 PR 核准當天消失）。
+  還有一條是給已經拿到 PR 一段時間的人用的：只要有任何一條顯示「已過」，
+  畫面必須同時說「已經辦好的請忽略、這個工具不知道你辦過什麼」——
+  否則一個早就換好照的人會被自己的紅色嚇一跳，然後就不信這個站了。
 
 `flags.test.js` 是橫向的，不管算得對不對，只管旗標印不印得出來——說明在上面「語法與旗標檢查」。
 
@@ -132,7 +151,7 @@ node test/flags.test.js
 `flags.test.js` 算的是會真的渲染出來的數，並釘住這條等式：
 
 ```js
-document.querySelectorAll('.pending').length   // 要等於 18（來源）+ 3（內容卡）+ 1（pending:true）= 22
+document.querySelectorAll('.pending').length   // 要等於 18（來源）+ 3（沒有網址的資料列）+ 1（pending:true）= 22
 ```
 
 對不上就代表有 renderer 讀不到旗標，畫面上會有一筆沒標「待核」的未查證資料。這個 bug 真的發生過

@@ -157,12 +157,21 @@ ok("級距文字用「至少 N 歲、未滿 M 歲」的官方寫法，不寫成 
   "官方原文是 at least X but less than Y——寫成區間會在生日當天差一天");
 
 console.log("\n— 提名加分（immi 與西澳兩個獨立來源都確認過）—");
-const visaOpts = P.q.find(q => q.k === "visa").o;
+const visaQ = P.q.find(q => q.k === "visa"), visaOpts = visaQ.o;
+const optWith = n => visaOpts.find(o => o[0].includes(n));
 ok("189 加 0 分、190 加 5 分、491 加 15 分",
-  visaOpts.find(o => o[0].startsWith("189"))[1] === 0 &&
-  visaOpts.find(o => o[0].startsWith("190"))[1] === 5 &&
-  visaOpts.find(o => o[0].startsWith("491"))[1] === 15,
+  optWith("189")[1] === 0 && optWith("190")[1] === 5 && optWith("491")[1] === 15,
   JSON.stringify(visaOpts));
+/* 這一題曾經問「你要走哪一類簽證」——問意圖，卻按官方的「已被提名且提名未撤回」給分。
+   它是全表單筆最大的 15 分，想走 491 的人照實回答就白拿，總分整個是假的。 */
+ok("題幹問的是「已取得的提名」，不是「打算走哪條路」",
+  /已(經)?取得|已獲/.test(visaQ.q) && !/你要走|打算|想走/.test(visaQ.q), visaQ.q);
+ok("加分選項自己也寫明是「已獲」，勾選時不會再誤讀成意圖",
+  optWith("190")[1] === 5 && optWith("190")[0].includes("已獲") &&
+  optWith("491")[0].includes("已獲"),
+  JSON.stringify(visaOpts.map(o => o[0])));
+ok("0 分那一項要明說「還沒有提名」，讓沒提名的人有地方可勾",
+  optWith("189")[0].includes("還沒有提名"), optWith("189")[0]);
 ok("英文三級是 0 / 10 / 20",
   JSON.stringify(P.q.find(q => q.k === "eng").o.map(o => o[1])) === "[0,10,20]");
 ok("澳洲工作年資最高 20 分、海外最高 15 分",
@@ -217,10 +226,38 @@ ok("沒填 → 提示而不是算出東西", runAge("", N).verdict.includes("先
 ok("亂填 → 不當成 0 歲", runAge("abc", N).verdict.includes("先填出生日期"));
 ok("未滿 18 → 告訴他哪一天開始起算",
   runAge("2015-03-09", N).html.includes("2033-03-09"), runAge("2015-03-09", N).html);
-ok("2/29 出生 → 明說這裡不猜非閏年怎麼認定",
-  runAge("2000-02-29", N).html.includes("不猜"));
+/* 舊版宣稱「這裡不猜」，但 dayGap 與 ageOn 走 Date.UTC，**事實上早就一致採 3/1**，
+   而畫面卻印出 2033-02-29 這個不存在的日期——宣稱、行為、顯示三邊各說各話。
+   現在的規則是：顯示跟行為一致（都採 3/1），並且明說這不是查到的答案。 */
+const leap = runAge("2000-02-29", N);
+/* 2040-02-29 是存在的（2040 是閏年），2033-02-29 不是。所以不能用
+   「有沒有出現 02-29」當判準，要逐個日期回檢曆法。 */
+const unreal = (leap.html.match(/\d{4}-\d{2}-\d{2}/g) || []).filter(s => {
+  const [y, m, d] = s.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() !== y || t.getUTCMonth() + 1 !== m || t.getUTCDate() !== d;
+});
+ok("2/29 出生 → 印出來的每個日期在曆法上都要真的存在",
+  unreal.length === 0, "不存在的日期：" + unreal.join("、"));
+ok("2/29 出生 → 非閏年的日期顯示成 3 月 1 日，跟算天數採的是同一邊",
+  leap.html.includes("2033-03-01") && leap.html.includes("3 月 1 日"),
+  (leap.html.match(/2033-\d{2}-\d{2}/) || [""])[0]);
+ok("2/29 出生 → 明說這是工具採用的一邊，不是官方認定",
+  leap.html.includes("沒有查到明文") && leap.html.includes("不是查到的答案"));
 ok("非 2/29 出生 → 不出現那段閏年說明",
-  !runAge("2000-03-01", N).html.includes("非閏年的生日"));
+  !runAge("2000-03-01", N).html.includes("非閏年沒有這一天"));
+/* 曆法上不存在的日期不該被當成合法生日：只驗格式的話 2000-02-31 會過關，
+   然後畫面印出「2033-02-31」。原生 date input 吐不出來，但貼上可以。 */
+ok("曆法上不存在的日期 → 當成沒填，不要算出東西",
+  runAge("2000-02-31", N).verdict.includes("先填出生日期"),
+  runAge("2000-02-31", N).verdict);
+ok("2000-02-29 是真的存在（上一條不能連合法閏日一起擋掉）",
+  !leap.verdict.includes("先填出生日期"), leap.verdict);
+/* 「1 年 12 個月」：餘 351–364 天時 m 進位成 12，年沒跟著進位。 */
+ok("「還有」的年月換算不得出現 12 個月",
+  !["1983-08-04", "1984-08-04", "1985-08-04", "1990-08-04"]
+    .some(b => /\d+ 年 (1[2-9]|[2-9]\d) 個月/.test(runAge(b, N).html)),
+  ["1983-08-04", "1984-08-04"].map(b => (runAge(b, N).html.match(/還有 [^<]*/g) || []).join("｜")).join("\n    "));
 
 console.log("\n— 這個工具存在的理由，不可以被改掉 —");
 const anyone = runAge("1996-01-15", N);
@@ -266,6 +303,50 @@ console.log("\n— 沒填完就不給總分 —");
 ok("算完要說這是自己宣稱的分數，不是移民部認可的",
   boxes["#prans"].innerHTML.includes("不是移民部認可的分數"));
 
+/* ---- 西澳 EOI 門檻：站上自己引的那一頁寫著的數字，不能吞掉 ----
+   migration.wa.gov.au 的「Step 1: Lodge an expression of interest」列出 EOI
+   必要內容，其中一項是 A score of at least 65 points in the Home Affairs
+   points test。這是**投 EOI 的門檻**，不是「幾分會被邀請」——兩件事。
+   舊版把兩件一起吞掉，結果算出 55 分的人看到一個純綠色、零訊號的畫面。 */
+console.log("\n— 西澳 EOI 門檻（站上自己引用的那一頁上就有）—");
+ok("eoiFloor 是 65，跟西澳官方頁面一致", P.eoiFloor === 65, String(P.eoiFloor));
+const low = runPoints(Object.assign({}, base, { eng: idxOf("eng", 0), visa: idxOf("visa", 0) }));
+ok("55 分（低於門檻）→ 算得出來的總分仍是 55", low.total === 55, String(low.total));
+ok("低於門檻 → 明說還差幾分", low.html.includes("還差 10 分"),
+  (low.html.match(/還差[^<]*/) || [""])[0]);
+ok("低於門檻 → 附上官方原文，不是自己說的",
+  low.html.includes("A score of at least 65 points in the Home Affairs points test"));
+ok("低於門檻 → 色調不是綠的",
+  boxes["#prans"].className.trim() === "ans warn", boxes["#prans"].className);
+ok("低於門檻 → 措辭是「不符合必要條件」而不是「機率低」",
+  low.html.includes("不是機率低"), (low.html.match(/不是機率低[^<]*/) || [""])[0]);
+const high = runPoints({ eng: idxOf("eng", 20) });
+ok("75 分（高於門檻）→ 說它過了門檻", high.total === 75 && high.html.includes("過了這個門檻"),
+  String(high.total));
+ok("高於門檻 → 色調回到綠的",
+  boxes["#prans"].className.trim() === "ans ok", boxes["#prans"].className);
+ok("兩種情況都要把「門檻」與「幾分會被邀請」明白切開",
+  high.html.includes("不是「幾分會被邀請」的那條線") &&
+  low.html.includes("不是「幾分會被邀請」的那條線"));
+
+/* ---- parts 是手寫的，DATA.pr.q 是資料驅動的，兩邊會漂 ----
+   DATA 區塊的開頭寫著「所有事實集中在這裡」。但往 q 加第 12 個因子，
+   表單會多一格、missing 會算它，**總分卻不會加它**——靜默少分，沒有任何測試擋得住。 */
+console.log("\n— 表單因子與加總必須對得起來 —");
+{
+  const partsSrc = (prBlock.match(/const parts = \[([\s\S]*?)\n    \];/) || [, ""])[1];
+  const missing = P.q.map(q => q.k).filter(k => !new RegExp('val\\("' + k + '"\\)').test(partsSrc));
+  ok("DATA.pr.q 的每一個 k 都出現在 parts 的加總裡",
+    partsSrc.length > 0 && missing.length === 0,
+    partsSrc.length === 0 ? "切不到 parts 陣列，這條等於沒測" : "漏掉：" + missing.join("、"));
+  /* 反向也要看：parts 引用了 q 裡沒有的 k，代表刪題時漏改，執行期會 throw。
+     （列數不能拿來比——ovs 與 aus 兩題合併成一列「工作年資」。） */
+  const used = [...partsSrc.matchAll(/val\("(\w+)"\)/g)].map(m => m[1]);
+  const keys = new Set(P.q.map(q => q.k));
+  const stray = [...new Set(used)].filter(k => !keys.has(k));
+  ok("parts 沒有引用 DATA.pr.q 以外的 k", stray.length === 0, "多出來：" + stray.join("、"));
+}
+
 /* ================================================ 不可以長回來的宣稱 */
 console.log("\n— 無來源宣稱守門 —");
 /* 官方 189 積分表頁面上沒有任何及格分數。任何「N 分保證上」都是猜測，
@@ -275,6 +356,9 @@ ok("不得寫出任何「幾分會被邀請／保證上」的分數線",
   (HTML.match(/(\d{2})\s*分[^。]{0,12}(保證|一定|穩)[^。]{0,6}(上|邀|過)/) || [])[0]);
 ok("要明說這張表沒有寫幾分會被邀請",
   HTML.includes("沒有寫幾分會被邀請") || HTML.includes("沒有告訴你幾分會被邀請"));
+ok("不得把 EOI 門檻講成受邀分數線",
+  !/65 分[^。]{0,10}(就會|就能|即可)[^。]{0,6}(邀|上)/.test(HTML),
+  (HTML.match(/65 分[^。]{0,20}/g) || []).join("｜"));
 /* WHV 的時數與職業條件是 grok 提出、我回官方原文查證後才寫上去的，
    兩句原文都要留著——沒有原文，這幾條就退化成「聽說」。 */
 ok("技術年資的兩句官方原文都在站上",

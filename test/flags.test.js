@@ -142,12 +142,19 @@ for (const a of aware) {
   if (!Array.isArray(node)) bad("註冊了 DATA." + a + " 但它不是陣列（實際：" + typeof node + "）");
 }
 
-is(flagged.length, 22, "畫面上應該出現的「待核」徽章總數");
+/* 這裡數的是 DATA 的筆數，這支測試從頭到尾沒有渲染過 DOM，
+   所以講「畫面上會出現幾個」是過度宣稱——上面的黑洞對帳只證明了
+   「每一筆都落在吃得到旗標的陣列裡」，證不到渲染真的跑過。 */
+is(flagged.length, 22, "DATA 裡帶旗標的總筆數（＝畫面該有的徽章數上限）");
 
 /* ============ 4. 掛載點：註冊到的 id 要真的在 HTML 裡 ============ */
 
 console.log("\n— 掛載點 —");
-const regs = [...HTML.matchAll(/\b(?:flags|sources|calls)\(\s*"(#[\w-]+)"/g)].map(m => m[1].slice(1));
+/* `cards` 一定要在這串裡面。它漏掉過，而漏掉的代價可以實際做出來：
+   把 markup 的 id="savelist" 改成 id="savelist-v2"（渲染器呼叫不動），
+   cards() 走 `if(!w) return;` 靜默整段消失、畫面上唯一那筆 pending:true 跟著不見，
+   這支測試卻全綠。這支測試存在的理由就是防這個，它自己漏掉了。 */
+const regs = [...HTML.matchAll(/\b(?:flags|sources|calls|cards|li|html)\(\s*"(#[\w-]+)"/g)].map(m => m[1].slice(1));
 const missing = [...new Set(regs)].filter(id => !new RegExp('id="' + id + '"').test(HTML));
 missing.length === 0
   ? ok("全部 " + new Set(regs).size + " 個註冊目標都找得到對應的 id")
@@ -166,7 +173,7 @@ for (const k of srcArrays) {
 }
 is(bare, 0, "沒有網址的來源");
 is(undated, 0, "日期格式不對的來源");
-is(srcArrays.length, 9, "有來源清單的區塊數");
+is(srcArrays.length, 10, "有來源清單的區塊數");
 
 console.log("\n" + (fail === 0 ? "全數通過" : "有失敗") + "：" + pass + " 過 / " + fail + " 失敗");
 process.exit(fail === 0 ? 0 : 1);
