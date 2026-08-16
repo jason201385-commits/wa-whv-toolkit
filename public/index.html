@@ -3516,13 +3516,24 @@ const dayGap = (a, b) => Math.round((Date.UTC(b[0], b[1]-1, b[2]) - Date.UTC(a[0
 function ageOn(b, on){ let a = on[0] - b[0]; if(on[1] < b[1] || (on[1] === b[1] && on[2] < b[2])) a--; return a; }
 const bandOf = a => DATA.pr.age.find(x => a >= x.lo && a < x.hi) || null;
 const fmtD = d => d[0] + "-" + String(d[1]).padStart(2,"0") + "-" + String(d[2]).padStart(2,"0");
-/* 「還有 N 天」對超過一年的距離沒有感覺，換算成年又幾個月才讀得懂。 */
-function human(days){
+/* 「還有 N 天」對超過一年的距離沒有感覺，換算成年又幾個月才讀得懂。
+   ⚠️ **不能用「天數 ÷ 30.44 再四捨五入」**：那會把 80 天講成「3 個月」，
+   往多的方向最多多報 15 天。這一頁印的每一條都是法定期限，
+   **多報剩餘時間 ＝ 叫人晚點再辦**，而晚的那幾天正好是預約排隊要用的。
+   改成走曆法逐月推進，只講**已經滿的**整月：「還有 2 個月」的意思因此是
+   「至少還有 2 個月」，永遠不會反過來。順帶把 365 天一年的近似也一起拿掉。 */
+function human(from, to){
+  /* 兩端誰前誰後由參數決定太容易叫錯（呼叫端有「已過」與「還有」兩種語序），
+     所以在這裡就地擺正——這支只回長度，不回方向。 */
+  if(dayGap(from, to) < 0){ const t = from; from = to; to = t; }
+  const days = dayGap(from, to);
   if(days < 60) return days + " 天";
-  let y = Math.floor(days / 365), m = Math.round((days - y*365) / 30.44);
-  /* 餘數落在 351–364 天時 m 會被四捨五入成 12，年沒有跟著進位，
-     就會印出「1 年 12 個月」——讀者分不出那是 1 年還是 2 年。 */
-  if(m >= 12){ y += 1; m -= 12; }
+  /* 一個月一個月加上去，加到再加一個月就會超過為止。
+     norm() 會把 1/31 + 1 個月正規化成 3/2 之類——那是曆法本來的樣子，
+     而且它把界線往後推，等於仍然是「至少」，方向沒有翻。 */
+  let n = 0;
+  while(n < 1200 && dayGap(norm([from[0], from[1] + n + 1, from[2]]), to) >= 0) n++;
+  const y = Math.floor(n / 12), m = n % 12;
   if(y <= 0) return m + " 個月";
   return m > 0 ? y + " 年 " + m + " 個月" : y + " 年";
 }
@@ -3584,7 +3595,7 @@ function checkAge(){
     const label = m.p === null
       ? "滿 45 歲 — 年齡分數表關門"
       : "滿 " + m.k + " 歲 — 年齡分數變 " + m.p + " 分（" + (m.delta > 0 ? "+" : "") + m.delta + "）";
-    h += '<li><span>' + esc(fmtD(m.d)) + '　' + label + '</span><span>還有 ' + esc(human(m.days)) + '</span></li>';
+    h += '<li><span>' + esc(fmtD(m.d)) + '　' + label + '</span><span>還有 ' + esc(human(now, m.d)) + '</span></li>';
   });
   h += '</ul>';
   h += '<p class="note"><strong>這些日期之所以重要，是因為積分測驗以「受邀當下」認定，不是以你送出 EOI 的那天。</strong>'
@@ -3837,7 +3848,7 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     rows.forEach(r => {
       const when = r.state
         ? (r.days < 0 ? "已經發生" : r.days === 0 ? "就是今天" : "屆時發生")
-        : r.days < 0 ? "已過 " + human(-r.days) : "還有 " + human(r.days);
+        : r.days < 0 ? "已過 " + human(r.d, now) : "還有 " + human(now, r.d);
       h += '<li><span>' + esc(fmtD(r.d)) + '　' + esc(r.k) + '</span><span>' + esc(when) + '</span></li>';
     });
     h += '</ul>';

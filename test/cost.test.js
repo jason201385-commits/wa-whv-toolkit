@@ -656,13 +656,23 @@ t("不知道 → 先以有登記估，並要求對第一張 payslip",
 t("有登記 → 不該再叫人去對 payslip 的 30%",
   { rate: 30, hours: 38, reg: "reg" }, { htmlLacks: "以有登記估" });
 (function () {
-  const a = runCost({ rate: 30, hours: 38, reg: "reg" });
-  const b = runCost({ rate: 30, hours: 38, reg: "unreg" });
-  const g = h => parseFloat((h.match(/稅後週薪<\/strong> <span class="num">\$([\d.]+)</) || [, "0"])[1]);
+  /* ⚠️ 這一段原本用 `[\d.]+` 抓金額，跟 542 行那條警告犯的是同一個錯——
+     只是那裡寫了註解、這裡沒有。`$1,034.21` 被 `[\d.]+` 抓成「1」，
+     而下面兩條比大小、比相等的斷言**照樣會過**：1 < 904 成立、1 === 1 也成立。
+     原本的時薪 30 剛好讓兩邊都不到四位數，所以這個洞一直沒被踩到——
+     **「測試是綠的」跟「測試在測東西」是兩件事**，這裡是後者失守。
+     一併把時薪調到 34（同 543 行），讓千分位那條路真的被走過一次。 */
+  const a = runCost({ rate: 34, hours: 38, reg: "reg" });
+  const b = runCost({ rate: 34, hours: 38, reg: "unreg" });
+  const g = h => {
+    const m = h.match(/稅後週薪<\/strong> <span class="num">\$([\d,.]+)</);
+    return m ? parseFloat(m[1].replace(/,/g, "")) : 0;
+  };
+  ok("前提：有登記那一邊是四位數（否則千分位那條路沒被走到）", g(a.html) > 1000, String(g(a.html)));
   ok("沒登記的稅後收入一定比較低", g(b.html) < g(a.html),
     `有登記 $${g(a.html)}／沒登記 $${g(b.html)}`);
   ok("「不知道」與「有登記」算出來一樣（不知道時採較保守的估法）",
-    g(runCost({ rate: 30, hours: 38, reg: "unknown" }).html) === g(a.html));
+    g(runCost({ rate: 34, hours: 38, reg: "unknown" }).html) === g(a.html));
 })();
 
 /* ------------------------------------------------------------------ 通勤 */
