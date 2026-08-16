@@ -47,6 +47,8 @@ function slice(startPattern) {
 const SRC = [
   slice("const DATA = {"),
   slice("function whmTaxCents("),
+  slice("function residentTaxCents("),
+  slice("function medicareLevyCents("),
   slice("function checkCost("),
   slice("function comparePrice("),
 ].join(";\n");
@@ -65,6 +67,7 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(
   SRC + ";\nglobalThis.DATA = DATA; globalThis.whmTaxCents = whmTaxCents;" +
+  "globalThis.residentTaxCents = residentTaxCents; globalThis.medicareLevyCents = medicareLevyCents;" +
   "globalThis.checkCost = checkCost; globalThis.comparePrice = comparePrice;",
   sandbox
 );
@@ -72,11 +75,13 @@ vm.runInContext(
 const C = sandbox.DATA.cost;
 
 /* 預設值刻意跟畫面上的 <select> 第一個選項一致：
-   creg=unknown、cbills=inc、ctrans=walk。填了別的才代表使用者主動選過。 */
+   ctax=unknown、cbills=inc、ctrans=walk。填了別的才代表使用者主動選過。
+   o.reg 這個鍵名沿用舊的（它現在餵的是稅表模式，多了 resident 這個值）——
+   改鍵名要動 7 個呼叫點，而那 7 行本身沒有變髒。 */
 function runCost(o) {
   const set = (k, v) => { fields[k] = { value: v == null ? "" : String(v) }; };
   set("#crate", o.rate); set("#chours", o.hours);
-  set("#creg", o.reg || "unknown");
+  set("#ctax", o.reg || "unknown");
   set("#crent", o.rent); set("#cbills", o.bills || "inc");
   set("#ctrans", o.trans || "walk"); set("#ccar", o.car);
   set("#cfood", o.food); set("#cgoal", o.goal);
@@ -192,6 +197,127 @@ for (const [y, want] of [[135000, 40500], [190000, 60850], [200000, 65350]]) {
 ok("沒登記在任何收入下都不會比有登記划算",
   [1, 45000, 135000, 145600, 190000, 250000].every(
     y => sandbox.whmTaxCents(c(y), false) >= sandbox.whmTaxCents(c(y), true)));
+
+/* ---------------------------------------------------------------------------
+   居民稅表（2026–27）與 Medicare levy。
+
+   為什麼這一段要單獨測：離開打工度假簽之後，稅是**整個換一張表**算的，
+   而中文社群普遍把「稅務居民」跟「拿到 PR」當同一件事。這兩件事在 ATO 是分開的，
+   誤判的代價是整年的預扣稅算錯。
+   免稅額那一格（$18,200）是兩張表差最多的地方，年收 $20,800 的人
+   在 WHM 表要繳 $3,120，在居民表只要 $390。
+   --------------------------------------------------------------------------- */
+console.log("\n— 居民稅表（ATO 2026–27）—");
+const R = C.tax.res;
+ok("免稅額整數點（$18,200）→ $0",
+  sandbox.residentTaxCents(c(R.free)) === 0,
+  "實得 " + sandbox.residentTaxCents(c(R.free)) / 100);
+ok("免稅額以下一毛都不用繳——這是跟 WHM 表最大的差別",
+  sandbox.residentTaxCents(c(10000)) === 0 && sandbox.whmTaxCents(c(10000), true) === c(1500));
+ok("超過免稅額 $1 → 15 分（不是從第一元起算）",
+  sandbox.residentTaxCents(c(18201)) === 15,
+  "實得 " + sandbox.residentTaxCents(c(18201)));
+/* 端點金額直接抄 ATO 表，不是從程式推回來的。 */
+for (const [y, want] of [[45000, 4020], [50000, 5520], [135000, 31020],
+                         [190000, 51370], [200000, 55870]]) {
+  ok(`居民 $${y.toLocaleString()} → $${want.toLocaleString()}（ATO 2026–27）`,
+    sandbox.residentTaxCents(c(y)) === c(want),
+    "實得 " + sandbox.residentTaxCents(c(y)) / 100);
+}
+ok("居民表的邊際稅率全程不超過 45%", (() => {
+  let worst = 0;
+  for (let y = 1000; y <= 260000; y += 1000)
+    worst = Math.max(worst, (sandbox.residentTaxCents(c(y + 1000)) - sandbox.residentTaxCents(c(y))) / c(1000));
+  return worst <= C.tax.r4 + 1e-9;
+})());
+ok("居民表的所得稅在任何收入下都不會高於 WHM 表",
+  [1, 18200, 20000, 45000, 135000, 190000, 250000].every(
+    y => sandbox.residentTaxCents(c(y)) <= sandbox.whmTaxCents(c(y), true)));
+
+console.log("\n— Medicare levy 的三段（低收入門檻）—");
+const LV = C.tax.levy;
+ok("下門檻（$28,011）以下不課",
+  sandbox.medicareLevyCents(c(LV.lo)) === 0 && sandbox.medicareLevyCents(c(20000)) === 0);
+/* 這一條是整段的錨：ATO 自己的示範案例就寫著 $29,000 的人繳 $98.90。
+   如果哪天這個數字對不上，代表門檻或 10% 那個係數變了，兩個都要回去查頁面。 */
+ok("ATO 示範案例：年收 $29,000 → levy 恰為 $98.90",
+  sandbox.medicareLevyCents(c(29000)) === c(98.90),
+  "實得 " + sandbox.medicareLevyCents(c(29000)) / 100);
+ok("剛超過下門檻 $1 → 只課 10 分，不是 2%",
+  sandbox.medicareLevyCents(c(28012)) === 10,
+  "實得 " + sandbox.medicareLevyCents(c(28012)));
+ok("上門檻（$35,013）→ $700.20（分段公式，不是 2%）",
+  sandbox.medicareLevyCents(c(LV.hi)) === c(700.20),
+  "實得 " + sandbox.medicareLevyCents(c(LV.hi)) / 100);
+ok("超過上門檻就是全額 2%",
+  sandbox.medicareLevyCents(c(35014)) === c(700.28) &&
+  sandbox.medicareLevyCents(c(70000)) === c(1400));
+ok("levy 單調遞增",
+  [29000, 30000, 35013, 35014, 40000, 100000].every(
+    (y, i, a) => i === 0 || sandbox.medicareLevyCents(c(y)) > sandbox.medicareLevyCents(c(a[i - 1]))));
+ok("上門檻就是下門檻除以 0.8 取整——兩個數字不是各自獨立的，改一個就要改另一個",
+  Math.floor(LV.lo / (1 - 2 * LV.phase + LV.phase)) === LV.hi || Math.floor(LV.lo / 0.8) === LV.hi,
+  `lo=${LV.lo} hi=${LV.hi}`);
+ok("居民稅表的三個累計基底彼此推得出來",
+  Math.round((R.b1 - R.free) * R.r1) === R.base2 &&
+  Math.round(R.base2 + (R.b2 - R.b1) * R.r2) === R.base3 &&
+  Math.round(R.base3 + (R.b3 - R.b2) * R.r3) === R.base4);
+
+console.log("\n— 居民模式從畫面走一遍 —");
+/* 年收 $69,160（$35 × 38 小時）：落在全額 2% 那一段，換簽之後是省錢的。 */
+t("居民模式要講免稅額，不能沿用「沒有免稅額」那句 WHM 文案",
+  { rate: 35, hours: 38, reg: "resident" },
+  { htmlHas: ["免稅", "Medicare levy"], htmlLacks: ["沒有免稅額", "一律 15%"] });
+t("全額 2% 這一段要能算出 MES 免掉的年金額",
+  { rate: 35, hours: 38, reg: "resident" },
+  { htmlHas: ["Medicare Entitlement Statement", "8 週", "7 月 1 日", "有機會整筆免掉"] });
+t("要把「這一天起 2% 開始繳」接回 /settle",
+  { rate: 35, hours: 38, reg: "resident" }, { htmlHas: 'href="#settle"' });
+t("要說明兩張表的公布年度不同，不要假裝在比同一年",
+  { rate: 35, hours: 38, reg: "resident" },
+  { htmlHas: [C.tax.whmYear, C.tax.res.year] });
+t("換簽省錢時要寫「少繳」", { rate: 35, hours: 38, reg: "resident" },
+  { htmlHas: "少繳", htmlLacks: "多繳" });
+/* 年收 $156,000（$40 × 75 小時）：$135,000 以上居民表加上 levy 反而比 WHM 貴。
+   這個方向真的存在，文案不准寫死「換簽一定比較省」。 */
+t("高收入時居民＋levy 反而較貴，要寫「多繳」",
+  { rate: 40, hours: 75, reg: "resident" }, { htmlHas: "多繳", htmlLacks: "少繳" });
+/* 年收 $20,800（$20 × 20 小時）：在下門檻以下，levy 是 0。
+   這時候還跳出「有機會整筆免掉」等於叫人去申請一份他根本不需要的文件。 */
+t("levy 是 0 的時候不要叫人去辦 MES",
+  { rate: 20, hours: 20, reg: "resident" },
+  { htmlHas: ["Medicare levy", "本來就不課"], htmlLacks: ["有機會整筆免掉", "Medicare Entitlement Statement"] });
+/* 年收 $32,500（$25 × 25 小時）：落在兩個門檻之間，只課超出部分的 10%。 */
+t("中間段要講「超過下門檻部分的 10%」，不是 2%",
+  { rate: 25, hours: 25, reg: "resident" },
+  { htmlHas: "超過下門檻部分的 10%" });
+/* DASP 的稅率不看稅表，看簽證——這一段在加居民模式時漏了分支，
+   結果對「已經不是打工度假簽」的人印出 65%，而且跟 /settle 釘住的
+   「拿到 PR 那一刻 DASP 資格永久消失」直接矛盾。兩個方向都要釘。 */
+t("居民模式不得沿用打工度假的 65% DASP",
+  { rate: 35, hours: 38, reg: "resident" },
+  { htmlHas: ["taxed element", "35%", "永久消失"],
+    htmlLacks: "打工度假者的 DASP 稅率是 65%" });
+t("居民模式要把 PR 之後領不到那件事接回 /settle",
+  { rate: 35, hours: 38, reg: "resident" },
+  { htmlHas: ["拿到 PR 的那一刻", 'href="#settle"'] });
+t("WHM 模式仍然要保留 65% 那句，不要被居民分支洗掉",
+  { rate: 35, hours: 38, reg: "reg" },
+  { htmlHas: "打工度假者的 DASP 稅率是 65%", htmlLacks: "taxed element" });
+
+/* 這裡不能用「免稅」兩個字當反向斷言——WHM 那支的文案是「沒有免稅額」，
+   本來就含這兩個字。要挑真的只屬於居民表的字串。 */
+t("WHM 三種選項都不該出現居民表的字眼",
+  { rate: 35, hours: 38, reg: "reg" },
+  { htmlHas: "沒有免稅額", htmlLacks: ["Medicare levy", "居民稅表前"] });
+
+/* 這個站不做身分判定，但必須把判準與「這不是看有沒有 PR」講出來，
+   否則使用者只會照自己的直覺選，而直覺在這一題上是錯的。 */
+ok("畫面要點破「稅務居民 ≠ 有 PR」並附四個法定測試的名字",
+  HTML.includes("We don't use the same rules as the Department of Home Affairs") &&
+  HTML.includes("183 天") && HTML.includes("本站<b>不替你判定</b>"));
+ok("畫面要擋住還在打工度假簽的台灣人去選居民表（台灣不在 NDA 名單）",
+  HTML.includes("還在打工度假簽的台灣人不要選它") && HTML.includes("台灣不在名單上"));
 
 /* 從 UI 進得去的那一格：護欄放行 80 小時，所以高時薪一定會跨到第三級距。 */
 (function () {
@@ -400,7 +526,7 @@ ok("稅級距的四個端點與兩張表的基底彼此對得上",
   Math.round(C.tax.b2 * C.tax.unreg) === C.tax.unregBase3 &&
   Math.round(C.tax.unregBase3 + (C.tax.b3 - C.tax.b2) * C.tax.r3) === C.tax.unregBase4);
 ok("來源筆數與待核筆數要被釘住（README 的對帳表靠這個）",
-  C.src.length === 13 && C.src.filter(s => s.v === false).length === 2,
+  C.src.length === 17 && C.src.filter(s => s.v === false).length === 2,
   `實得 ${C.src.length} 筆／待核 ${C.src.filter(s => s.v === false).length} 筆——`
   + "數字變了就回去改 public/README.md 的對帳表，不要只改這一行");
 

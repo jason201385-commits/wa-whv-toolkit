@@ -151,6 +151,30 @@ ok("續期費用兩條路都要繳，所以要明說不算進差額",
   feeHtml.includes("不算進上面的差額"));
 ok("要提醒費用每年 7 月 1 日調", feeHtml.includes("7 月 1 日"));
 
+/* 上面那幾條鎖的全是金額，而金額對不代表話沒說反。
+   實測把兩行的日期標籤對調（金額不動），整支測試照樣全綠——
+   頁面會變成「2025-10-31 前要考筆試＋路考」，方向完全相反。
+   所以要鎖的是「哪個標籤綁哪個金額」，不是「這些金額有出現」。 */
+const aud = c => "A$" + (c / 100).toFixed(2);
+const iNow = feeHtml.indexOf("2025-11-01 起"), iWas = feeHtml.indexOf("2025-10-31 前");
+const segNow = iNow >= 0 && iWas > iNow ? feeHtml.slice(iNow, iWas) : "";
+const segWas = iWas >= 0 ? feeHtml.slice(iWas) : "";
+ok("兩行的順序是「現在這條」在前、「當時那條」在後",
+  iNow >= 0 && iWas > iNow, "iNow=" + iNow + " iWas=" + iWas);
+ok("2025-11-01 那行要綁筆試＋含路考，且金額是合計",
+  segNow.includes("筆試") && segNow.includes("含路考") &&
+  segNow.includes(aud(S.fee.ctt + S.fee.xferTest)) && !segNow.includes("免路考"),
+  segNow.replace(/\s+/g, " ").slice(0, 160));
+ok("2025-10-31 那行要綁免路考，而且不可以混進筆試",
+  segWas.includes("免路考") && segWas.includes(aud(S.fee.xferNoTest)) &&
+  !segWas.includes("筆試 "),
+  segWas.replace(/\s+/g, " ").slice(0, 160));
+/* 「倍以上」是下界，所以只能用 floor；而且要拿重考比重考，
+   不能拿路考重考去比第一次的筆試（那是兩種不同的東西）。 */
+ok("重考的倍數用 floor 算，而且比較基準是筆試重考費",
+  feeHtml.includes(Math.floor(S.fee.pdaResit / S.fee.cttResit) + " 倍以上"),
+  "期望 " + Math.floor(S.fee.pdaResit / S.fee.cttResit) + " 倍以上");
+
 /* ================================================ 兩個時鐘 */
 console.log("\n— 兩個時鐘：起點不同，不可以混 —");
 const N = [2026, 8, 17];
@@ -212,8 +236,7 @@ console.log("\n— 色調：已經過了跟還早不能長一樣 —");
 ok("期限已過 → bad", run("", "2026-01-01", N).tone === "bad", run("", "2026-01-01", N).tone);
 ok("期限已過 → 說「已過」而不是「還有」",
   /已過/.test(run("", "2026-01-01", N).html));
-/* 離台 2024-10-01 → 戶籍那條落在 2026-10-01，距 2026-08-17 是 45 天。
-   刻意只填一個欄位：兩個都填的話 DASP 那條會把色調拉走，測不到這個門檻。 */
+/* 離台 2024-10-01 → 戶籍那條落在 2026-10-01，距 2026-08-17 是 45 天。 */
 ok("90 天內到期 → warn",
   run("2024-10-01", "", N).tone === "warn", run("2024-10-01", "", N).tone);
 ok("還很久 → ok", run("", "2026-08-01", [2026, 3, 1]).tone === "ok",
@@ -233,6 +256,31 @@ ok("這句話只在真的有過期時出現",
 ok("而且要說清楚工具不知道你辦過什麼",
   run("", "2026-01-01", N).html.includes("不知道你辦過什麼"));
 
+/* DASP 那一列的日期就是使用者填的 PR 核准日本身，所以 PR 一下來它永遠是過去式。
+   它曾經被算進色調，結果是**每一個已經拿到 PR 的人都拿到紅色的「有期限已經過了」**
+   ——包括換照倒數還有將近三個月、什麼都沒錯過的人。上面那條「90 天內 → warn」
+   當初是靠「刻意只填一個欄位」才測得出來的，那個繞法就是這個缺陷的痕跡。 */
+const prOnly = run("", "2026-08-11", N);   // PR 核准 6 天前 → 換照還有 85 天
+ok("PR 剛下來（換照還有 85 天）→ warn，不准因為 DASP 那列變成 bad",
+  prOnly.tone === "warn", prOnly.tone + "／" + prOnly.html.slice(0, 60));
+ok("而且判語要指向換照那條，不是「有期限已經過了」",
+  prOnly.html.includes("90 天內有期限到期") && !prOnly.html.includes("有期限已經過了"),
+  prOnly.html.slice(0, 80));
+ok("這種情況不該出現「已經辦好的請忽略」（沒有任何期限過去）",
+  !prOnly.html.includes("已經辦好的那幾條請直接忽略"));
+/* 右欄措辭：「已過 N 天」是「你遲到了」的講法，而這一格沒有人遲到得了。 */
+ok("DASP 那一列右欄寫「已經發生」，不是「已過 N 天」",
+  prOnly.html.includes("已經發生") && !/已過 \d/.test(prOnly.html),
+  (prOnly.html.match(/已過 [^<]*/g) || []).join("｜"));
+/* 但它仍然要在清單裡，而且仍然要講不可逆——降級的是色調，不是這件事的重要性。 */
+ok("降級色調不等於把 DASP 藏起來",
+  prOnly.html.includes("超級年金離境提領（DASP）資格消失") &&
+  prOnly.html.includes("這一格不可逆"));
+/* 真的有期限過去時照樣要紅：PR 8 個月前 → 換照已逾期 5 個月。 */
+const bothPast = run("", "2025-12-16", N);
+ok("真的逾期（換照已過）→ 照樣 bad",
+  bothPast.tone === "bad" && bothPast.html.includes("有期限已經過了"), bothPast.tone);
+
 console.log("\n— 期限不是辦理時間 —");
 ok("要明說這些是法規期限，不是你辦得完的時間",
   both.html.includes("不是辦理時間"));
@@ -241,72 +289,214 @@ ok("要明說這些是法規期限，不是你辦得完的時間",
 console.log("\n— 三件在中文網路上普遍過期的事實 —");
 const ALL = S.drive.concat(S.nhi, S.supr, S.flags).join("\n");
 
-ok("駕照：明講 2025-11-01 台灣被移出承認名單",
-  /2025-11-01/.test(ALL) && ALL.includes("承認名單"));
-ok("駕照：附西澳公告原文，不是自己說的",
-  ALL.includes("no longer exists") &&
-  ALL.includes("pass a theory test and Practical Driving Assessment"));
-ok("駕照：明講換照義務來自 PR 而不是落地",
-  ALL.includes("PR 帶來的") && ALL.includes("do not need to transfer your overseas licence"));
-ok("駕照：附「3 個月後即使沒過期也不能開」的原文",
-  ALL.includes("even if it is current and valid"));
-/* 官網的國家查詢器對台灣還顯示舊文案，但分類旗標是 0（未承認）。
-   使用者會自己去點那個查詢器，所以這個矛盾必須由站上先講。 */
-ok("駕照：主動揭露官網查詢器還沒改乾淨這件事",
-  ALL.includes("experienced driver recognised country") && ALL.includes("以流程頁與公告為準"));
+/* 這一段原本每一條都對 ALL（四個陣列串起來的字串）做 grep。
+   突變測試證明那擋不住東西：把 nhi[0] 的「113 年 12 月 23 日」改成 115 年、
+   把 supr[2] 的 65% 改成 15%，測試都照樣綠——因為別的 bullet 剛好也含那些 token，
+   正則在串接字串上仍然命中。所以事實斷言一律綁**指定索引**。
+   索引本身也要鎖：bullet 順序調動時要紅一次，讓人回來確認斷言還指著同一句。 */
+const at = (arr, i, name) => {
+  if (typeof arr[i] !== "string") throw new Error(name + "[" + i + "] 不存在——bullet 順序改了就回來對一次索引");
+  return arr[i];
+};
+/* 有幾條要比的是「讀者眼睛看到的字」，而 <b> 會把詞切開
+   （例：「退保 2 年<b>內</b>回去」直接 includes("2 年內") 永遠 false，
+   結果是一條看起來很嚴格、其實測不到東西的斷言）。這種就先脫標籤再比。 */
+const txt = s => s.replace(/<[^>]+>/g, "");
+ok("bullet 數量固定（駕照 8／健保 7／超級年金 5／迷思 5）",
+  S.drive.length === 8 && S.nhi.length === 7 && S.supr.length === 5 && S.flags.length === 5,
+  [S.drive.length, S.nhi.length, S.supr.length, S.flags.length].join("／"));
 
-ok("健保：明講停保制度自 2024-12-23 起廢止",
-  /113 年 12 月 23 日|2024-12-23/.test(ALL) && ALL.includes("不受理停保申請"));
-ok("健保：附憲法法庭判決依據，不是「聽說改了」",
-  ALL.includes("憲法法庭") && ALL.includes("111 年憲判字第 19 號"));
-ok("健保：把「停保」與「戶籍遷出」分開講（這是兩件事）",
-  ALL.includes("真正讓你停繳的是戶籍遷出"));
-ok("健保：講出回台加保的 6 個月等待期與唯一例外",
-  ALL.includes("滿 6 個月") && ALL.includes("有一定雇主之受僱者"));
-ok("健保：國外就醫核退要講清楚是有上限的補貼，不是保險",
-  ALL.includes("它是補貼，不是保險"));
+ok("駕照：明講 2025-11-01 台灣被移出承認名單（釘 drive[2]）",
+  /2025-11-01/.test(at(S.drive, 2, "drive")) && at(S.drive, 2, "drive").includes("承認名單"));
+ok("駕照：附西澳公告原文，不是自己說的（釘 drive[2]）",
+  at(S.drive, 2, "drive").includes("no longer exists") &&
+  at(S.drive, 2, "drive").includes("pass a theory test and Practical Driving Assessment"));
+ok("駕照：明講換照義務來自 PR 而不是落地（釘 drive[0]）",
+  at(S.drive, 0, "drive").includes("PR 帶來的") &&
+  at(S.drive, 0, "drive").includes("do not need to transfer your overseas licence"));
+ok("駕照：附「3 個月後即使沒過期也不能開」的原文（釘 drive[1]）",
+  at(S.drive, 1, "drive").includes("even if it is current and valid"));
+/* 3 個月的**起點**官方沒有明文，站上是從「If you are an Australian citizen or
+   permanent resident…」這個條件推出來的。整個 /settle 的 PR 時鐘都靠這個推論，
+   所以推論本身必須寫在畫面上，不能只寫結論。 */
+ok("駕照：3 個月的起點是推論，要自己承認（釘 drive[1]）",
+  at(S.drive, 1, "drive").includes("If you are an Australian citizen or permanent resident") &&
+  at(S.drive, 1, "drive").includes("官方沒有另外寫死"));
+/* 這一條原本寫的是「官網查詢器還沒改乾淨，查 Taiwan 會跳出舊文案」。
+   2026-08-17 實際去查：查詢器回的是 "Taiwan is not a recognised country or region"，
+   舊字串雖然還在原始資料裡，但 widget 只在另一種分類下才會渲染它，畫面上看不到。
+   一個照著站上說法去驗證的讀者會看到相反的東西——所以這條改成「去查，它跟我們一樣」。 */
+ok("駕照：查詢器那條要引「畫面上真的看得到」的那句（釘 drive[3]）",
+  at(S.drive, 3, "drive").includes("Taiwan is not a recognised country or region"),
+  at(S.drive, 3, "drive").slice(0, 80));
+ok("駕照：不得再宣稱查詢器會「跳出」舊文案（那是撈原始資料才看得到的殘留）",
+  !/跳出舊文案|還沒改乾淨/.test(ALL) && at(S.drive, 3, "drive").includes("畫面上看不到"),
+  (ALL.match(/跳出舊文案|還沒改乾淨/g) || []).join("｜"));
 
-ok("超級年金：明講 PR 核准那一刻 DASP 資格永久消失",
-  ALL.includes("永久消失") &&
-  ALL.includes("you're not an Australian or New Zealand citizen, or a permanent resident of Australia"));
-ok("超級年金：講出 WHM 的 65% 稅率", /65%/.test(ALL) && ALL.includes("WHM"));
-ok("超級年金：明講這是整區唯一不可逆的一格",
-  ALL.includes("不可逆"));
+/* 這一條原本寫成「民國年 or 西元年 任一命中」。突變證明那是漏的:
+   把民國 113 改成 115、西元不動,斷言照樣綠——而畫面上會同時印出
+   兩個互相矛盾的年份,讀者只會相信前面那個。兩個都要在,而且要對得起來。 */
+const nhi0 = txt(at(S.nhi, 0, "nhi"));
+ok("健保：明講停保制度自 2024-12-23 起廢止（釘 nhi[0]）",
+  nhi0.includes("113 年 12 月 23 日") && nhi0.includes("2024-12-23") &&
+  nhi0.includes("不受理停保申請"), nhi0.slice(0, 90));
+ok("健保：民國年與西元年要自己對得起來（差 1911）", (function () {
+  const roc = nhi0.match(/(\d{2,3}) 年 (\d{1,2}) 月 (\d{1,2}) 日/);
+  const ad = nhi0.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!roc || !ad) return false;
+  return Number(roc[1]) + 1911 === Number(ad[1]) &&
+    Number(roc[2]) === Number(ad[2]) && Number(roc[3]) === Number(ad[3]);
+})(), nhi0.slice(0, 90));
+ok("健保：附憲法法庭判決依據，不是「聽說改了」（釘 nhi[0]）",
+  at(S.nhi, 0, "nhi").includes("憲法法庭") && at(S.nhi, 0, "nhi").includes("111 年憲判字第 19 號"));
+ok("健保：把「停保」與「戶籍遷出」分開講（釘 nhi[2]）",
+  at(S.nhi, 2, "nhi").includes("真正讓你停繳的是戶籍遷出"));
+/* 戶籍法第 16 條第 3 項與第 5 項的原文（2026-08-17 自全國法規資料庫 D0030006 取得）。
+   第 5 項是實務上真的會踩到的那一格：拿外國護照回台不算「入境」。 */
+ok("健保：引戶籍法第 16 條原文，不是自己轉述（釘 nhi[2]）",
+  at(S.nhi, 2, "nhi").includes("出境二年以上，應為遷出登記") &&
+  at(S.nhi, 2, "nhi").includes("仍列入出境二年應為遷出登記期間之計算"),
+  at(S.nhi, 2, "nhi").slice(0, 80));
+ok("健保：講出回台加保的等待期規則與例外（釘 nhi[3]）",
+  txt(at(S.nhi, 3, "nhi")).includes("滿 6 個月") &&
+  txt(at(S.nhi, 3, "nhi")).includes("有一定雇主之受僱者"));
+ok("健保：等待期要講出「2 年內／2 年後」這個分水嶺（釘 nhi[3]）",
+  txt(at(S.nhi, 3, "nhi")).includes("2 年內") && txt(at(S.nhi, 3, "nhi")).includes("2 年後"));
+/* 「返國初設戶籍」的人沒有戶籍可以「恢復」，那 6 個月是從設籍起算的。
+   原文寫成「要等戶籍恢復滿 6 個月」，對這一支分岔講的是一個不存在的動作。 */
+ok("健保：初設戶籍那一支不能寫成「恢復」（釘 nhi[3]）",
+  !/返國初設戶籍[^。]*要等戶籍恢復滿/.test(txt(at(S.nhi, 3, "nhi"))) &&
+  txt(at(S.nhi, 3, "nhi")).includes("恢復或初設"),
+  txt(at(S.nhi, 3, "nhi")).slice(30, 130));
+ok("健保：國外就醫核退要講清楚是有上限的補貼，不是保險（釘 nhi[5]）",
+  at(S.nhi, 5, "nhi").includes("它是補貼，不是保險"));
 
-ok("Medicare：明講台灣不在互惠協定名單裡，並把 11 國列出來",
-  ALL.includes("沒有台灣") && ALL.includes("11 個國家") &&
+ok("超級年金：明講 PR 核准那一刻 DASP 資格永久消失（釘 supr[0]）",
+  at(S.supr, 0, "supr").includes("永久消失") &&
+  at(S.supr, 0, "supr").includes("you're not an Australian or New Zealand citizen, or a permanent resident of Australia"));
+ok("超級年金：講出 WHM 的 65% 與非 WHM 的 35%（釘 supr[2]）",
+  /65%/.test(at(S.supr, 2, "supr")) && /35%/.test(at(S.supr, 2, "supr")) &&
+  at(S.supr, 2, "supr").includes("WHM"), at(S.supr, 2, "supr").slice(0, 80));
+ok("超級年金：明講這是整區唯一不可逆的一格（釘 supr[0]）",
+  at(S.supr, 0, "supr").includes("不可逆"));
+ok("超級年金：明講「趁還沒拿 PR 先領」不成立，因為要先離境（釘 supr[1]）",
+  at(S.supr, 1, "supr").includes("你得先離境"));
+
+ok("Medicare：明講台灣不在互惠協定名單裡，並把 11 國列出來（釘 flags[2]）",
+  at(S.flags, 2, "flags").includes("沒有台灣") && at(S.flags, 2, "flags").includes("11 個國家") &&
   ["Belgium", "Finland", "Italy", "Malta", "Netherlands", "New Zealand",
-   "Norway", "Ireland", "Slovenia", "Sweden", "United Kingdom"].every(c => ALL.includes(c)));
+   "Norway", "Ireland", "Slovenia", "Sweden", "United Kingdom"]
+    .every(c => at(S.flags, 2, "flags").includes(c)));
+/* flags[3] 原本把 nhi[3] 的分段規則壓成無條件的「回台要等 6 個月」，
+   等於同一頁的兩個區塊互相矛盾——而且對「退保 2 年內就回台」的人，
+   那 6 個月根本不存在，他會把一筆不存在的成本算進要不要遷戶籍的決定裡。 */
+const f3 = txt(at(S.flags, 3, "flags"));
+ok("迷思區要講出「2 年內／2 年後」這個分水嶺（釘 flags[3]）",
+  f3.includes("2 年內") && f3.includes("2 年後"), f3.slice(0, 80));
+/* 光是「有出現分水嶺」擋不住退化:突變把開頭改成
+   「…也可能當天就加得了保。反正就是要等 6 個月。曾經的分水嶺是…」,
+   後半段的分水嶺原封不動,上面那條照樣綠——而讀者只會看第一句。
+   所以綁的是**開頭那一句的形狀**:兩種結果都要講,而且只准講一次 6 個月。 */
+const f3head = f3.slice(0, f3.indexOf("分水嶺"));
+ok("迷思區的第一句要同時給出兩種結果（釘 flags[3]）",
+  f3head.includes("可能要等 6 個月") && f3head.includes("也可能當天就加得了保"),
+  f3head);
+ok("而且第一句不准再補一個無條件的 6 個月（釘 flags[3]）",
+  (f3head.match(/6 個月/g) || []).length === 1,
+  f3head);
+/* 兩個分支的結論要各自綁在自己的條件上,不能只是「這些詞都有出現」。 */
+const f3in = f3.slice(f3.indexOf("2 年內"), f3.indexOf("2 年後"));
+const f3after = f3.slice(f3.indexOf("2 年後"));
+ok("「2 年內」那一支不得出現 6 個月，要講當天就加保（釘 flags[3]）",
+  !f3in.includes("6 個月") && /當天就加保|沒有等待期/.test(f3in), f3in);
+ok("「2 年後」那一支才是要等 6 個月的那一支（釘 flags[3]）",
+  f3after.includes("6 個月"), f3after.slice(0, 80));
 
 console.log("\n— 這個站不做的事 —");
-/* 這一區最容易長出來的違規是「幫人決定要不要拿 PR」。
-   它只能把交換條件擺出來，不能替人選。 */
+/* 這兩條是「不當移民代辦」與「不發佈會過期的數字」兩條紅線的唯一機械執行點，
+   而它們原本只掃 DATA 的四個陣列。突變證明：往 #settle 的 markup 或答案面板的
+   IIFE 字串注入「建議你趕快申請 PR」「核准率約 78%」，兩條都照樣綠——
+   而那兩處正是使用者真正讀到的地方。掃描範圍改成「讀得到的全部」。 */
+const SETTLE_MARKUP = (function () {
+  const i = HTML.indexOf('id="settle"');
+  if (i < 0) throw new Error("找不到 section#settle");
+  const e = HTML.indexOf("</section>", i);
+  if (e < 0) throw new Error("section#settle 沒有收尾");
+  return HTML.slice(i, e);
+})();
+const SETTLE_JS = tailBlock.slice(tailBlock.indexOf(SETTLE_HEAD));
+const READABLE = [ALL, SETTLE_MARKUP, SETTLE_JS].join("\n");
+ok("掃描範圍真的涵蓋 markup 與答案面板，不是只有 DATA",
+  SETTLE_MARKUP.includes("最後一次") && SETTLE_JS.includes("DASP") &&
+  READABLE.length > ALL.length + 2000,
+  "markup " + SETTLE_MARKUP.length + " / js " + SETTLE_JS.length);
 ok("不得出現「建議你拿／不要拿 PR」這種替人決定的話",
-  !/建議你(拿|申請|不要)|你應該(拿|申請)/.test(ALL),
-  (ALL.match(/建議你[^。]{0,20}|你應該[^。]{0,20}/g) || []).join("｜"));
+  !/建議你(拿|申請|不要)|你應該(拿|申請)/.test(READABLE),
+  (READABLE.match(/建議你[^。]{0,20}|你應該[^。]{0,20}/g) || []).join("｜"));
 ok("不得寫出沒有來源的辦理天數或核准率",
-  !/(核准率|通過率)\s*\d|大約\s*\d+\s*(天|週|個月)就/.test(ALL),
-  (ALL.match(/(核准率|通過率)\s*\d[^。]{0,20}/g) || []).join("｜"));
-ok("明說每個數字都會變，並要求使用者自己點官方連結",
-  ALL.includes("要做決定之前自己點進去看一次"));
+  !/(核准率|通過率)\s*\d|大約\s*\d+\s*(天|週|個月)就|平均等待\s*\d/.test(READABLE),
+  (READABLE.match(/(核准率|通過率)\s*\d[^。]{0,20}|平均等待\s*\d[^。]{0,20}/g) || []).join("｜"));
+ok("明說每個數字都會變，並要求使用者自己點官方連結（釘 flags[4]）",
+  at(S.flags, 4, "flags").includes("要做決定之前自己點進去看一次"));
+
+console.log("\n— 戶籍那個時鐘的前提要講出來 —");
+/* 24 個月是平加出來的，而法條要的是「連續 2 年未入境」（施行細則第 5 條的通報條件）。
+   中間回過台灣的人，這個日期就不對——不講出來，工具會用一個他沒觸發的期限，
+   把他推向遷出戶籍這個不可逆的行政動作。 */
+ok("戶籍那條要講出「連續 2 年未入境」這個前提",
+  out2.html.includes("連續 2 年未入境") && out2.html.includes("往後推"),
+  out2.html.slice(0, 200));
+ok("輸入欄位要問「最後一次」離台，不是「離台」",
+  SETTLE_MARKUP.includes("你<b>最後一次</b>離開台灣的日期"));
+ok("要講出逾期戶政事務所得逕行代辦，不是放著就沒事",
+  out2.html.includes("逕行") && out2.html.includes("施行細則第 5 條"));
+/* DASP 那一列是紅字倒數，很容易被讀成「還有 N 個月可以去領」。 */
+ok("DASP 倒數旁邊要說清楚人還在澳洲時一天都領不了",
+  pr3.html.includes("一天都領不了") && pr3.html.includes("你人已經離開澳洲"),
+  pr3.html.slice(0, 200));
 
 /* ================================================ 來源 */
 console.log("\n— 來源 —");
-ok("八筆來源，全部已核（每一筆都自己 curl 過 200）",
-  S.src.length === 8 && S.src.every(s => s.v === true),
+ok("十筆來源，全部已核（每一筆都自己 curl 過 200）",
+  S.src.length === 10 && S.src.every(s => s.v === true),
   `實得 ${S.src.length} 筆／待核 ${S.src.filter(s => s.v === false).length} 筆`);
-const DOMAINS = ["transport.wa.gov.au", "servicesaustralia.gov.au", "ato.gov.au", "nhi.gov.tw"];
-ok("來源都指向官方網域",
-  S.src.every(s => DOMAINS.some(d => s.u.includes("://www." + d + "/"))),
-  S.src.filter(s => !DOMAINS.some(d => s.u.includes("://www." + d + "/"))).map(s => s.u).join("\n    "));
+/* `law.moj.gov.tw` 沒有 www 子網域（全國法規資料庫就是掛在裸網域上），
+   所以這裡不能沿用「://www.<domain>/」那個寫法——寫死 www 會把一個
+   真的官方來源判成不合格。改成比對 host 本身。 */
+const DOMAINS = ["www.transport.wa.gov.au", "www.servicesaustralia.gov.au",
+  "www.ato.gov.au", "www.nhi.gov.tw", "law.moj.gov.tw"];
+const host = u => (u.match(/^https:\/\/([^/]+)\//) || [, ""])[1];
+ok("來源都指向官方網域（含裸網域的 law.moj.gov.tw）",
+  S.src.every(s => DOMAINS.includes(host(s.u))),
+  S.src.filter(s => !DOMAINS.includes(host(s.u))).map(s => s.u).join("\n    "));
 ok("全部走 https", S.src.every(s => s.u.startsWith("https://")));
 ok("每一筆都有查核日期", S.src.every(s => /^\d{4}-\d{2}-\d{2}$/.test(s.as)));
-/* 四個主題各要有自己的來源，缺一個就代表那一塊是沒有出處的。 */
-ok("駕照、健保、Medicare、超級年金四塊各自都有來源",
+/* 五個主題各要有自己的來源，缺一個就代表那一塊是沒有出處的。
+   戶籍法是 2026-08-17 補的：在那之前整段戶籍規則沒有任何法源連結，
+   而它是這一區唯一會把人推向不可逆行政動作的內容。 */
+ok("駕照、健保、Medicare、超級年金、戶籍法五塊各自都有來源",
   S.src.some(s => s.u.includes("transport.wa.gov.au")) &&
   S.src.some(s => s.u.includes("nhi.gov.tw")) &&
   S.src.some(s => s.u.includes("servicesaustralia.gov.au")) &&
-  S.src.some(s => s.u.includes("ato.gov.au")));
+  S.src.some(s => s.u.includes("ato.gov.au")) &&
+  S.src.some(s => /pcode=D0030006$/.test(s.u)) &&
+  S.src.some(s => /pcode=D0030007$/.test(s.u)));
+/* `includes("pcode=D0030007")` 會被 `pcode=D0030007x` 命中——突變證明過。
+   pcode 是「一個英文字母 + 7 位數字」的固定形狀,錯一個字元就是另一部法規
+   （或根本不存在的頁面）,而 v:true 宣稱的是「我 curl 過 200」。 */
+ok("法規連結的 pcode 形狀要對（一個字母 + 7 位數字，不多不少）",
+  S.src.filter(s => s.u.includes("law.moj.gov.tw"))
+    .every(s => /[?&]pcode=[A-Z]\d{7}$/.test(s.u)),
+  S.src.filter(s => s.u.includes("law.moj.gov.tw")).map(s => s.u).join("\n    "));
+
+/* 頁尾那個 asOf 是整站唯一對外宣告「這些數字什麼時候查的」的地方。
+   突變測試把它改成 2019-01-01，四支測試全綠——等於這個站可以在
+   宣稱「2019 年查的」的狀態下印出 2026 年的法規，而沒有任何東西會紅。
+   它至少要跟最新的那一筆來源一樣新，否則就是在低報自己的新鮮度。 */
+const newest = S.src.map(s => s.as).sort().pop();
+ok("頁尾的 asOf 不得比任何一筆來源的查核日還舊",
+  /^\d{4}-\d{2}-\d{2}$/.test(sandbox.DATA.asOf) && sandbox.DATA.asOf >= newest,
+  "asOf=" + sandbox.DATA.asOf + " 最新來源=" + newest);
 
 /* ================================================ 版面 */
 console.log("\n— 版面 —");

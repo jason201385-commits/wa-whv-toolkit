@@ -488,12 +488,14 @@ footer a{color:var(--accent)}
       <input type="number" id="crate" inputmode="decimal" step="0.01" min="0" placeholder="時薪">
       <input type="number" id="chours" inputmode="decimal" step="0.5" min="0" placeholder="每週工時" aria-label="每週工時">
 
-      <label for="creg">你的雇主有沒有向 ATO 登記為「WHM 雇主」（決定被扣 15% 還是 30%）</label>
-      <select id="creg" aria-label="雇主是否登記為 WHM 雇主">
-        <option value="unknown">不知道 / 還沒拿到第一張 payslip</option>
-        <option value="reg">有登記——payslip 上扣的是 15%</option>
-        <option value="unreg">沒登記——payslip 上扣了 30% 左右</option>
+      <label for="ctax">你適用哪一張稅表（這一格決定有沒有免稅額、要不要算 Medicare levy）</label>
+      <select id="ctax" aria-label="適用哪一張稅表">
+        <option value="unknown">打工度假簽——還沒拿到第一張 payslip，不知道雇主有沒有登記</option>
+        <option value="reg">打工度假簽——payslip 上扣的是 15%（雇主有登記）</option>
+        <option value="unreg">打工度假簽——payslip 上扣了 30% 左右（雇主沒登記）</option>
+        <option value="resident">已經不是打工度假簽（482、186、PR⋯⋯），而且我是「稅務居民」</option>
       </select>
+      <p class="hint" style="margin:-2px 0 0">最後那一項不是看你有沒有 PR。ATO 的原文是<i>&ldquo;We don't use the same rules as the Department of Home Affairs&rdquo;</i>——<strong>沒有 PR 也可能是稅務居民，有簽證也可能不是</strong>。判準是 resides／domicile／183 天／公務員退休金四個測試，本站<b>不替你判定</b>，下面來源清單裡有 ATO 的說明頁。<br><b>還在打工度假簽的台灣人不要選它</b>：居民稅率只開放給 ATO 的 NDA 國家名單，<b>台灣不在名單上</b>，選了會低估你的稅。</p>
 
       <label for="crent">每週房租（澳幣。澳洲房租一律以「週」報價，看到月租要先除以 4.33）</label>
       <!-- 這一格與伙食費那一格的 placeholder 不准放數字：沒有來源、會過期，
@@ -837,7 +839,7 @@ footer a{color:var(--accent)}
   </header>
   <div class="body">
     <div class="ask">
-      <label for="sout">你離開台灣的日期</label>
+      <label for="sout">你<b>最後一次</b>離開台灣的日期</label>
       <input type="date" id="sout" autocomplete="off">
       <label for="spr">PR 核准日（還沒有就填預計）</label>
       <input type="date" id="spr" autocomplete="off">
@@ -901,7 +903,7 @@ footer a{color:var(--accent)}
    v:false 代表尚未由官方頁面確認，畫面上會標「待核」。
    ========================================================================== */
 const DATA = {
-  asOf: "2026-08-16",
+  asOf: "2026-08-17",
 
   /* ---------------- 集簽 ----------------
      台灣護照走的是 417。462 的合格國家清單沒有台灣，所以這一段只寫 417 的規則。
@@ -1176,9 +1178,13 @@ const DATA = {
      **金額由使用者自己填**。任何「Perth 一週菜錢大概 $XXX」都不准寫進來——
      那種數字沒人維護就會變成害人白算一輪的假錨點，跟站上不做職缺表是同一個理由。 */
   cost: {
-    /* ATO 打工度假者稅率。前 45,000 一律 15c／$1 且沒有免稅額——
-       這一級距自 2020–21 年度起連續六個年度未變動。 */
+    /* ATO 稅率。這裡有三張表，而且三張表「官方最新公布到哪一年」並不一致——
+       居民表已經出到 2026–27，WHM 表、外國居民表、Medicare levy 門檻都還停在 2025–26。
+       算起來一樣不等於官方已公布，所以年度各自標記、複核時分開查（見 public/README.md 的複核日曆）。 */
     tax: {
+      /* 打工度假者稅率（官方最新公布：2025–26）。前 45,000 一律 15c／$1 且沒有免稅額——
+         這一級距自 2020–21 年度起連續六個年度未變動。 */
+      whmYear: "2025–26",
       b1: 45000, r1: 0.15,
       b2: 135000, r2: 0.30, base2: 6750,
       /* 第三、四級距（37c／45c）兩張表完全一樣，只有累計基底不同。
@@ -1189,6 +1195,28 @@ const DATA = {
          ATO 自己的例子寫的是「starting at 30%」。外國居民表沒有 15% 那一級，
          0–135,000 一路 30c，$135,000 時累計 $40,500、$190,000 時 $60,850。 */
       unreg: 0.30, unregBase3: 40500, unregBase4: 60850,
+
+      /* 居民稅表（官方已公布 2026–27，就是現在這個年度）。
+         這張表只給「已經不是打工度假簽」的人用。台灣不在 ATO 的 NDA 國家名單裡，
+         所以持 417／462 的台灣人就算符合稅務居民定義，仍然走上面那張 WHM 表
+         ——本區來源清單裡有這一條，不要把兩者混在一起。
+         與 WHM 表最大的差別是 free 這一格：WHM 表沒有免稅額。 */
+      res: {
+        year: "2026–27",
+        free: 18200,
+        b1: 45000,  r1: 0.15,
+        b2: 135000, r2: 0.30, base2: 4020,
+        b3: 190000, r3: 0.37, base3: 31020,
+        r4: 0.45,   base4: 51370
+      },
+
+      /* Medicare levy：2% 不是每個人都課。低於下門檻不課；兩個門檻之間只課
+         「超過下門檻部分的 10%」。那個 10% 不是推的，是拿 ATO 自己的例子對過的——
+         該頁寫 $29,000 的人繳 $98.90，而 (29000−28011)×0.1 = 98.90，分毫不差。
+         門檻取「單身、無 SAPTO」那一列（官方最新公布：2025–26）。
+         一週 20 小時的兼職年薪就落在中間那一段，無腦乘 2% 會高估他的稅。 */
+      levy: {year: "2025–26", rate: 0.02, lo: 28011, hi: 35013, phase: 0.10},
+
       weeksPerYear: 52
     },
 
@@ -1262,6 +1290,10 @@ const DATA = {
       {t:"ATO — 打工度假者：雇主未登記時「withholds tax at the foreign resident tax rates starting at 30%」", u:"https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/coming-to-australia/working-holiday-makers", as:"2026-06-03", v:true},
       {t:"ATO — Schedule 15 稅表：已登記雇主 15% 平稅率，未登記者依外國居民稅率", u:"https://www.ato.gov.au/tax-rates-and-codes/schedule-15-tax-table-for-working-holiday-makers", as:"2026-08-16", v:true},
       {t:"ATO — 雇主必須登記才能用 WHM 稅率，未登記可罰", u:"https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/engaging-a-worker/hiring-a-new-worker/employers-of-working-holiday-makers", as:"2025-07-24", v:true},
+      {t:"ATO — 居民稅率 2026–27（前 $18,200 免稅；頁面自述不含 2% Medicare levy）", u:"https://www.ato.gov.au/tax-rates-and-codes/tax-rates-australian-residents", as:"2026-08-17", v:true},
+      {t:"ATO — 稅務居民身分：「We don't use the same rules as the Department of Home Affairs」，沒有 PR 也可能是稅務居民", u:"https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/your-tax-residency", as:"2026-08-17", v:true},
+      {t:"ATO — Medicare levy 低收入門檻（單身 $28,011／$35,013，中間段課超出部分 10%）", u:"https://www.ato.gov.au/individuals-and-families/medicare-and-private-health-insurance/medicare-levy/medicare-levy-reduction/medicare-levy-reduction-for-low-income-earners", as:"2026-08-17", v:true},
+      {t:"ATO — 沒有 Medicare 資格者的 levy 豁免：需 MES，7 月 1 日開放、最久 8 週、拿到才能報稅", u:"https://www.ato.gov.au/individuals-and-families/medicare-and-private-health-insurance/medicare-levy/medicare-levy-exemption/not-entitled-to-medicare-benefits", as:"2026-08-17", v:true},
       {t:"Transperth — 票價表（2026-01-01 生效）", u:"https://www.transperth.wa.gov.au/Tickets-Fares/Fares", as:"2026-01-01", v:true},
       {t:"Transperth — 免費交通：週日全網免費、Free Transit Zone、292 免費接駁", u:"https://www.transperth.wa.gov.au/Tickets-Fares/Free-Travel", as:"2026-08-16", v:true},
       {t:"Transperth — CAT 巴士免費（Perth CBD、Joondalup、Surf CAT 至 Scarborough）", u:"https://www.transperth.wa.gov.au/Timetables/CAT-Timetables", as:"2026-08-16", v:true},
@@ -1855,9 +1887,9 @@ const DATA = {
     },
     drive: [
       "<strong>還是打工度假、學生或觀光身分的話，什麼都不用辦。</strong>官方原文：<i>&ldquo;If you are a visitor to WA, such as a tourist or someone studying or working temporarily in WA, you do not need to transfer your overseas licence&rdquo;</i>。台灣駕照只要還在效期內就能一直開。<b>換照的義務是 PR 帶來的，不是落地帶來的。</b>",
-      "<strong>PR 或公民身分下來之後，只剩 3 個月。</strong>官方原文：<i>&ldquo;you can drive in Western Australia for up to 3 months using your overseas licence&rdquo;</i>，而且<i>&ldquo;After this 3-month period you cannot legally drive on your overseas licence, even if it is current and valid&rdquo;</i>——台灣駕照沒過期也一樣不能開。",
+      "<strong>PR 或公民身分下來之後，只剩 3 個月。</strong>官方原文：<i>&ldquo;If you are an Australian citizen or permanent resident and have a current and valid overseas driver's licence, you can drive in Western Australia for up to 3 months using your overseas licence&rdquo;</i>，而且<i>&ldquo;After this 3-month period you cannot legally drive on your overseas licence, even if it is current and valid&rdquo;</i>——台灣駕照沒過期也一樣不能開。<b>官方沒有另外寫死「從哪一天開始數」</b>：這 3 個月綁的是「你是公民或 PR」這個條件，而同一頁的 FAQ 說訪客身分不必換照，所以本站以<b>身分成立那天</b>當起點。差幾天會有影響的話，用 DoTDirect 或直接問 Transport WA 確認你的個案。",
       "<strong>台灣在 2025-11-01 被移出承認名單，換照現在要考筆試＋路考。</strong>西澳公告原文：<i>&ldquo;From 1 November 2025, the Experienced Driver Recognised Country or Region category no longer exists&rdquo;</i>，名單上的 16 個國家／地區包含 Taiwan，而且<i>&ldquo;did not apply for a WA car or motorcycle driver's licence on or before 31 October 2025, you will now need to pass a theory test and Practical Driving Assessment&rdquo;</i>。<b>沒有趕上 2025-10-31 那班車的人，就是要考。</b>",
-      "<strong>官網自己還沒改乾淨，不要被它安慰到。</strong>「Moving from overseas」頁面上的國家查詢器，查 Taiwan 仍然跳出舊文案「is an experienced driver recognised country」——但同一筆資料的分類旗標是 <code>0</code>（未承認），跟日本、紐西蘭的 <code>1</code> 不同，點下去也是連到<b>未承認國家</b>的流程頁。被取消的那 16 個全部都是 <code>0</code>，殘留的只有描述文字。<b>以流程頁與公告為準。</b>",
+      "<strong>官方的國家查詢器跟這裡講的一樣，你可以自己去查一次。</strong>在「Moving from overseas」頁面的查詢器選 Taiwan，它回答的是 <i>&ldquo;Taiwan is not a recognised country or region&rdquo;</i>，並連到<b>未承認國家</b>的流程頁——台灣的分類旗標是 <code>0</code>（未承認），跟日本、紐西蘭的 <code>1</code> 不同。<b>要查證這一區，就查這裡。</b>附帶一提：那份資料裡台灣仍留著一句舊的 <i>&ldquo;is an experienced driver recognised country&rdquo;</i> 描述字串（2026-08-17 查，含台灣共 19 個國家／地區還留著），但查詢器<b>只在另一種分類下才會顯示它，畫面上看不到</b>。看到有人拿這句話說「台灣還在名單上」，那是撈原始資料撈到的殘留，不是名單改回來了。",
       "<strong>先過筆試才能考路考</strong>（<i>&ldquo;You must pass the theory test before you can take the practical driving assessment&rdquo;</i>）。筆試不用預約，多數 metro 服務中心直接去就能考，但<b>所有測驗必須在下午 3:45 前開始</b>。路考要用 DoTDirect 線上預約。",
       "<strong>用自排車考，拿到的就是自排限定駕照。</strong>官方原文：<i>&ldquo;If you take the practical driving assessment in an automatic vehicle, you will be issued with a driver's licence for an automatic vehicle only&rdquo;</i>。這件事沒有補救，只能重考。",
       "<strong>台灣駕照要附英文翻譯。</strong>翻譯只接受 NAATI 認證譯者（未承認國家的流程<b>排除</b> Recognised Practising 級）、大學以上學歷譯者、OMI 名單上的 2007 年前永久認證譯者、內政部移民署 Free Translating Service，或領事館／大使館。另外：<b>2018-01-01 之後由 NAATI 認證譯者做的翻譯不被接受</b>（2007 年前永久認證者除外）——這條反過來，是舊的才收。",
@@ -1866,8 +1898,8 @@ const DATA = {
     nhi: [
       "<strong>「出國停保」這個制度已經不存在了。</strong>健保署問答集寫得很明確：<i>「自 113 年 12 月 23 日起(含)，不受理停保申請」</i>（＝2024-12-23）。依據是憲法法庭 111 年憲判字第 19 號判決——舊的停復保規定沒有法律明確授權，違反法律保留原則，施行細則第 37、39 條已經刪除。<b>還在教人「出國前記得去辦停保」的資訊，全部是舊的。</b>",
       "<strong>戶籍還在台灣，人在澳洲也要繼續繳健保費。</strong>官方原文：<i>「自符合加保資格之日起，都應持續依適法身分加保及繳納保險費」</i>。長住國外的人建議辦金融機構或信用卡自動轉帳（約需 45 個工作天生效），否則人在澳洲很難按時繳。",
-      "<strong>真正讓你停繳的是戶籍遷出，不是停保。</strong>依戶籍法，<i>「出境 2 年以上，應為戶籍遷出登記」</i>；戶籍一旦遷出國外，<b>就喪失健保投保資格、應予退保</b>，不必再繳，但同時<b>不再有任何健保給付</b>。這是一個要自己權衡的交換，不是行政手續。",
-      "<strong>遷出的代價在「回台灣那天」才算給你看。</strong>退保後想重新加保：退保日<b>2 年內</b>恢復戶籍 → 自戶籍恢復當日加保；退保日<b>2 年後</b>恢復、或返國初設戶籍 → 要等<b>戶籍恢復滿 6 個月</b>才能加保。<b>唯一的例外是「有一定雇主之受僱者，自受僱日加保」</b>——回台灣先找到工作，那 6 個月的空窗就不存在。",
+      "<strong>真正讓你停繳的是戶籍遷出，不是停保。</strong>戶籍法第 16 條第 3 項原文：<i>「出境二年以上，應為遷出登記」</i>（例外只有因公派駐境外人員及其眷屬、隨我國籍遠洋漁船出海作業兩種）。同條第 5 項另有一個陷阱：<i>「未持我國護照或入國證明文件入境者，其入境之期間，仍列入出境二年應為遷出登記期間之計算」</i>——<b>拿外國護照回台，那段期間仍然列入這 2 年；拿中華民國護照回台則不列入。</b>（施行細則第 5 條的通報條件寫的是「出境滿二年<b>未入境</b>」。）戶籍一旦遷出國外，<b>就喪失健保投保資格、應予退保</b>，不必再繳，但同時<b>不再有任何健保給付</b>。這是一個要自己權衡的交換，不是行政手續。",
+      "<strong>遷出的代價在「回台灣那天」才算給你看。</strong>退保後想重新加保：退保日<b>2 年內</b>恢復戶籍 → 自戶籍恢復當日加保；退保日<b>2 年後</b>恢復、或返國初設戶籍 → 要等<b>戶籍恢復或初設滿 6 個月</b>才能加保。<b>唯一的例外是「有一定雇主之受僱者，自受僱日加保」</b>——回台灣先找到工作，那 6 個月的空窗就不存在。",
       "<strong>眷屬會被一起帶走。</strong>官方原文：<i>「如當事人有眷屬依附投保，該眷屬亦於同日轉出」</i>。依附你投保的家人要另外找適法身分銜接，不會自動留著。",
       "<strong>沒停保、也沒遷戶籍的人，在國外看病可以核退，但有上限。</strong>不可預期的緊急傷病或緊急分娩，在<b>就診當日或出院日起 6 個月內</b>檢據申請；核退標準<b>以國內特約醫院診所平均費用為上限，每季公告</b>。在澳洲看急診的實際帳單通常遠高於這個上限——<b>它是補貼，不是保險。</b>",
       "<strong>2024-12-22 以前已經辦過停保的人另有過渡條款</strong>（施行細則第 36 條之 1）：那一次停保如果出國達 6 個月以上，效力持續到返國入境日、當天要辦復保；如果出國未達 6 個月就回台，該次停保要註銷並補繳保費。"
@@ -1883,7 +1915,7 @@ const DATA = {
       "<strong>「先辦停保再出國」——這句話在 2024-12-23 之後就是錯的。</strong>照著做只會發現公所不受理。真正的岔路是「戶籍要不要遷出」，那是完全不同的一件事、不同的機關、不同的後果。",
       "<strong>「台灣駕照可以直接換西澳駕照」——2025-11-01 之後不成立。</strong>寫這句話的中文文章、影片、群組訊息多數都是那天之前寫的，而且沒有人回去改。看到這句話先確認發文日期。",
       "<strong>「有 Medicare 就不用買保險」——PR 下來之前你沒有 Medicare。</strong>互惠醫療協定只有 11 個國家（Belgium、Finland、Italy、Malta、Netherlands、New Zealand、Norway、Ireland、Slovenia、Sweden、United Kingdom），<b>沒有台灣</b>。打工度假、學生、482 這些臨時簽證期間，醫療費用是自己的事。",
-      "<strong>「反正回台灣還有健保」——遷出戶籍的人回台要等 6 個月。</strong>除非你回去當天就有雇主。把這 6 個月當成遷出戶籍的隱藏成本去算，不要等到需要看病那天才發現。",
+      "<strong>「反正回台灣還有健保」——遷出戶籍之後，回台可能要等 6 個月，也可能當天就加得了保。</strong>分水嶺是<b>退保滿不滿 2 年</b>：退保 2 年<b>內</b>回去恢復戶籍，恢復當天就加保、沒有等待期；退保 2 年<b>後</b>才回去、或返國初設戶籍，才要等戶籍恢復或初設<b>滿 6 個月</b>。另一條出口是「有一定雇主之受僱者，自受僱日加保」——從到職日起算，不必是回國當天。<b>所以要不要遷戶籍，真正要算的不是那 6 個月，是你打算在外面待幾年。</b>",
       "<strong>這一區的每個數字都會變，而且變的時候不會通知你。</strong>換照費用每年 7 月 1 日調、健保規定跟著修法走、DASP 稅率跟著預算案走。下面每一條都附了官方連結與查核日期——<b>要做決定之前自己點進去看一次</b>，這個站只負責告訴你該看哪一頁。"
     ],
     src: [
@@ -1894,7 +1926,9 @@ const DATA = {
       { t:"健保署 — 停復保規定變革專區（取消停復保，發布 113-12-19）", u:"https://www.nhi.gov.tw/ch/np-3873-1.html", as:"2026-08-17", v:true },
       { t:"健保署 — 取消停復保規定相關問答集 PDF（113-12-22；停保受理終止日、戶籍遷出退保、返國加保等待期）", u:"https://www.nhi.gov.tw/ch/dl-80326-3e4b2b57624145da8397510cb55ad9c8-1.pdf", as:"2026-08-17", v:true },
       { t:"Services Australia — 互惠醫療協定：來澳訪客（11 國名單，不含台灣）", u:"https://www.servicesaustralia.gov.au/when-reciprocal-health-care-agreements-apply-and-you-visit-australia", as:"2026-08-17", v:true },
-      { t:"ATO — 離境澳洲超級年金給付 DASP（四項資格條件、PR 不符資格、WHM 65% 稅率；頁面更新日 2026-04-21）", u:"https://www.ato.gov.au/individuals-and-families/super-for-individuals-and-families/super/temporary-residents-and-superannuation/departing-australia-superannuation-payment-dasp", as:"2026-08-17", v:true }
+      { t:"ATO — 離境澳洲超級年金給付 DASP（四項資格條件、PR 不符資格、WHM 65% 稅率；頁面更新日 2026-04-21）", u:"https://www.ato.gov.au/individuals-and-families/super-for-individuals-and-families/super/temporary-residents-and-superannuation/departing-australia-superannuation-payment-dasp", as:"2026-08-17", v:true },
+      { t:"全國法規資料庫 — 戶籍法（第 16 條：出境二年以上應為遷出登記；第 5 項未持我國護照入境仍列入計算）", u:"https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=D0030006", as:"2026-08-17", v:true },
+      { t:"全國法規資料庫 — 戶籍法施行細則（第 5 條：接獲「出境滿二年未入境」通報後限期辦理，逾期得逕行為之）", u:"https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=D0030007", as:"2026-08-17", v:true }
     ]
   },
 
@@ -2657,6 +2691,30 @@ function whmTaxCents(annualCents, registered){
   return upper(T.base3, T.base4);
 }
 
+/* 居民稅表（整數分）。跟上面那支刻意分開寫，不是重複——
+   WHM 表沒有免稅額，這張有，第一級距的起算點就不一樣，硬要合併只會把兩張表都寫糊。
+   誰能用這張表由畫面上的選項決定，這支不做身分判斷。 */
+function residentTaxCents(annualCents){
+  const R = DATA.cost.tax.res;
+  const free = R.free * 100, b1 = R.b1 * 100, b2 = R.b2 * 100, b3 = R.b3 * 100;
+  if(annualCents <= free) return 0;
+  if(annualCents <= b1) return Math.round((annualCents - free) * R.r1);
+  if(annualCents <= b2) return Math.round(R.base2 * 100 + (annualCents - b1) * R.r2);
+  if(annualCents <= b3) return Math.round(R.base3 * 100 + (annualCents - b2) * R.r3);
+  return Math.round(R.base4 * 100 + (annualCents - b3) * R.r4);
+}
+
+/* Medicare levy（整數分）。三段，不是無腦 2%——下門檻以下不課，
+   門檻之間只課超出部分的 10%。兼職的人正好落在中間那一段。
+   上門檻的接合處官方自己就差 6 分（門檻是 28,011÷0.8 進位來的），
+   照 ATO 的分段寫，不要自作聰明取 min，那會讓數字跟官方計算機對不起來。 */
+function medicareLevyCents(annualCents){
+  const L = DATA.cost.tax.levy, lo = L.lo * 100, hi = L.hi * 100;
+  if(annualCents <= lo) return 0;
+  if(annualCents <= hi) return Math.round((annualCents - lo) * L.phase);
+  return Math.round(annualCents * L.rate);
+}
+
 function checkCost(){
   const C = DATA.cost, box = $("#costans");
   const num = sel => { const raw = ($(sel).value || "").trim(); return raw === "" ? null : parseFloat(raw); };
@@ -2681,10 +2739,16 @@ function checkCost(){
   const pct = (a, b) => b === 0 ? 0 : Math.round(a * 1000 / b) / 10;
 
   const grossW = Math.round(rate * hours * 100);          /* 稅前週薪（分） */
-  const reg = $("#creg").value;                            /* reg / unreg / unknown */
+  const reg = $("#ctax").value;                            /* unknown / reg / unreg / resident */
+  const isRes = reg === "resident";
   const isReg = reg !== "unreg";                           /* 不知道的話，先以「有登記」估——低估稅比高估安全 */
   const annual = grossW * C.tax.weeksPerYear;
-  const taxW = Math.round(whmTaxCents(annual, isReg) / C.tax.weeksPerYear);
+  /* levy 跟所得稅刻意分開存，不要先加總。這兩筆的性質不一樣：
+     所得稅逃不掉，那 2% 拿得到 MES 就免得掉。合成一個數字，
+     使用者就看不見「這裡有一筆可以省」——而那是這個模式唯一能幫他省到錢的地方。 */
+  const levyW = isRes ? Math.round(medicareLevyCents(annual) / C.tax.weeksPerYear) : 0;
+  const taxW = Math.round((isRes ? residentTaxCents(annual) : whmTaxCents(annual, isReg))
+                          / C.tax.weeksPerYear) + levyW;
   const netW = grossW - taxW;
   const superW = Math.round(grossW * DATA.wage.superRate);
 
@@ -2767,6 +2831,52 @@ function checkCost(){
        + '這筆錢報稅時追得回來，但<strong>你整年都被少發</strong>。'
        + '有登記的話同樣的薪水只會扣 ' + m(Math.round(whmTaxCents(annual, true) / C.tax.weeksPerYear))
        + '，每週差 ' + m(taxW - Math.round(whmTaxCents(annual, true) / C.tax.weeksPerYear)) + '。</p>';
+  } else if(isRes){
+    const incW = taxW - levyW, L = C.tax.levy;
+    d += '<p><strong>所得稅</strong> −' + m(incW) + '（約 ' + pct(incW, grossW) + '%）。'
+       + '居民稅表前 $' + C.tax.res.free.toLocaleString() + ' <strong>免稅</strong>——'
+       + '這一格就是它跟打工度假稅表最大的差別，那張表第一元就開始扣。</p>';
+
+    if(levyW === 0){
+      d += '<p><strong>Medicare levy</strong> $0。年收入約 $' + Math.round(annual / 100).toLocaleString()
+         + '，在 $' + L.lo.toLocaleString() + ' 的下門檻以下，<strong>本來就不課</strong>。</p>';
+    } else if(annual <= L.hi * 100){
+      d += '<p><strong>Medicare levy</strong> −' + m(levyW) + '。年收入落在 $' + L.lo.toLocaleString()
+         + '–$' + L.hi.toLocaleString() + ' 之間，只課<strong>超過下門檻部分的 10%</strong>，'
+         + '不是全額的 2%——兼職的人常被這一段算多。</p>';
+    } else {
+      d += '<p><strong>Medicare levy</strong> −' + m(levyW) + '（全額 2%）。</p>';
+    }
+
+    /* 這是整個居民模式唯一真的替使用者省到錢的地方，不能只丟進來源清單帶過。 */
+    if(levyW > 0){
+      /* 「這筆」與「有機會」中間不要留空格：中文之間的空白在畫面上就是一個孤兒缺口，
+         而它在原始碼裡看起來只像是接字串時的排版。渲染成純文字讀才會發現。 */
+      d += '<p>這筆錢<strong>有機會整筆免掉</strong>，一年是 ' + m(medicareLevyCents(annual)) + '。'
+         + '台灣不在互惠醫療協定的 11 國名單內，PR 下來之前你沒有 Medicare 資格，'
+         + '而 ATO 允許沒有資格的人申請豁免——憑證是 Services Australia 的 '
+         + '<b>Medicare Entitlement Statement</b>（MES）。ATO 自己頁面上的示範案例就是一個 482 簽證的人。'
+         + '<br>三個會卡住人的細節：<b>每年 7 月 1 日才開放申請</b>、<b>最久要等 8 週</b>、'
+         + '而且<b>要等 MES 到手才能報稅</b>。有配偶或小孩的話，他們也必須同樣不具資格才算數——'
+         + '有 MES 不等於自動免徵。'
+         + '<br>拿到 PR 的那一天，這 2% 開始要繳，因為同一天你才開始有 Medicare。見 <a href="#settle">/settle</a>。</p>';
+    }
+
+    /* 從打工度假簽轉過來的人最想知道的就是這一句。年差額直接用年度數字算，
+       不要拿週差額乘 52——四捨五入過的週數字乘回去會跟實際年稅對不起來。 */
+    const annualWhm = whmTaxCents(annual, true);
+    const whmW = Math.round(annualWhm / C.tax.weeksPerYear);
+    const diffY = annualWhm - (residentTaxCents(annual) + medicareLevyCents(annual));
+    if(diffY !== 0){
+      d += '<p>同樣的薪水，還在打工度假稅表下是 ' + m(whmW) + '／週，'
+         + '所以換簽之後你每週' + (diffY > 0 ? '少繳 ' : '多繳 ') + m(Math.abs(whmW - taxW))
+         + '，一年' + (diffY > 0 ? '少繳 ' : '多繳 ') + m(Math.abs(diffY)) + '。'
+         + '<br><small style="color:var(--muted)">兩張表的公布年度不同：WHM 表 ATO 最新公布的是 '
+         + C.tax.whmYear + '，居民表是 ' + C.tax.res.year + '。</small></p>';
+    }
+
+    /* 選了這一項的人已經離開打工度假身分，下面那句「前 45,000 一律 15%」對他是錯的，
+       所以這一支不落到 else 去。 */
   } else {
     d += '<p><strong>預扣稅</strong> −' + m(taxW) + '（約 ' + taxPct + '%）。'
        + '打工度假者前 $' + C.tax.b1.toLocaleString() + ' 一律 15%，<strong>沒有免稅額</strong>。'
@@ -2827,12 +2937,25 @@ function checkCost(){
     }
   }
 
-  /* --- 退休金：不是手取，但是你的錢 --- */
+  /* --- 退休金：不是手取，但是你的錢 ---
+     DASP 的稅率跟上面那張稅表**不是同一件事**：稅表看的是所得，DASP 看的是你持哪一種簽證。
+     選了居民模式的人已經不是打工度假簽，65% 那個數字對他不成立，直接印出來就是錯的
+     （這一段原本沒有分支，是加居民模式時漏掉的）。三種身分的差別見 /settle 的超級年金區。 */
   d += '<p style="margin-top:12px"><strong>另外還有退休金</strong> ' + m(superW)
      + '／週（' + (DATA.wage.superRate * 100) + '%）。這筆<strong>不進你的戶頭，也不能從時薪裡挖</strong>，'
-     + '是雇主要額外提撥到你的 super 基金。離境時可以申請領回，但打工度假者的 DASP 稅率是 65%——'
-     + '也就是這 ' + m(superW) + ' 裡，最後真正回到你手上的大約 ' + m(Math.round(superW * 0.35)) + '。'
-     + '算「這份工作值不值得」的時候，用後面這個數字比較誠實。</p>';
+     + '是雇主要額外提撥到你的 super 基金。';
+  if(isRes){
+    d += '這筆錢離境時能不能領回，<strong>看你手上是哪一種簽證，不是看你適用哪張稅表</strong>——'
+       + '還在臨時簽（482 之類）的話，離境後仍可申請 DASP，taxed element 課 <b>35%</b>、'
+       + 'untaxed element 45%，<strong>不是打工度假的那個 65%</strong>；以 taxed element 計，'
+       + '這 ' + m(superW) + ' 裡大約 ' + m(Math.round(superW * 0.65)) + ' 回得到你手上。'
+       + '但<strong>拿到 PR 的那一刻，DASP 資格就永久消失</strong>，這筆錢要留到退休年齡才領得到'
+       + '——它不會不見，只是不再是「離境時的一筆現金」。細節在 <a href="#settle">/settle</a>。</p>';
+  } else {
+    d += '離境時可以申請領回，但打工度假者的 DASP 稅率是 65%——'
+       + '也就是這 ' + m(superW) + ' 裡，最後真正回到你手上的大約 ' + m(Math.round(superW * 0.35)) + '。'
+       + '算「這份工作值不值得」的時候，用後面這個數字比較誠實。</p>';
+  }
 
   /* --- 存錢目標 --- */
   const goalIn = num("#cgoal");
@@ -3371,8 +3494,11 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     w.appendChild(u);
     const p = el("p","note");
     p.innerHTML = '這只是<strong>一次就過</strong>的價錢。筆試每重考一次 ' + aud(S.fee.cttResit)
-      + '、路考每重考一次 <strong>' + aud(S.fee.pdaResit) + '</strong>——重考費比第一次的筆試貴'
-      + Math.round(S.fee.pdaResit / S.fee.ctt) + ' 倍以上，所以這件事不適合抱著「先去考考看」的心情。'
+      + '、路考每重考一次 <strong>' + aud(S.fee.pdaResit) + '</strong>——同樣是重考，路考一次是筆試的 '
+      /* floor 不是 round：後面接的是「倍以上」，那是下界。用 round 的話，只要哪一年費用
+         調成 x.5 以上，這句話就會自己生出一個誇大的倍數。分母也換成筆試「重考」費，
+         拿重考比重考才是同一類——原本拿路考重考去比第一次的筆試，是兩種不同的東西。 */
+      + Math.floor(S.fee.pdaResit / S.fee.cttResit) + ' 倍以上，所以這件事不適合抱著「先去考考看」的心情。'
       + '拿到之後另計牌照效期費用：1 年 ' + aud(S.fee.renew1) + '、5 年 ' + aud(S.fee.renew5)
       + '（兩條路都要繳，所以不算進上面的差額）。<b>費用每年 7 月 1 日調整，以官方頁面為準。</b>';
     w.appendChild(p);
@@ -3400,16 +3526,29 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     let clamped = false;
 
     if(out){
-      /* 戶籍法：出境 2 年以上應為戶籍遷出登記。這是「應辦」不是「會自動」，
-         所以它是一個到期日，不是一個通知。 */
+      /* 戶籍法第 16 條第 3 項：出境二年以上，應為遷出登記。
+         但這 24 個月不是從「第一次離台」平加——同條第 5 項規定，未持我國護照或入國證明
+         文件入境者，其入境期間「仍列入」計算；反過來說，持中華民國護照回台的那段期間
+         不列入。施行細則第 5 條的觸發條件也寫得很清楚，是「出境滿二年未入境」通報。
+         所以這個工具只能算「以你填的那次離境為準」，欄位標籤才會寫「最後一次」，
+         而且要在畫面上把這個前提講出來——不然回過台灣的人會拿到一個早就過期的紅字。 */
       const a = addMonths(out, 24); clamped = clamped || a.clamped;
       rows.push({ d:a.d, days:dayGap(now, a.d),
         k:"出境滿 2 年 — 依戶籍法應為戶籍遷出登記",
-        v:"遷出之後喪失健保投保資格、應予退保：不必再繳費，也不再有任何給付。眷屬同日轉出。" });
+        v:"這個日期是拿你填的離境日加 24 個月算的，而法條要的是<b>連續 2 年未入境</b>"
+         + "——中間持中華民國護照回過台灣，那段期間不列入計算，這個日期就要往後推"
+         + "（持外國護照入境則仍列入計算）。遷出之後喪失健保投保資格、應予退保："
+         + "不必再繳費，也不再有任何給付。眷屬同日轉出。" });
+      /* 「應為登記」讀起來像放著不辦就沒事，但施行細則第 5 條接的是逕行代辦。
+         這一句要講，否則使用者會以為這個到期日只是個提醒。 */
+      notes.push('這件事<b>不是只有你辦得動</b>：戶籍法施行細則第 5 條寫的是，戶政事務所接到入出國'
+        + '管理機關的<i>「出境滿二年未入境」</i>人口通報後，會通知限期辦理遷出登記，'
+        + '逾期<strong>得依本法第 42 條逕行為之</strong>。所以「不去辦就沒事」不成立，'
+        + '只是換成戶政事務所替你辦——而你人在澳洲，未必知道它已經辦了。');
       /* 回台加保的等待期綁的是「退保日」，不是離台日；退保日取決於何時遷出戶籍，
          所以這裡不算它的日期，只把規則講清楚。 */
       notes.push('健保的第二個時鐘從<b>退保那天</b>起算，不是從離台那天：退保日 <b>2 年內</b>恢復戶籍，'
-        + '自戶籍恢復當日加保；<b>2 年後</b>恢復、或返國初設戶籍，要等<strong>戶籍恢復滿 6 個月</strong>。'
+        + '自戶籍恢復當日加保；<b>2 年後</b>恢復、或返國初設戶籍，要等<strong>戶籍恢復或初設滿 6 個月</strong>。'
         + '唯一的例外是<strong>有一定雇主之受僱者，自受僱日加保</strong>——回台灣先找到工作，這 6 個月的空窗就不存在。');
     }
 
@@ -3419,16 +3558,30 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
       rows.push({ d:a.d, days:dayGap(now, a.d),
         k:"PR 核准滿 3 個月 — 台灣駕照在西澳失效",
         v:"官方原文：<i>&ldquo;After this 3-month period you cannot legally drive on your overseas licence, even if it is current and valid&rdquo;</i>——台灣駕照沒過期也一樣。而且台灣自 2025-11-01 起不在承認名單上，換照要考筆試＋路考，這 3 個月要塞得下預約、考試與可能的重考。" });
-      rows.push({ d:norm(pr), days:dayGap(now, norm(pr)),
+      /* state:true ＝「這是一個狀態，不是一個你趕得上的期限」。
+         這一列的日期就是使用者填的 PR 核准日本身，所以只要 PR 已經下來，它永遠是過去式。
+         把它算進色調的話，**每一個已經拿到 PR 的人都會看到紅色的「有期限已經過了」**
+         ——而他其實什麼都沒有錯過，真正該動的換照倒數反而被那片紅蓋掉。
+         右欄也不能寫「已過 N 天」：那是「你遲到了」的措辭，這一格沒有人遲到得了。
+         （這個缺陷是把面板渲染成純文字讀出來的；在那之前色調測試是靠「刻意只填一個欄位」
+         繞過它的——測試繞過一個行為，通常代表那個行為本身有問題。） */
+      rows.push({ d:norm(pr), days:dayGap(now, norm(pr)), state:true,
         k:"PR 核准當天 — 超級年金離境提領（DASP）資格消失",
-        v:"ATO 的資格條件之一是<i>&ldquo;you're not an Australian or New Zealand citizen, or a permanent resident of Australia&rdquo;</i>。<strong>這一格不可逆</strong>：駕照可以重考，健保可以再加保，這個不行。同一天起你才開始有 Medicare——台灣不在互惠協定的 11 國名單裡，在那之前沒有。" });
+        /* 這一列是紅字倒數，很容易被讀成「你還有 N 個月可以去把 super 領出來」。
+           但 DASP 的四項條件裡還有「簽證已失效」與「人已離境」——人還在澳洲的
+           這段期間，一天都領不了。倒數旁邊沒有這句話，等於在鼓勵一個做不到的動作。
+           措辭不能寫「這個倒數」：PR 已經核准的人看到的是「已過 N 個月」，
+           那時候畫面上根本沒有倒數，一句指著不存在的東西的話會讓整段失去可信度。
+           （這是把面板渲染成純文字讀過一遍才看見的，斷言看不到這種東西。） */
+        v:"ATO 的資格條件之一是<i>&ldquo;you're not an Australian or New Zealand citizen, or a permanent resident of Australia&rdquo;</i>。<strong>這一格不可逆</strong>：駕照可以重考，健保可以再加保，這個不行。<b>但這一天之前那段日子並不是「還可以去領」的期間</b>——DASP 同時要求<b>簽證已失效</b>且<b>你人已經離開澳洲</b>，所以人還在澳洲、簽證有效的那段時間，一天都領不了。同一天起你才開始有 Medicare——台灣不在互惠協定的 11 國名單裡，在那之前沒有。" });
     }
 
     rows.sort((x,y) => x.days - y.days);
 
     /* 色調看最急的那一條：已經過了 → bad；90 天內 → warn；其餘 ok。
-       「已經過了」在這一區是真的有法律後果的狀態，不是提醒。 */
-    const soonest = rows.reduce((m,r) => Math.min(m, r.days), Infinity);
+       「已經過了」在這一區是真的有法律後果的狀態，不是提醒。
+       但只數**真的是期限**的那幾條（state 的不算，理由見上面 DASP 那一列）。 */
+    const soonest = rows.filter(r => !r.state).reduce((m,r) => Math.min(m, r.days), Infinity);
     const tone = soonest < 0 ? "bad" : soonest <= 90 ? "warn" : "ok";
     const verdict = soonest < 0 ? "有期限已經過了"
       : soonest <= 90 ? "90 天內有期限到期"
@@ -3436,7 +3589,9 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
 
     let h = '<div class="detail"><ul class="kv">';
     rows.forEach(r => {
-      const when = r.days < 0 ? "已過 " + human(-r.days) : "還有 " + human(r.days);
+      const when = r.state
+        ? (r.days < 0 ? "已經發生" : r.days === 0 ? "就是今天" : "屆時發生")
+        : r.days < 0 ? "已過 " + human(-r.days) : "還有 " + human(r.days);
       h += '<li><span>' + esc(fmtD(r.d)) + '　' + esc(r.k) + '</span><span>' + esc(when) + '</span></li>';
     });
     h += '</ul>';
