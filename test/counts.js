@@ -19,6 +19,11 @@ const cp = require("child_process");
 
 const ROOT = path.join(__dirname, "..");
 const README = fs.readFileSync(path.join(ROOT, "public", "README.md"), "utf8");
+/* 有**兩份** README，而這支原本只看 public/ 那一份。
+   2026-08-17 實測結果：被對帳的那份是準的，沒被對帳的那份三個數字全爛
+   （合計還停在 340、cost 停在 132、突變停在 16）——正是這支程式寫來要擋的那種腐壞，
+   只是它守的是另一扇門。**「有一支對帳程式」不等於「數字是對的」，要看它讀的是哪個檔。** */
+const ROOT_README = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
 
 let pass = 0, fail = 0;
 function ok(name, actual, claimed) {
@@ -31,11 +36,17 @@ function ok(name, actual, claimed) {
 
 /* README 寫的數字。抓不到 pattern 本身就是一種漂移（那一行被改寫過），
    所以回 null 而不是 0——0 會跟「真的是 0」混在一起。 */
-function claim(re, label) {
-  const m = README.match(re);
-  if (!m) { fail++; console.log("✗ README 找不到「" + label + "」那一行 ←— 句型被改過，對帳規則要跟著改"); return null; }
+function claim(re, label, src, where) {
+  const m = (src || README).match(re);
+  if (!m) {
+    fail++;
+    console.log("✗ " + (where || "public/README.md") + " 找不到「" + label
+      + "」那一行 ←— 句型被改過，對帳規則要跟著改");
+    return null;
+  }
   return m[1];
 }
+const rootClaim = (re, label) => claim(re, label, ROOT_README, "README.md");
 
 function runSuite(name) {
   const r = cp.spawnSync("node", [path.join(__dirname, name + ".test.js")], { encoding: "utf8" });
@@ -84,15 +95,37 @@ if (g !== null) {
 console.log("\n— 突變 —");
 const mc = cp.spawnSync("node", [path.join(__dirname, "mutate.js"), "--count"], { encoding: "utf8" });
 if (mc.status !== 0) { fail++; console.log("✗ mutate.js --count 跑不起來"); }
-else ok("突變條數", mc.stdout.trim(), claim(/目前 (\d+) 條突變全部被抓到/, "N 條突變全部被抓到"));
+else {
+  ok("突變條數", mc.stdout.trim(), claim(/目前 (\d+) 條突變全部被抓到/, "N 條突變全部被抓到"));
+  ok("突變條數（根目錄 README）", mc.stdout.trim(),
+    rootClaim(/看測試會不會紅（目前 (\d+) 條全被抓到）/, "N 條全被抓到"));
+}
+
+/* -------------------------------------------------- 根目錄 README 的同一組數字 */
+/* 這一節跟上面對的是同一批事實，只是寫在另一個檔裡。兩份都要對，
+   否則「有對帳」只保護得了其中一份，另一份繼續往少的方向爛。 */
+console.log("\n— 根目錄 README —");
+ok("合計（根目錄 README）", total, rootClaim(/合計 (\d+) 個案例（時薪/, "合計 N 個案例"));
+ok("cost 案例數（根目錄 README）",
+  Number((README.match(/cost\.test\.js\s+生活成本試算的回歸測試（(\d+) 個案例）/) || [0, 0])[1]),
+  rootClaim(/（時薪 \d+、生活成本 (\d+)、/, "括號裡的 cost 案例數"));
+if (g !== null) {
+  const m = g.match(/（(\d+) 個場景，(\d+) 行）/);
+  if (m) ok("golden 場景數（根目錄 README）", m[1], rootClaim(/快照：(\d+) 個場景的答案面板/, "golden 的場景數"));
+}
 
 /* -------------------------------------------------- 有沒有測試沒被寫進 README */
 /* 數字對得上，不代表清單是完整的：新增一支測試而忘了寫進檔案樹，
    README 會安靜地少描述一整支。這條擋的是那個。 */
+/* 兩份都要檢查。2026-08-17 實測：根目錄那份寫著「另外兩支」，
+   而 test/ 底下有四支不算進案例數的工具（golden、mutate、render、counts），
+   少描述的那兩支就是這一條原本看不到的東西。 */
 console.log("\n— 檔案樹 —");
 const files = fs.readdirSync(__dirname).filter(f => f.endsWith(".js")).sort();
-const missing = files.filter(f => !README.includes(f));
-ok("test/ 底下每一支都寫進 README 了", missing.length ? "少了 " + missing.join("、") : 0, 0);
+for (const [where, src] of [["public/README.md", README], ["README.md", ROOT_README]]) {
+  const missing = files.filter(f => !src.includes(f));
+  ok("test/ 底下每一支都寫進 " + where + " 了", missing.length ? "少了 " + missing.join("、") : 0, 0);
+}
 
 console.log("\n" + (fail === 0 ? "全數通過：" : "") + pass + " 過 / " + fail + " 失敗");
 process.exit(fail === 0 ? 0 : 1);
