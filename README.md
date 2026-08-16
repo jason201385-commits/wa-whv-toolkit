@@ -2,7 +2,8 @@
 
 **線上：https://wa-whv.pages.dev**
 
-一個靜態單頁。給人在西澳（Perth 及周邊）的台灣打工度假者，在**付錢或答應之前**查清楚。
+一個靜態單頁。給人在西澳（Perth 及周邊）的台灣人，在**付錢或答應之前**查清楚。
+主要讀者是打工度假者；`/pr` 那一段是給已經開始想「要不要留下來」的人用的。
 
 非營利。沒有廣告、沒有推薦回饋、沒有合作仲介、沒有任何導流分潤。
 
@@ -16,9 +17,10 @@
 /after     已經被騙了，第一步該打給誰
 /landing   剛落地：TFN、Medicare、稅
 /ask       在群裡問之前，先問對問題
+/pr        留下來：年齡時鐘與技術移民點數試算
 ```
 
-九個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
+十個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
 
 ---
 
@@ -61,6 +63,8 @@ public/               ← 部署目錄。只有這裡面的東西會上線。
 test/
   wage.test.js        時薪判定的回歸測試
   cost.test.js        生活成本試算的回歸測試（稅級距、房租佔比、單位價格）
+  pr.test.js          年齡時鐘與點數試算的回歸測試（官方點數表逐格對照）
+  flags.test.js       旗標對帳：標了「待核」的資料一定要真的印得出「待核」
 ```
 
 沒有 `package.json`，因為沒有相依套件。要跑的只有 Node（測試用）跟一個瀏覽器。
@@ -80,13 +84,15 @@ python -m http.server 8787 --bind 127.0.0.1 --directory public
 ```bash
 node test/wage.test.js
 node test/cost.test.js
+node test/pr.test.js
+node test/flags.test.js
 ```
 
-零相依套件，合計 125 個案例（時薪 28、生活成本 97）。兩支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
+零相依套件，合計 194 個案例（時薪 28、生活成本 100、點數 51、旗標對帳 15）。四支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
 
-**動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`。**
+**動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`；動過 `checkAge()`、點數試算或 `DATA.pr` 一定要跑 `pr.test.js`；動過任何 renderer 或加了新的來源清單一定要跑 `flags.test.js`。**
 
-只有這兩條路徑有測試，因為只有它們會主動對使用者說出會改變他行為的話：
+前三支對應的是會主動對使用者說出改變他行為的話的路徑：
 
 - `wage.test.js` — 「你的雇主違法」。涵蓋輸入護欄、浮點數邊界、入門級分類的假指控情境、兩套勞資系統、計件三分支、剪貼簿文字必須與畫面判定同一個符號、每條路徑都要有退休金提醒。
 - `cost.test.js` — 「你的雇主沒登記所以你每週被多扣 $XXX」「你的房租超過官方判準」「存到目標要 N 週」。涵蓋 ATO 兩張稅表的四個級距邊界、未登記雇主改用外國居民稅率的分支、30/40 rule 的踩線與越線、票價必須來自 `DATA.cost.fares` 不能寫死、支出剛好等於收入時不得印出 `$-0.00`、以及「這一區不得出現寫死的生活費金額」這條設計約束本身。
@@ -95,24 +101,44 @@ node test/cost.test.js
   **②placeholder 守門**——`#crent`、`#cfood` 的 placeholder 不得是數字，`#crate` 不得在 markup 寫死法定時薪、必須由 `DATA.wage.casualMin` 灌進去。
   **③無來源宣稱守門**——不得宣稱任何具名連鎖店不受 Unit Pricing Code 規範。
   ①②③ 三組都自帶 canary（故意餵它應該要紅的字串，確認守門正則不是永遠通過的假斷言）。
+  ③ 同時掃 `index.html` 與 `public/README.md`——同一句錯話在兩邊都活過一次，守則只守一半等於沒守。
+  README 那半有例外規則：「已知的錯誤來源」那一節**可以**引用錯句，但整句要包在「」裡，
+  以引號當「這是標本不是主張」的機械證據。
+- `pr.test.js` — 「你的年齡分數還剩 N 天」。逐格對照移民部 189 的官方點數表（`lo` 含、`hi` 不含，
+  照抄「至少 18 歲、未滿 25 歲」的邊界寫法），加上 190 提名 5 分、491 提名或親屬擔保 15 分、
+  受僱年資合計上限 20 分。年齡那一段測的是生日當天、跨檔當天、45 歲以上不在表內、2 月 29 日出生不猜，
+  以及**分數變動的正負號**——24 歲的人下一個生日是 +5 不是掉分，這個 bug 寫的時候真的犯過。
+  另有兩組守門。**無來源宣稱**：站上不得出現任何「幾分會被邀請／保證上」的分數線，
+  而且要明說這張表沒有告訴你幾分會被邀請——**官方點數表上就是沒有及格線**（整頁搜 `65` 零命中，
+  所以站上一個字都不寫）；技術年資、西澳 ABN／自僱排除、491 免僱傭合約三件事都必須附上官方原文；
+  WASMOL／GOL 的職業清單不准抄進站裡（清單會變，抄了就是製造過期資訊）。
+  **不可以被改掉的三句**：每次試算都要講「以受邀當下認定」、要標明官方原文寫的是 most 不是 all、
+  要明說 EOI 掛著等的期間年齡照走。
+
+`flags.test.js` 是橫向的，不管算得對不對，只管旗標印不印得出來——說明在上面「語法與旗標檢查」。
 
 ### 語法與旗標檢查
 
 ```bash
 node -e "const fs=require('fs');const m=fs.readFileSync('public/index.html','utf8').match(/<script>([\s\S]*)<\/script>/);fs.writeFileSync('chk.js',m[1])" && node --check chk.js
-grep -o 'v:false[},]' public/index.html | wc -l    # 目前 21
-grep -o 'pending:true' public/index.html | wc -l   # 目前 1
+node test/flags.test.js
 ```
 
-後兩條數的是「待核」旗標，而**站上有兩種標記法**：`v:false` 標單一來源，`pending:true` 標整張卡（`/cost` 的卡片渲染器已經把 `v` 用在別的地方，所以卡層另開一個旗標）。**兩個數字加起來要等於瀏覽器裡的 `document.querySelectorAll('.pending').length`**：
+**旗標不要用 `grep` 數。**站上有兩種標記法——`v:false` 標單一來源，`pending:true` 標整張卡
+（`/cost` 的卡片渲染器已經把 `v` 用在別的地方，所以卡層另開一個旗標）——而且 `grep -c 'v:false'`
+會回 25，其中 4 次出現在**註解裡**（那幾行正好在解釋這個機制）。2026-08-17 就有一次因為
+25 對不上 22 而誤判「記錄寫錯了」，追下去發現記錄是對的、grep 才是錯的工具。
+
+`flags.test.js` 算的是會真的渲染出來的數，並釘住這條等式：
 
 ```js
-document.querySelectorAll('.pending').length   // 要等於 21 + 1 = 22
+document.querySelectorAll('.pending').length   // 要等於 18（來源）+ 3（內容卡）+ 1（pending:true）= 22
 ```
 
-對不上就代表有 renderer 讀不到旗標，畫面上會有一筆沒標「待核」的未查證資料。這個 bug 真的發生過。
-
-⚠️ 只數 `v:false` 會少算，只看 `.srclist` 也會少算——有 3 筆 `v:false` 不住在來源清單裡，是由別的 renderer 印出來的。**加了新的 renderer 就要回來更新這一段**，否則下一個人會拿一個不完整的檢查去對，然後把「對不上」誤判成 bug。
+對不上就代表有 renderer 讀不到旗標，畫面上會有一筆沒標「待核」的未查證資料。這個 bug 真的發生過
+（換匯合法路徑那一段）。所以這支測試不只比總數：它解析出**五個**會印「待核」的 renderer
+各自吃哪些陣列，再檢查每一筆帶旗標的資料都落在其中。**加了第六個 renderer 而忘了讓它吃 `v`，測試會紅**
+——這件事以前只寫在 README 裡拜託下一個人記得，現在是機械擋的。
 
 ### 部署
 

@@ -414,6 +414,59 @@ ok("不得宣稱任何具名連鎖店不受 Unit Pricing Code 規範",
 ok("門檻要寫成『陳列雜貨的樓地板面積』，不得再寫成『賣場面積』",
   HTML.includes("陳列雜貨的樓地板面積") && !/賣場面積超過 1,000/.test(HTML));
 
+/* 上面那兩條只掃 index.html，但同一句話在 public/README.md 也活過一次——
+   說明文件跟站上內容是同一套宣稱，守則只守一半等於沒守。
+   麻煩的是 README **必須** 引得動那句錯的話：它有一節就叫「已知的錯誤來源（不要再引）」，
+   把原句抄在那裡是這份文件的用處所在。所以判準不是「有沒有出現」，是「以什麼身分出現」：
+     ・「已知的錯誤來源」那節**之前**出現 → 那是站在說它是真的，紅
+     ・那節**之後**出現，且整句包在「」裡 → 那是標本，放行
+   引號是機械判得出來的證據，比「我知道那段是在講反例」可靠。 */
+(function () {
+  const RM_PATH = path.join(__dirname, "..", "public", "README.md");
+  const RM = fs.readFileSync(RM_PATH, "utf8");
+  const CLAIM = /(ALDI|Coles|Woolworths|IGA)[^。」]{0,40}(不強制|不適用|門檻以下|免標)|賣場面積超過 1,000/g;
+
+  /* 回傳「以自己的口吻講出來」的命中，標本不算。 */
+  function liveClaims(text) {
+    const wrongSection = text.indexOf("### 已知的錯誤來源");
+    const out = [];
+    const re = new RegExp(CLAIM.source, "g");
+    let m;
+    while ((m = re.exec(text))) {
+      const lineStart = text.lastIndexOf("\n", m.index) + 1;
+      let lineEnd = text.indexOf("\n", m.index); if (lineEnd < 0) lineEnd = text.length;
+      const line = text.slice(lineStart, lineEnd);
+      const rel = m.index - lineStart;
+      /* 包在「」裡＝這一行在引述，不是在主張。看的是命中點左右最近的引號方向。 */
+      const openBefore = line.lastIndexOf("「", rel);
+      const closeBefore = line.lastIndexOf("」", rel);
+      const quoted = openBefore > closeBefore && line.indexOf("」", rel) > rel;
+      if (wrongSection < 0 || m.index < wrongSection || !quoted) {
+        out.push("第 " + text.slice(0, m.index).split("\n").length + " 行：" + m[0]);
+      }
+    }
+    return out;
+  }
+
+  ok("public/README.md 要保留「已知的錯誤來源」那一節（例外規則靠它定位）",
+    RM.indexOf("### 已知的錯誤來源") > 0);
+
+  const live = liveClaims(RM);
+  ok("public/README.md 不得以自己的口吻宣稱具名連鎖店不受 Unit Pricing Code 規範",
+    live.length === 0,
+    live.join("\n    ") + "\n    （要引那句錯的話，把它放進「已知的錯誤來源」那節並整句用「」包起來）");
+
+  /* 這條守則的例外規則比正則本身複雜，所以它自己也要被測——
+     不然「永遠通過」跟「守得很好」在輸出上長得一模一樣。 */
+  const REAL = "### 已知的錯誤來源（不要再引）\n- 「ALDI 與多數亞超面積在門檻以下，法規不強制它們標」——2026-08-16 刪除。\n";
+  ok("README 守則對三種寫法的判定都正確（不是永遠通過的假斷言）",
+    liveClaims(REAL).length === 0 &&
+    liveClaims("ALDI 面積在門檻以下，法規不強制標單位價格。\n" + REAL).length === 1 &&
+    liveClaims(REAL + "所以 Coles 以外的店都不強制標。\n").length === 1 &&
+    liveClaims("### 已知的錯誤來源\n- 賣場面積超過 1,000 平方公尺才要標。\n").length === 1,
+    "自我測試沒有得到 0/1/1/1");
+})();
+
 /* ---------------------------------------------------------------------------
    這個站最大聲的那條承諾：/cost 不存任何「今天多少錢」。
 

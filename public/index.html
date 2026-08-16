@@ -347,6 +347,7 @@ footer a{color:var(--accent)}
     <li><a href="#after"><span class="u">/after</span><b>已經轉出去了</b><span>接下來 24 小時的順序</span></a></li>
     <li><a href="#ask"><span class="u">/ask</span><b>出門前先問</b><span>別為了一則失效貼文白跑</span></a></li>
     <li><a href="#landing"><span class="u">/landing</span><b>落地清單</b><span>前 72 小時要辦什麼</span></a></li>
+    <li><a href="#pr"><span class="u">/pr</span><b>年齡與點數</b><span>你的門什麼時候關</span></a></li>
   </ul>
 </nav>
 
@@ -787,6 +788,44 @@ footer a{color:var(--accent)}
       <ul id="landflags"></ul>
     </div>
     <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="landsrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= PR ================= -->
+<section class="tool" id="pr">
+  <header>
+    <h2>留下來：年齡與點數<span class="slug">/pr</span></h2>
+    <p class="q">技術移民點數表裡，只有一個變數是你怎麼努力都擋不住的：年齡。它到日子就掉分，而且是<strong>受邀當下</strong>認定——不是你送 EOI 那天。先把自己的關門日期算出來，其他決定才有時間軸。</p>
+  </header>
+  <div class="body">
+    <div class="ask">
+      <label for="bday">你的出生日期</label>
+      <input type="date" id="bday" max="2026-12-31" autocomplete="off">
+      <button class="btn" id="bgo">算</button>
+    </div>
+    <p class="hint">日期只留在你自己的瀏覽器裡，這個站沒有伺服器可以送。<strong>算的是年齡級距與掉分日期，不是「你會不會過」</strong>——後者沒有人算得出來。</p>
+    <div class="ans" id="bans" hidden></div>
+
+    <h3 style="margin:30px 0 0;font-size:17px">點數試算</h3>
+    <p class="hint" style="margin-top:4px">照實填。這張表算的是<strong>你自己宣稱</strong>的分數，移民部認不認每一項，是職業評估與簽證官的事。上面填了出生日期的話，年齡會自動帶入。</p>
+    <div class="quiz" id="prq"></div>
+    <div class="ans" id="prans" hidden></div>
+
+    <div class="flags rule">
+      <b>打工度假的那幾年，在這張表上算什麼</b>
+      <ul id="prwhv"></ul>
+    </div>
+
+    <div class="flags rule">
+      <b>西澳州擔保：判準不是「我人在 Perth」</b>
+      <ul id="prwa"></ul>
+    </div>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="prflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="prsrc"></ul></details>
   </div>
 </section>
 
@@ -1680,6 +1719,67 @@ const DATA = {
     ]
   },
 
+  /* ---------------- 技術移民點數 ----------------
+     這一段是整個站上最穩的資料：點數表寫在移民法規裡，不像匯率或房租會天天動。
+     但「幾分會被邀請」不在這張表上——那由每一輪邀請的實際狀況決定，會變。
+     所以這裡只算分，不猜線。同一條原則：只給判斷基準，不給今日報價。
+
+     年齡級距的官方原文是「at least 18 but less than 25 years」這種寫法，
+     所以 lo 含、hi 不含。照抄邊界，不要自己換算成 18–24 再回推，那會在生日當天差一天。 */
+  pr: {
+    /* immi 189 points table，最後更新 11/06/2026。lo 含、hi 不含。 */
+    age: [
+      { lo:18, hi:25, p:25, t:"至少 18 歲、未滿 25 歲" },
+      { lo:25, hi:33, p:30, t:"至少 25 歲、未滿 33 歲" },
+      { lo:33, hi:40, p:25, t:"至少 33 歲、未滿 40 歲" },
+      { lo:40, hi:45, p:15, t:"至少 40 歲、未滿 45 歲" }
+    ],
+    /* 每一題的 o 是 [顯示文字, 分數]。分數全部來自官方表，不自己插值。 */
+    q: [
+      { k:"visa", q:"你要走哪一類簽證", o:[["189 技術獨立（無提名）",0],["190 州擔保（西澳提名）",5],["491 偏遠地區（州提名或親屬擔保）",15]] },
+      { k:"eng",  q:"英文能力", o:[["Competent",0],["Proficient",10],["Superior",20]] },
+      { k:"edu",  q:"最高學歷（只採計一項）", o:[["都不是",0],["澳洲文憑或技職資格",10],["評估機構認可的資格",10],["學士以上",15],["博士",20]] },
+      { k:"ovs",  q:"海外技術工作年資（受邀前 10 年內）", o:[["不到 3 年",0],["3 年以上、未滿 5 年",5],["5 年以上、未滿 8 年",10],["8 年以上",15]] },
+      { k:"aus",  q:"澳洲技術工作年資（受邀前 10 年內）", o:[["不到 1 年",0],["1 年以上、未滿 3 年",5],["3 年以上、未滿 5 年",10],["5 年以上、未滿 8 年",15],["8 年以上",20]] },
+      { k:"stem", q:"澳洲研究型碩士或博士（STEM／ICT，至少 2 學年）", o:[["沒有",0],["有",10]] },
+      { k:"study",q:"符合澳洲學習要求（Australian study requirement）", o:[["沒有",0],["符合",5]] },
+      { k:"py",   q:"澳洲專業年 Professional Year（會計／資通訊／工程）", o:[["沒有",0],["完成",5]] },
+      { k:"naati",q:"NAATI 社區語言認證（准專業級以上）", o:[["沒有",0],["有",5]] },
+      { k:"reg",  q:"在偏遠地區就學（不含遠距課程）", o:[["沒有",0],["有",5]] },
+      { k:"ptn",  q:"配偶", o:[["有配偶，但不符合下列任一項",0],["配偶有 Competent English",5],["配偶符合年齡＋英文＋技術評估",10],["單身，或配偶是澳洲公民／PR",10]] }
+    ],
+    /* 官方明文：海外＋澳洲工作年資合計上限 20 分。這個上限很容易被試算工具漏掉，
+       漏掉的人會以為自己有 35 分的工作分。 */
+    empCap: 20,
+    whv: [
+      "<strong>不是「在澳洲上過班」就算技術工作年資。</strong>官方原文寫得很死：只有當那份工作是<b>你申報的那個職業，或密切相關的技術職業</b>時才能計分（<i>&ldquo;only claim points for employment if the employment was in your nominated skilled occupation or a closely related skilled occupation&rdquo;</i>）。餐廳、農場、倉庫如果不是你要申報的職業，時數再多都是 0 分。",
+      "<strong>工時門檻是每週 20 小時。</strong>官方對「受僱」的定義是 <i>&ldquo;engaged in an occupation for remuneration for at least 20 hours a week&rdquo;</i>。低於這個時數的期間不算數。",
+      "<strong>計分窗口是「受邀前 10 年內」</strong>，不是你這輩子的年資。太早的經歷會自己掉出窗口。",
+      "<strong>二簽、三簽延長的是打工度假簽證本身，不是技術移民年資。</strong>集滿 88 天讓你能多留一年；那一年算不算點數，回到上面第一條——看它是不是你申報的職業。",
+      "打工度假這段時間<b>真正能換成點數的動作</b>是：把英文考到更高一級（最多 20 分）、確認自己的職業在不在清單上、拿 NAATI（5 分）。這三件在澳洲、在台灣都能做，而且不受年齡掉分影響。"
+    ],
+    wa: [
+      "西澳州擔保分兩條路：<b>General stream</b>（職業在 WASMOL Schedule 1 或 2 上）與 <b>Graduate stream</b>（在西澳完成 VET 或高等教育學歷，職業在 GOL 上）。<strong>判準是職業在不在清單上，不是你人在不在 Perth。</strong>",
+      "<strong>General stream 要僱傭合約，而且 ABN 接案不算。</strong>西澳官方原文：獨立承包商或自僱提出的僱傭合約<b>不符合要求</b>（<i>&ldquo;Employment contracts submitted by an independent contractor or for self-employment do not meet the above requirements&rdquo;</i>），sole trader 只有特定情況才會被考慮。很多人在 Perth 用 ABN 接案接了兩年，那份「工作證明」在這裡是不能用的。",
+      "<strong>491 沒有僱傭合約要求。</strong>西澳官方明寫這項要求 <i>&ldquo;not applicable to visa 491 applicants&rdquo;</i>——同一個人走 190 走不通，走 491 可能通，而且 491 的提名分數是 15 分，比 190 的 5 分高。",
+      "Graduate stream 的兩個硬條件：<b>線上課程超過 25% 不符合</b>（COVID 期間例外需舉證）；<b>「兩年」的實際認定是至少 87 週全時就讀</b>，可以由多張完成證明累加。",
+      "WASMOL 與 GOL 的<b>職業清單會改</b>，邀請輪次也會停開或加開（西澳自己的公告就有「SNMP 暫停」與「臨時追加名額」）。<strong>這個站不抄清單</strong>——抄下來的那天起它就開始過期。要看清單請直接開下面的西澳官方連結。"
+    ],
+    flags: [
+      "<strong>「先送 EOI 卡位，年齡就鎖住了」——沒有這回事。</strong>移民部原文是積分測驗<b>以受邀當下認定</b>（<i>&ldquo;satisfy most criteria specified in the points test at the time of invitation&rdquo;</i>）。EOI 掛著等的每一天，年齡都照走；跨過級距那天，你系統上那個分數就不成立了。",
+      "<strong>「有人跟我說幾分一定會上」——那個數字這個站不寫。</strong>官方點數表只教你怎麼算分，<b>沒有寫幾分會被邀請</b>。實際的線由每一輪邀請與你的職業決定，會變。任何把「今年 X 分穩上」講得很篤定的人，講的都是他自己的猜測。",
+      "<strong>老闆口頭說「到時幫你辦」不是簽證路徑。</strong>雇主擔保是一套獨立的申請與資格條件，跟這張點數表不是同一件事。在還沒看到書面文件之前，把它當計畫的每一年，年齡與英文的窗口都照關。",
+      "<strong>年齡掉分不會因為你已經在澳洲、或已經送件而暫停。</strong>它唯一認得的是日曆。上面的算式把你的掉分日期直接寫出來，就是為了讓這件事變成一個看得見的日期，而不是一種模糊的焦慮。",
+      "<strong>這個站不是移民顧問，也不能替你做職業評估。</strong>點數表是公開的，算術是機械的，這兩件這裡幫你做完。剩下的「我這個學歷算不算」「我的職稱對不對得上」——那要由評估機構認定，不是任何人在網路上說了算。"
+    ],
+    src: [
+      { t:"移民部 — 189 技術獨立簽證 積分表（年齡、英文、學歷、工作年資、配偶、工作年資 20 分上限）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189/points-table", as:"2026-08-17", v:true },
+      { t:"移民部 — 190 州擔保簽證 積分表（州提名 5 分）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-nominated-190/points-table", as:"2026-08-17", v:true },
+      { t:"移民部 — 491 偏遠地區簽證 積分表（州提名或親屬擔保 15 分）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-work-regional-provisional-491/points-table", as:"2026-08-17", v:true },
+      { t:"西澳 Migration WA — State Nominated Migration Program（190 加 5 分、491 加 15 分；WASMOL／GOL；僱傭合約與 ABN 排除；Graduate stream 87 週與 25% 線上課程上限）", u:"https://migration.wa.gov.au/our-services-support/state-nominated-migration-program", as:"2026-08-17", v:true }
+    ]
+  },
+
   /* ---------------- 可轉發的圖卡 ----------------
      在 LINE 裡連結多半沒人點，圖才會被轉。所以圖上必須自己講完一件事，
      不能只是「詳見網站」。文字一律純文字——canvas 不吃標籤。 */
@@ -1843,6 +1943,9 @@ flags("#carflags", DATA.car.flags);
 flags("#rentflags", DATA.rent.flags);
 flags("#scamflags", DATA.scam.flags);
 flags("#landflags", DATA.landing.flags);
+flags("#prflags", DATA.pr.flags);
+flags("#prwhv", DATA.pr.whv);
+flags("#prwa", DATA.pr.wa);
 
 /* ---- 來源 ---- */
 function sources(id, arr){
@@ -1864,6 +1967,7 @@ sources("#rentsrc", DATA.rent.src);
 sources("#scamsrc", DATA.scam.src);
 sources("#aftersrc", DATA.after.src);
 sources("#landsrc", DATA.landing.src);
+sources("#prsrc", DATA.pr.src);
 
 /* ---- 閘門式清單 ---- */
 function buildGate(key, items, unlockedMsg){
@@ -2892,6 +2996,171 @@ function comparePrice(){
       alert("如果沒有自動下載，請直接長按上面的圖片儲存。");
     }
   });
+})();
+
+/* ================= 年齡時鐘與點數 =================
+   整段刻意不碰 Date 的月份加減。年齡用 (年,月,日) 三元組直接比大小算，
+   天數差一律走 Date.UTC——本地時區的日光節約會讓「相差幾天」在換日那天差一天，
+   而這個工具整個賣點就是日期要準。西澳現在不實施日光節約，但使用者不一定在西澳看。 */
+const ymd = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? [+m[1], +m[2], +m[3]] : null; };
+const dayGap = (a, b) => Math.round((Date.UTC(b[0], b[1]-1, b[2]) - Date.UTC(a[0], a[1]-1, a[2])) / 86400000);
+/* 滿幾歲：生日還沒到就減一歲。不用 getTime 相減除以 365.25——那會在閏年附近錯一天。 */
+function ageOn(b, on){ let a = on[0] - b[0]; if(on[1] < b[1] || (on[1] === b[1] && on[2] < b[2])) a--; return a; }
+const bandOf = a => DATA.pr.age.find(x => a >= x.lo && a < x.hi) || null;
+const fmtD = d => d[0] + "-" + String(d[1]).padStart(2,"0") + "-" + String(d[2]).padStart(2,"0");
+/* 「還有 N 天」對超過一年的距離沒有感覺，換算成年又幾個月才讀得懂。 */
+function human(days){
+  if(days < 60) return days + " 天";
+  const y = Math.floor(days / 365), m = Math.round((days - y*365) / 30.44);
+  if(y <= 0) return m + " 個月";
+  return m > 0 ? y + " 年 " + m + " 個月" : y + " 年";
+}
+
+function checkAge(){
+  const box = $("#bans"), b = ymd(($("#bday").value || "").trim());
+  box.hidden = false;
+  const bail = (h, d, tone) => { box.className = "ans " + (tone || "warn");
+    box.innerHTML = '<div class="verdict">' + h + '</div><div class="detail">' + d + '</div>'; };
+
+  if(!b){ return bail("先填出生日期", "格式是年－月－日。這個欄位不會離開你的瀏覽器。"); }
+  const t = new Date(), now = [t.getFullYear(), t.getMonth()+1, t.getDate()];
+  const a = ageOn(b, now);
+  if(a < 0 || b[0] < 1900){ return bail("這個日期看起來不對", "請確認年份。"); }
+
+  /* 2/29 出生：非閏年的「生日」在各國法律上認定不同（2/28 還是 3/1）。
+     移民部怎麼認我沒有查到出處，所以不猜——直接告訴使用者這裡有個岔路。 */
+  const leapEdge = (b[1] === 2 && b[2] === 29);
+
+  if(a >= 45){
+    return bail("45 歲以上：這張點數表沒有你的級距",
+      "年齡分數的最後一級是「至少 40 歲、未滿 45 歲」。滿 45 之後不是變 0 分，是<strong>不在這張表的範圍內</strong>。"
+      + "技術移民之外還有別的簽證類別，但那不是這個工具算得出來的——請看下面的官方連結，或找註冊移民代理人（MARA）。", "bad");
+  }
+  if(a < 18){
+    return bail("還未滿 18 歲",
+      "點數表從「至少 18 歲」起算。你的第一個級距會在 " + fmtD([b[0]+18, b[1], b[2]]) + " 開始，那天起是 25 分。");
+  }
+
+  const band = bandOf(a);
+  /* 未來每一個會改變分數的日子：25 / 33 / 40 是換級距，45 是整張表關門。
+     delta 要相對於「前一個里程碑」，不是相對於現在——24 歲的人在 33 歲那格看到的
+     應該是從 30 掉到 25（−5），不是拿 25 去跟他現在的 25 比而得出 0。 */
+  const marks = [];
+  let prevP = band.p;
+  [25, 33, 40, 45].forEach(k => {
+    if(k <= a) return;
+    const d = [b[0]+k, b[1], b[2]], nb = bandOf(k), p = nb ? nb.p : null;
+    marks.push({ k:k, d:d, days:dayGap(now, d), p:p, delta: p === null ? null : p - prevP });
+    if(p !== null) prevP = p;
+  });
+
+  /* 第一個「變壞」的日子才決定色調。24 歲的人下一個生日是 +5 分，
+     那不是警告——把它標成紅色會讓真正該緊張的人失去參考點。 */
+  const drop = marks.find(m => m.p === null || m.delta < 0);
+  let tone = "ok";
+  if(drop && drop.days <= 365) tone = (drop.p === null) ? "bad" : "warn";
+
+  let h = '<div class="detail"><p><b>' + band.t + '</b> ＝ <b>' + band.p + ' 分</b>（你目前 ' + a + ' 歲）。</p>';
+  h += '<ul class="kv">';
+  marks.forEach(m => {
+    const label = m.p === null
+      ? "滿 45 歲 — 年齡分數表關門"
+      : "滿 " + m.k + " 歲 — 年齡分數變 " + m.p + " 分（" + (m.delta > 0 ? "+" : "") + m.delta + "）";
+    h += '<li><span>' + esc(fmtD(m.d)) + '　' + label + '</span><span>還有 ' + esc(human(m.days)) + '</span></li>';
+  });
+  h += '</ul>';
+  h += '<p class="note"><strong>這些日期之所以重要，是因為積分測驗以「受邀當下」認定，不是以你送出 EOI 的那天。</strong>'
+     + '移民部原文：<i>&ldquo;satisfy most criteria specified in the points test at the time of invitation&rdquo;</i>'
+     + '（原文寫的是 most，不是 all——例如婚姻狀況變動那一項，官方明說不以受邀當下認定）。'
+     + '所以 EOI 掛在系統上等待的那段期間，年齡照走；跨過上面任何一個日期，你當初填的分數就不再成立。</p>';
+  if(leapEdge){
+    h += '<p class="note">你的生日是 2 月 29 日。非閏年的生日該算 2/28 還是 3/1，各地法律規定不同，'
+       + '<strong>移民部怎麼認定我沒有查到明文，所以這裡不猜</strong>——上表的日期只是把月日照抄。差一天會影響你的請以官方認定為準。</p>';
+  }
+  h += '</div>';
+  box.className = "ans " + tone;
+  box.innerHTML = '<div class="verdict">'
+    + (tone === "bad" ? "一年內就會關門" : tone === "warn" ? "一年內會掉分" : "目前 " + band.p + " 分")
+    + '</div>' + h;
+
+  /* 年齡是點數試算的第一格，算完直接帶過去，不要讓人填兩次。 */
+  const sel = document.querySelector('[data-pk="age"]');
+  if(sel){ sel.value = String(band.p); sel.dispatchEvent(new Event("change")); }
+}
+$("#bgo").addEventListener("click", checkAge);
+$("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); });
+
+(function buildPoints(){
+  const wrap = $("#prq"), box = $("#prans");
+  if(!wrap || !box) return;
+  const ans = {};
+
+  /* 年齡那一格不在 DATA.pr.q 裡，因為它的選項就是 DATA.pr.age，
+     而且上面的時鐘會自動填它。手動改也可以——有人想試「如果我明年才送」。 */
+  const arow = el("div","qrow");
+  arow.appendChild(el("span","qt","年齡級距（上面算過的話會自動帶入）"));
+  const asel = el("select");
+  asel.setAttribute("aria-label","年齡級距");
+  asel.dataset.pk = "age";
+  asel.innerHTML = '<option value="">— 請選擇 —</option>'
+    + DATA.pr.age.map(x => '<option value="' + x.p + '">' + esc(x.t) + '（' + x.p + ' 分）</option>').join("");
+  asel.addEventListener("change", ()=>{ ans.age = asel.value; total(); });
+  arow.appendChild(asel); wrap.appendChild(arow);
+
+  DATA.pr.q.forEach(q => {
+    const row = el("div","qrow");
+    row.appendChild(el("span","qt", esc(q.q)));
+    const sel = el("select");
+    sel.setAttribute("aria-label", q.q);
+    sel.dataset.pk = q.k;
+    sel.innerHTML = '<option value="">— 請選擇 —</option>'
+      + q.o.map((o,i) => '<option value="' + i + '">' + esc(o[0]) + '（' + o[1] + ' 分）</option>').join("");
+    sel.addEventListener("change", ()=>{ ans[q.k] = sel.value; total(); });
+    row.appendChild(sel); wrap.appendChild(row);
+  });
+
+  function total(){
+    const missing = DATA.pr.q.filter(q => ans[q.k] === undefined || ans[q.k] === "").length + (ans.age ? 0 : 1);
+    if(missing > 0){
+      box.hidden = false; box.className = "ans";
+      box.innerHTML = '<div class="detail">還有 <b>' + missing + '</b> 題沒填。全部填完才會出總分——'
+        + '少一格算出來的數字會比實際低，那比不算還糟。</div>';
+      return;
+    }
+    const val = k => { const q = DATA.pr.q.find(x => x.k === k); return q.o[+ans[k]][1]; };
+    /* 官方明文：海外＋澳洲工作年資合計上限 20 分。先各自取值再一起砍，
+       不能分別砍——那樣 15+20 會變成 15+20 兩邊都合法卻超過上限。 */
+    const emp = Math.min(val("ovs") + val("aus"), DATA.pr.empCap);
+    const capped = (val("ovs") + val("aus")) > DATA.pr.empCap;
+    const parts = [
+      ["年齡", +ans.age],
+      ["英文", val("eng")],
+      ["工作年資（海外 " + val("ovs") + " ＋ 澳洲 " + val("aus") + "）", emp],
+      ["學歷", val("edu")],
+      ["STEM 研究型學位", val("stem")],
+      ["澳洲學習要求", val("study")],
+      ["專業年", val("py")],
+      ["NAATI 社區語言", val("naati")],
+      ["偏遠地區就學", val("reg")],
+      ["配偶", val("ptn")],
+      ["簽證類別提名加分", val("visa")]
+    ];
+    const sum = parts.reduce((s, p) => s + p[1], 0);
+
+    let h = '<div class="verdict">' + sum + ' 分</div><div class="detail"><ul class="kv">';
+    parts.forEach(p => { h += '<li><span>' + esc(p[0]) + '</span><span>' + p[1] + '</span></li>'; });
+    h += '</ul>';
+    if(capped){
+      h += '<p class="note">你的海外與澳洲工作年資合計是 ' + (val("ovs") + val("aus")) + ' 分，'
+         + '但官方對工作年資有 <strong>' + DATA.pr.empCap + ' 分上限</strong>，超過的部分不計。上表已經砍過。</p>';
+    }
+    h += '<p class="note"><strong>這是你自己宣稱的分數，不是移民部認可的分數。</strong>'
+       + '每一項都要拿得出文件；學歷與職業能不能對上，是職業評估機構認定的，不是自己填了就算。'
+       + '而且——<strong>這張表沒有告訴你幾分會被邀請</strong>。那條線由每一輪邀請的實際狀況與你的職業決定，會變，'
+       + '所以這個站不寫那個數字。看到有人說「今年 X 分穩上」，那是他的猜測。</p></div>';
+    box.hidden = false; box.className = "ans ok";
+    box.innerHTML = h;
+  }
 })();
 </script>
 </body>
