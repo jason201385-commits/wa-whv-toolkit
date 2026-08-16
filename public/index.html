@@ -2729,13 +2729,30 @@ function checkCost(){
   if(rate === null || !isFinite(rate) || rate <= 0 || hours === null || !isFinite(hours) || hours <= 0){
     return bail("請先填時薪和每週工時", "<p>其他欄位可以空著，但這兩個沒有就算不出任何東西。時薪填<strong>稅前</strong>的——對方報「到手多少」的話，那個數字不能拿來算。</p>");
   }
+  /* 時薪沒有上界的話，多打一個 0 會安靜地算出一整頁看起來完全正常的數字。
+     這條門檻是**打字錯誤的啟發式，不是「時薪不可能超過這個數」的宣稱**——
+     真的領這麼多的人不需要這一頁。取全國最低的 10 倍，讓它跟著 DATA.wage.nmw 走，
+     不另外維護一個寫死的數字（那種數字沒有人會回來更新）。 */
+  const rateCap = Math.round(DATA.wage.nmw * 10);
+  if(rate > rateCap){
+    return bail("時薪超過 $" + rateCap + "，這個數字先確認一下",
+      "<p>更常見的情況是多打了一個位數，或者把「一週領多少」填進了時薪那一格。<br>如果真的是這個數字，那這一頁幫不上忙——它算的是「這樣過不過得下去」，而那個問題你已經沒有了。</p>");
+  }
   if(hours > 80){
     return bail("每週工時超過 80 小時，這個數字先確認一下",
       "<p>不是不可能，但更常見的情況是把「兩週的工時」填成一週。<br>如果真的是一週 " + hours + " 小時，那要看的不是這一頁——長時間工作有安全與加班費的問題，先看 <a href=\"#wage\">/wage</a>。</p>");
   }
 
   const c = x => Math.round(x * 100);          /* 元 → 分 */
-  const m = cents => '<span class="num">$' + (cents / 100).toFixed(2) + '</span>';
+  /* 金額只有這一個格式器，畫面與剪貼簿共用。
+     以前畫面走 toFixed(2)（印出 $2730.00）而稅級距走 toLocaleString（印出 $18,200），
+     同一句話裡兩種寫法；時薪欄多打一個位數還會印出 $44000000603.85 這種讀不動的東西。
+     指定 en-AU 而不是讓它跟著系統語系跑——golden 快照要在別人的機器上也長一樣。 */
+  const fmt = cents => (cents / 100).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = cents => "$" + fmt(cents);                            /* 純文字：剪貼簿用 */
+  const m = cents => '<span class="num">' + money(cents) + '</span>'; /* 畫面用 */
+  const whole = n => n.toLocaleString("en-AU");                       /* 整數：稅級距、年收 */
+  const rateTxt = money(c(rate));
   const pct = (a, b) => b === 0 ? 0 : Math.round(a * 1000 / b) / 10;
 
   const grossW = Math.round(rate * hours * 100);          /* 稅前週薪（分） */
@@ -2759,20 +2776,29 @@ function checkCost(){
 
   /* 支出。每一筆都是使用者自己填的，沒填就當 0 並在下面說明。 */
   const bills = $("#cbills").value;
-  const rentIn = num("#crent");
-  const rentW = rentIn === null || !isFinite(rentIn) || rentIn < 0 ? 0 : c(rentIn);
-  const foodIn = num("#cfood");
-  const foodW = foodIn === null || !isFinite(foodIn) || foodIn < 0 ? 0 : c(foodIn);
-
   const tr = $("#ctrans").value;
+
+  /* 負數以前跟「沒填」走同一條路安靜歸零：填 -500 的人會看到「你沒有填任何支出」，
+     然後拿到一個偏高、卻長得完全正常的結餘。安靜的錯比擋下來危險，
+     尤其這一份是要貼進群組的。油錢只有選了「開車」才看——沒選就不該被舊值擋住。 */
+  const neg = [["#crent", "房租"], ["#cfood", "伙食"]]
+    .concat(tr === "car" ? [["#ccar", "油錢"]] : [])
+    .filter(p => { const v = num(p[0]); return v !== null && isFinite(v) && v < 0; })
+    .map(p => p[1]);
+  if(neg.length){
+    return bail(neg.join("、") + "填了負數，先改一下",
+      "<p>負的支出算不出東西。這一格以前會被當成沒填，於是你會拿到一個偏高、卻看起來很正常的結餘——那比直接擋下來危險。</p><p>把它改成正數，或者留白。</p>");
+  }
+
+  const amt = sel => { const v = num(sel); return v === null || !isFinite(v) ? 0 : c(v); };
+  const rentW = amt("#crent");
+  const foodW = amt("#cfood");
+
   const F = C.fares.goAnywhere;
   /* 大眾運輸：以「一天來回兩趟 Go Anywhere、每週工作 5 天」估。
      刻意不用 DayRider——那要一天跑三趟以上才划算，通勤族多數用不到。 */
   const fare = tr === "sr20" ? F.sr20 : tr === "sr" ? F.sr10 : tr === "cash" ? F.cash : 0;
-  const carIn = num("#ccar");
-  const transW = tr === "car"
-    ? (carIn === null || !isFinite(carIn) || carIn < 0 ? 0 : c(carIn))
-    : c(fare) * 2 * 5;
+  const transW = tr === "car" ? amt("#ccar") : c(fare) * 2 * 5;
 
   const spendW = rentW + foodW + transW;
   const leftW = netW - spendW;
@@ -2783,44 +2809,52 @@ function checkCost(){
   /* 判定用的是嚴格大於 30%，顯示的百分比卻四捨五入到小數一位。$300.01／$1000
      會印出「30%」再說「超過 30%」——同一句話自打嘴巴。踩線的情形一律改用文字。 */
   const hairline = overStress && rentPct <= C.stress * 100;
-  const rentPctText = hairline ? "剛好壓在 30% 的線上" : rentPct + "%";
+  /* 踩線的時候「30%」這個數字不能單獨出現，所以踩線版是一整個子句、不是一個百分比。
+     兩種句型各留一份，而且要挨在一起：畫面與剪貼簿都只准從這兩個裡面挑，不准自己再組一次。
+     2026-08-17 剪貼簿就是自己組了一次（`rentPct + "%"`），印出「稅前的 30%（超過 30%）」，
+     而畫面同一刻寫的是「剛好壓在線上」——貼進群組的那一份自己打自己。 */
+  const rentShare = hairline ? "剛好壓在稅前收入 30% 的線上" : "佔稅前收入 " + rentPct + "%";
+  const rentShareShort = hairline ? "剛好壓在 30% 的線上" : "吃掉稅前收入的 " + rentPct + "%";
 
   /* 判準二：每一項要工作幾小時才付得起。這是全頁唯一不會過期的表達方式——
      時薪漲、物價漲，這個比值仍然是對的。 */
   const netRate = grossW === 0 ? 0 : netW / hours;   /* 稅後時薪（分／小時） */
   const hrs = cents => netRate === 0 ? "—" : (cents / netRate).toFixed(1);
 
+  /* 標題後面的附註可能同時成立好幾條，各自包一組括號會變成「（…）（…）」。收進同一組。
+     宣告要在色調判定之前：底下「雇主未登記」有兩個入口（第三支，以及前兩支中了之後的補述），
+     兩個入口以前各自 `clip += "（…）"`，於是剪貼簿印出兩組括號、畫面只有一組。
+     兩份輸出各自組裝就會分岔——這一輪抓到的每一個錯都是這個形狀。 */
+  const notes = [], clipNotes = [];
+
   let tone, verdict, clip;
   if(leftW < 0){
     tone = "bad";
     verdict = "🛑 這個組合是負的——每週短少 " + m(-leftW);
-    clip = "🛑 每週短少 $" + (-leftW / 100).toFixed(2);
+    clip = "🛑 每週短少 " + money(-leftW);
   } else if(overStress){
     tone = "warn";
-    verdict = hairline ? "⚠️ 撐得住，但房租剛好壓在 30% 的線上"
-                       : "⚠️ 撐得住，但房租吃掉稅前收入的 " + rentPct + "%";
-    clip = hairline ? "⚠️ 房租剛好壓在稅前收入 30% 的線上（官方判準是超過 30%）"
-                    : "⚠️ 房租佔稅前 " + rentPct + "%（超過 30% 的官方判準）";
+    verdict = "⚠️ 撐得住，但房租" + rentShareShort;
+    clip = "⚠️ 房租" + rentShare + "（官方判準是超過 30%）";
   } else if(reg === "unreg"){
     /* 錢是夠用，但整年被多扣稅。這種情況不該給一個乾淨的 ✅——
        ✅ 會讓人以為沒事要處理，實際上要處理的是雇主的登記狀態。 */
     tone = "warn";
     verdict = "⚠️ 每週結餘 " + m(leftW) + "，但你正在被多扣稅";
-    clip = "⚠️ 每週結餘 $" + (leftW / 100).toFixed(2) + "（雇主未登記為 WHM 雇主，被扣 30%）";
+    clip = "⚠️ 每週結餘 " + money(leftW);
   } else {
     tone = "ok";
     verdict = "✅ 每週結餘 " + m(leftW);
-    clip = "✅ 每週結餘 $" + (leftW / 100).toFixed(2);
+    clip = "✅ 每週結餘 " + money(leftW);
   }
 
   /* 上面四支只會中一支，但「雇主沒登記」跟「錢夠不夠」是兩個各自獨立的問題。
-     前兩支中了就會把它整句蓋掉，標題只講一半——所以在後面補回去。 */
-  if(reg === "unreg" && (leftW < 0 || overStress)){
-    verdict += "，而且被多扣稅";
-    clip += "（雇主未登記為 WHM 雇主，被扣 30%）";
+     前兩支中了就會把它整句蓋掉，標題只講一半——所以在這裡補回去。
+     四支走同一條路：畫面接在標題後面，剪貼簿一律進 clipNotes 由下面統一收口。 */
+  if(reg === "unreg"){
+    if(leftW < 0 || overStress) verdict += "，而且被多扣稅";
+    clipNotes.push("雇主未登記為 WHM 雇主，被扣 30%");
   }
-  /* 標題後面的附註可能同時成立好幾條，各自包一組括號會變成「（…）（…）」。收進同一組。 */
-  const notes = [], clipNotes = [];
 
   /* 「不知道」是以有登記估的。給乾淨的 ✅ 會讓人以為稅那一欄已經查證過。
      （剪貼簿不重複這一條——它的稅那一行本來就寫著「以有登記估的 WHM 稅率」。） */
@@ -2853,10 +2887,10 @@ function checkCost(){
   let d = "";
 
   /* --- 收入 --- */
-  d += '<p><strong>稅前週薪</strong> ' + m(grossW) + '（$' + rate.toFixed(2) + ' × ' + hours + ' 小時）</p>';
+  d += '<p><strong>稅前週薪</strong> ' + m(grossW) + '（' + rateTxt + ' × ' + hours + ' 小時）</p>';
 
   if(belowMin){
-    d += '<p>你填的 $' + rate.toFixed(2) + ' 低於全國 casual 最低 $' + DATA.wage.casualMin.toFixed(2)
+    d += '<p>你填的 ' + rateTxt + ' 低於全國 casual 最低 $' + DATA.wage.casualMin.toFixed(2)
        + (rate < DATA.wage.nmw ? '，也低於不含 casual loading 的 $' + DATA.wage.nmw.toFixed(2) : '')
        + '。<strong>下面照你填的數字算下去，但它算的是「這樣過不過得下去」，不是「這樣合不合法」。</strong>'
        + '<br>合不合法要看你的年齡（未滿 21 歲有 junior rate）、僱用形態、以及適用哪一本 award'
@@ -2873,18 +2907,26 @@ function checkCost(){
   } else if(isRes){
     const incW = taxW - levyW, L = C.tax.levy;
     d += '<p><strong>所得稅</strong> −' + m(incW) + '（約 ' + pct(incW, grossW) + '%）。'
-       + '居民稅表前 $' + C.tax.res.free.toLocaleString() + ' <strong>免稅</strong>——'
+       + '居民稅表前 $' + whole(C.tax.res.free) + ' <strong>免稅</strong>——'
        + '這一格就是它跟打工度假稅表最大的差別，那張表第一元就開始扣。</p>';
 
     if(levyW === 0){
-      d += '<p><strong>Medicare levy</strong> $0。年收入約 $' + Math.round(annual / 100).toLocaleString()
-         + '，在 $' + L.lo.toLocaleString() + ' 的下門檻以下，<strong>本來就不課</strong>。</p>';
+      d += '<p><strong>Medicare levy</strong> $0。年收入約 $' + whole(Math.round(annual / 100))
+         + '，在 $' + whole(L.lo) + ' 的下門檻以下，<strong>本來就不課</strong>。</p>';
     } else if(annual <= L.hi * 100){
-      d += '<p><strong>Medicare levy</strong> −' + m(levyW) + '。年收入落在 $' + L.lo.toLocaleString()
-         + '–$' + L.hi.toLocaleString() + ' 之間，只課<strong>超過下門檻部分的 10%</strong>，'
+      d += '<p><strong>Medicare levy</strong> −' + m(levyW) + '。年收入落在 $' + whole(L.lo)
+         + '–$' + whole(L.hi) + ' 之間，只課<strong>超過下門檻部分的 10%</strong>，'
          + '不是全額的 2%——兼職的人常被這一段算多。</p>';
     } else {
       d += '<p><strong>Medicare levy</strong> −' + m(levyW) + '（全額 2%）。</p>';
+    }
+
+    /* 上面刻意把兩筆拆開講（那 2% 拿得到 MES 就免得掉，所得稅免不掉）。
+       但拆開之後，畫面上就沒有任何一個地方寫著「這週總共被扣多少」——
+       而剪貼簿的第二行印的正好是那個合計。同一次計算，一個數字只在對外那一份出現，
+       畫面上查不到，等於沒有人能核對它。所以合計要補回來，位置在拆解的後面。 */
+    if(levyW > 0){
+      d += '<p><strong>兩筆合計預扣</strong> −' + m(taxW) + '（約 ' + taxPct + '%）。</p>';
     }
 
     /* 這是整個居民模式唯一真的替使用者省到錢的地方，不能只丟進來源清單帶過。 */
@@ -2916,7 +2958,7 @@ function checkCost(){
        所以這一支不落到 else 去。 */
   } else {
     d += '<p><strong>預扣稅</strong> −' + m(taxW) + '（約 ' + taxPct + '%）。'
-       + '打工度假者前 $' + C.tax.b1.toLocaleString() + ' 一律 15%，<strong>沒有免稅額</strong>。'
+       + '打工度假者前 $' + whole(C.tax.b1) + ' 一律 15%，<strong>沒有免稅額</strong>。'
        + (reg === "unknown"
           ? '<br>你選了「不知道」，所以這裡先<strong>以有登記估</strong>。第一張 payslip 拿到就對一次：'
             + '扣掉的接近 30% 就代表雇主沒登記，回來把選項改掉重算。'
@@ -2964,7 +3006,7 @@ function checkCost(){
   if(rentW > 0){
     /* 建議工時要無條件進位：40.1333 印成 40.1 之後，40.1 小時仍然踩在線上。 */
     const needHours = Math.ceil(rentW / C.stress / (rate * 100) * 10) / 10;
-    d += '<p style="margin-top:12px"><strong>房租佔稅前收入 ' + rentPctText + '。</strong>'
+    d += '<p style="margin-top:12px"><strong>房租' + rentShare + '。</strong>'
        + (overStress
           ? '澳洲統計口徑（ABS／AIHW）的 30/40 rule 是<strong>超過 30% 即為 housing stress</strong>，你在線上。'
             + '<br>能動的只有兩邊：<strong>房租降到 ' + m(Math.floor(grossW * C.stress)) + ' 以下</strong>，'
@@ -3045,26 +3087,31 @@ function checkCost(){
      所以標籤、levy、DASP 現在三個都跟著模式走，而 DASP 直接吃畫面用的同一個 daspBackW。 */
   const clipTable = reg === "unreg" ? "雇主未登記，用外國居民稅率"
                   : reg === "unknown" ? "以「雇主有登記」估的 WHM 稅率"
-                  : isRes ? "已換簽，用居民稅表，前 $" + C.tax.res.free.toLocaleString() + " 免稅"
+                  : isRes ? "已換簽，用居民稅表，前 $" + whole(C.tax.res.free) + " 免稅"
                   : "WHM 稅率";
   const clipLevy = levyW > 0
-    ? "\n　其中 Medicare levy $" + (levyW / 100).toFixed(2) + "／週（一年 $"
-      + (medicareLevyCents(annual) / 100).toFixed(2) + "），拿到 MES 有機會整筆免掉"
+    ? "\n　其中 Medicare levy " + money(levyW) + "／週（一年 "
+      + money(medicareLevyCents(annual)) + "），拿到 MES 有機會整筆免掉"
     : "";
+  /* 房租這一行以前寫死 `rentPct + "%"`，是全檔最後一處沒跟著 hairline 走的地方：
+     $300.01／$1,000 會印出「稅前的 30%」再接「超過 30% 的判準」，同一行自打嘴巴。
+     注意不能只是把 rentShare 換進原句——踩線版是一整個子句，
+     接在「稅前的」後面不成話，後面那個字面 "%" 也會多一個出來。整句一起換。 */
+  const clipRent = rentW === 0 ? ""
+    : "\n房租 " + money(rentW) + "／週，" + rentShare
+      + (overStress ? "（ABS／AIHW 判準：超過 30% 即 housing stress）" : "");
   copyRow(box,
-    "時薪 $" + rate.toFixed(2) + " × 每週 " + hours + " 小時 → " + clip +
+    "時薪 " + rateTxt + " × 每週 " + hours + " 小時 → " + clip +
     /* 這裡曾經寫死「WHM 15%」。年收跨過 $45,000 之後畫面顯示的是 21.9%、39.2%，
        貼進群組的那份卻說 15%——同一次計算兩個數字，而群組看到的是錯的那個。
        改成印實際算出來的比例，標籤只講稅表是哪一張。 */
-    "\n稅前 $" + (grossW / 100).toFixed(2) + "／週，扣稅 $" + (taxW / 100).toFixed(2) +
+    "\n稅前 " + money(grossW) + "／週，扣稅 " + money(taxW) +
     "（約 " + taxPct + "%，" + clipTable + "）" +
-    "，稅後 $" + (netW / 100).toFixed(2) + clipLevy +
-    (rentW > 0 ? "\n房租 $" + (rentW / 100).toFixed(2) + "／週 ＝ 稅前的 " + rentPct + "%"
-       + (overStress ? "（超過 30% 的 housing stress 判準）" : "") : "") +
-    "\n退休金另計 $" + (superW / 100).toFixed(2) + "／週，離境時"
-      + (isRes ? "（還在臨時簽的話）DASP 課 35%，實拿約 $" + (daspBackW / 100).toFixed(2)
+    "，稅後 " + money(netW) + clipLevy + clipRent +
+    "\n退休金另計 " + money(superW) + "／週，離境時"
+      + (isRes ? "（還在臨時簽的話）DASP 課 35%，實拿約 " + money(daspBackW)
                  + "；PR 一下來這一格歸零"
-               : "領回課 65%，實拿約 $" + (daspBackW / 100).toFixed(2)),
+               : "領回課 65%，實拿約 " + money(daspBackW)),
     "有人問「這個薪水在 Perth 活不活得下去」，貼這段比講感覺清楚。");
 }
 

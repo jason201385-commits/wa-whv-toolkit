@@ -76,12 +76,31 @@ const M = [
     "const diffY = annualWhm - (residentTaxCents(annual) + medicareLevyCents(annual));",
     "const diffY = (whmW - taxW) * C.tax.weeksPerYear;"],
   ["剪貼簿的稅表標籤不跟著模式走（居民也印 WHM）",
-    '                  : isRes ? "已換簽，用居民稅表，前 $" + C.tax.res.free.toLocaleString() + " 免稅"\n', ""],
+    '                  : isRes ? "已換簽，用居民稅表，前 $" + whole(C.tax.res.free) + " 免稅"\n', ""],
   ["剪貼簿漏掉 Medicare levy 那一行", "const clipLevy = levyW > 0", "const clipLevy = false"],
   ["低於法定最低時不降級標題（畫面留 ✅）", 'if(tone === "ok"){\n      tone = "warn";', 'if(false){\n      tone = "warn";'],
   ["低於法定最低的門檻改用 nmw（漏掉 casual loading 那一段）",
     "const belowMin = rate < DATA.wage.casualMin;", "const belowMin = rate < DATA.wage.nmw;"],
   ["年度那一行退回「只有換簽差額不為零才印」", 'd += \'<p><small style="color:var(--muted)">這次算用到的稅表年度：\'', 'if(false) d += \'<p><small style="color:var(--muted)">這次算用到的稅表年度：\''],
+
+  /* ↓↓ 2026-08-17 這一輪修掉的錯，一條一條把它改回去。
+     修法本身不是證據——把錯改回來、看測試會不會紅，才是。
+     前兩條是 QA 抓到的兩支紅旗（貼進 LINE 群的那份自我矛盾／印出兩組括號），
+     它們當時躲在 golden 沒覆蓋的分支裡；現在有場景了，這裡再確認場景真的在看。 */
+  ["剪貼簿房租行退回寫死的 rentPct（踩線時自打嘴巴）",
+    '"／週，" + rentShare', '"／週，稅前的 " + rentPct + "%"'],
+  ["未登記那條附註退回自己組括號（兩條附註時印出兩組）",
+    'clipNotes.push("雇主未登記為 WHM 雇主，被扣 30%");',
+    'clip += "（雇主未登記為 WHM 雇主，被扣 30%）";'],
+  ["時薪上界失效（多打一個位數會安靜算完一整頁）", "if(rate > rateCap){", "if(false){"],
+  ["負支出的擋門失效（退回安靜歸零，結餘偏高但看起來正常）", "if(neg.length){", "if(false){"],
+  /* 這條改的是格式器本身：畫面與剪貼簿共用它，所以「兩邊千分位一致」那條
+     通則斷言應該要紅。如果只有 golden 紅、cost 沒紅，代表那條通則沒真的在看。 */
+  ["金額格式器退回 toFixed（四位數以上不分節）",
+    'const fmt = cents => (cents / 100).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });',
+    "const fmt = cents => (cents / 100).toFixed(2);"],
+  ["居民模式的「兩筆合計預扣」不印（剪貼簿有的數字畫面查不到）",
+    "      d += '<p><strong>兩筆合計預扣</strong>", "      if(false) d += '<p><strong>兩筆合計預扣</strong>"],
 ];
 
 if (COUNT_ONLY) { console.log(String(M.length)); process.exit(0); }

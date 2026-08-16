@@ -389,20 +389,58 @@ t("每週 100 小時 → 先要求確認，不直接算",
 t("每週 80 小時（邊界內）照算", { rate: 34, hours: 80 }, { tone: "ok" });
 ok("結果框一定會顯示出來", runCost({ rate: 33, hours: 38 }).hidden === false);
 
+/* 工時有上界、時薪沒有——多打一個 0 會安靜地算出一整頁看起來完全正常的數字，
+   而使用者不會懷疑一個「有算出答案」的畫面。上界取全國最低的 10 倍，
+   它是打字錯誤的啟發式，不是「時薪不可能超過這個數」的宣稱。 */
+(function () {
+  const cap = Math.round(sandbox.DATA.wage.nmw * 10);
+  const over = runCost({ rate: cap + 1, hours: 38 });
+  ok("時薪超過上界 → 先要求確認，不直接算",
+    over.tone === "warn" && over.verdict.includes("先確認"), over.verdict);
+  ok("時薪超過上界 → 不得產生剪貼簿（那一份會被貼進群組）", over.clip === null);
+  ok("時薪超過上界 → 門檻要跟著 DATA.wage.nmw 走，不是寫死的數字",
+    over.verdict.includes("$" + cap), over.verdict);
+  ok("剛好等於上界 → 照算", runCost({ rate: cap, hours: 38 }).tone === "ok");
+})();
+
+/* 負支出以前跟「沒填」走同一條路安靜歸零：填 -500 的人會看到
+   「你沒有填任何支出」，然後拿到一個偏高、卻長得完全正常的結餘。
+   算錯而看起來正常，比擋下來危險。 */
+(function () {
+  for (const [label, o] of [
+    ["房租", { rate: 34, hours: 38, rent: -100 }],
+    ["伙食", { rate: 34, hours: 38, food: -50 }],
+    ["油錢", { rate: 34, hours: 38, trans: "car", car: -30 }],
+  ]) {
+    const r = runCost(o);
+    ok(`${label}填負數 → 擋下來並指名是哪一格`,
+      r.tone === "warn" && r.verdict.includes(label) && r.verdict.includes("負數"), r.verdict);
+    ok(`${label}填負數 → 不得再說「你沒有填任何支出」`, !r.html.includes("沒有填任何支出"));
+    ok(`${label}填負數 → 不產生剪貼簿`, r.clip === null);
+  }
+  /* 沒選「開車」的時候，油錢那一格的舊值不該擋住整個計算。 */
+  const stale = runCost({ rate: 34, hours: 38, trans: "walk", car: -30 });
+  ok("沒選開車時，油錢欄的舊負值不擋計算", stale.tone === "ok", stale.verdict);
+})();
+
 /* ------------------------------------------------------------ 浮點數邊界 */
 console.log("\n— 浮點數邊界（舊事故：印出「短少 $0.00」）—");
 (function () {
-  /* 刻意湊一組稅後剛好等於支出的輸入：先算稅後，再把它整個填成房租。 */
-  const probe = runCost({ rate: 30, hours: 38 });
-  const net = probe.html.match(/稅後週薪<\/strong> <span class="num">\$([\d.]+)</);
+  /* 刻意湊一組稅後剛好等於支出的輸入：先算稅後，再把它整個填成房租。
+     時薪要在 casual 最低（$33.05）之上——$30 會另外掛一條「低於法定最低」的附註
+     並把色調降成 warn，那條跟浮點數無關，混進來會讓下面分不出是誰造成的。
+     金額要吃得下千分位：$1,034.21 用 [\d.]+ 抓只會抓到「1」。 */
+  const probe = runCost({ rate: 34, hours: 38 });
+  const net = probe.html.match(/稅後週薪<\/strong> <span class="num">\$([\d,.]+)</);
   if (!net) { fail++; console.log("✗ 抓不到稅後週薪，後面的邊界測試無法進行"); return; }
-  const exact = parseFloat(net[1]);
-  const r = runCost({ rate: 30, hours: 38, rent: exact });
+  const exact = parseFloat(net[1].replace(/,/g, ""));
+  ok("前提：抓到的稅後週薪是四位數（否則千分位那一段沒被測到）", exact > 1000, String(exact));
+  const r = runCost({ rate: 34, hours: 38, rent: exact });
   ok("支出剛好等於稅後收入 → 不得判成負的",
     r.tone !== "bad" && !r.html.includes("短少"),
     `實得色調 ${r.tone}／判定「${r.verdict}」`);
   ok("剛好打平時不得出現 $-0.00", !r.html.includes("-0.00") && !r.verdict.includes("-0.00"));
-  const r2 = runCost({ rate: 30, hours: 38, rent: exact + 0.01 });
+  const r2 = runCost({ rate: 34, hours: 38, rent: exact + 0.01 });
   ok("再多一分錢就要判負", r2.tone === "bad", `實得 ${r2.tone}`);
 })();
 
@@ -539,6 +577,217 @@ for (const { o, mark } of [
   const r = runCost({ rate: 25, hours: 40, rent: 400 });
   ok("貼文要帶上房租佔比", r.clip.includes("40%"), r.clip);
   ok("貼文要帶上退休金另計", r.clip.includes("退休金另計"));
+})();
+
+/* ------------------------------ 剪貼簿與畫面的機械對帳（通則，不是逐句） */
+/* 上面那一段釘的是「這幾句話要一致」。它防得住已經知道的分岔，防不住下一個：
+   2026-08-17 這一輪連續抓到同一個形狀四次——兩份輸出各自組裝，改了看得見的那一份。
+   逐句斷言永遠慢一步，因為新加的欄位天生沒有人替它寫斷言。
+
+   所以這一段不看句子，看**通則**：
+     (1) 剪貼簿印出來的每一個金額，畫面上都要找得到同一個數字
+     (2) 判定符號（✅／⚠️／🛑）兩邊必須相同
+     (3) 剪貼簿的標題列只准有一組括號
+     (4) 四位數以上的金額兩邊都要有千分位（＝兩邊真的共用同一個格式器）
+   四條都跟「有哪些欄位」無關，所以以後加欄位也會被它管到。
+   這是刻意選來取代「把 checkCost() 拆成 facts 物件」那個重構的：
+   350 行的改寫只能用 golden 相等來證明自己沒改壞，防不住下一次新增；
+   這四條防得住整個類別。 */
+console.log("\n— 剪貼簿與畫面的機械對帳（通則）—");
+(function () {
+  /* 每一條會改變組裝路徑的分支都要有一格。少一條路徑，這個通則就對那條路徑沒有意見
+     ——這一輪的兩個錯就是躲在沒有人走過的分支裡。 */
+  const CASES = [
+    ["WHM 有登記", { rate: 34, hours: 38, reg: "reg" }],
+    ["WHM 有登記＋房租", { rate: 34, hours: 38, reg: "reg", rent: 250 }],
+    ["不知道有沒有登記", { rate: 34, hours: 38, reg: "unknown", rent: 250 }],
+    ["雇主未登記", { rate: 34, hours: 38, reg: "unreg", rent: 250 }],
+    ["未登記＋低於全國最低（兩條附註）", { rate: 18, hours: 38, reg: "unreg" }],
+    ["居民・levy 門檻以下", { rate: 20, hours: 20, reg: "resident" }],
+    ["居民・levy 過渡段", { rate: 25, hours: 25, reg: "resident" }],
+    ["居民・levy 全額", { rate: 35, hours: 38, reg: "resident", rent: 250 }],
+    ["房租踩在 30% 的線上", { rate: 34, hours: 38, reg: "reg", rent: 387.65 }],
+    ["房租過重", { rate: 34, hours: 38, reg: "reg", rent: 450 }],
+    ["負結餘", { rate: 34, hours: 20, reg: "reg", rent: 500, food: 200 }],
+    ["農場包吃住", { rate: 34, hours: 38, reg: "reg", rent: 150, bills: "farm" }],
+    ["開車通勤", { rate: 34, hours: 38, reg: "reg", rent: 250, trans: "car", car: 90 }],
+    ["六位數年收（會出現千分位）", { rate: 60, hours: 60, reg: "resident", rent: 800 }],
+  ];
+  const MARKS = ["✅", "⚠️", "🛑"];
+  const amounts = s => s.match(/\$[\d,]+\.\d{2}/g) || [];
+
+  for (const [label, o] of CASES) {
+    const r = runCost(o);
+    const screen = r.html.replace(/<[^>]+>/g, "");
+    const head = r.clip.split("\n")[0];
+
+    /* 單向查：畫面本來就講得比剪貼簿細，反方向不成立。 */
+    const orphan = amounts(r.clip).filter(a => !screen.includes(a));
+    ok("〔" + label + "〕剪貼簿的每個金額畫面上都找得到",
+      orphan.length === 0, "畫面上沒有：" + orphan.join("、"));
+
+    /* 畫面 ⚠️ 而剪貼簿 ✅ 是這一輪最貴的一個錯：
+       貼進群組的那一份會替一個被短給的人背書。 */
+    const mk = s => MARKS.filter(x => s.includes(x)).join("");
+    ok("〔" + label + "〕判定符號兩邊一致", mk(r.verdict) === mk(head),
+      "畫面「" + mk(r.verdict) + "」／剪貼簿「" + mk(head) + "」");
+
+    /* 數括號組數，不是查有沒有括號——後者兩種寫法都會過。 */
+    ok("〔" + label + "〕剪貼簿標題列最多一組括號",
+      (head.match(/（/g) || []).length <= 1, head);
+
+    /* 擋的是「有人把其中一邊改回 toFixed(2)」。 */
+    const noSep = /\$\d{4,}\.\d{2}/;
+    ok("〔" + label + "〕四位數以上的金額兩邊都有千分位",
+      !noSep.test(r.clip) && !noSep.test(screen),
+      (r.clip.match(noSep) || screen.match(noSep) || [""])[0]);
+  }
+})();
+
+/* ------------------------------------------------ 踩線：30% 的三處輸出 */
+/* 判定用嚴格大於 30%，顯示卻四捨五入到小數一位。$387.65／$1,292 ＝ 30.003%，
+   印出來是「30%」——再接一句「超過 30%」就是同一段話自打嘴巴。
+   畫面早就改講「剛好壓在線上」了，剪貼簿沒跟上，於是貼進群組的那一份自我矛盾。 */
+console.log("\n— 房租踩在 30% 線上時，三處輸出要講同一件事 —");
+(function () {
+  const r = runCost({ rate: 34, hours: 38, reg: "reg", rent: 387.65 });
+  const screen = r.html.replace(/<[^>]+>/g, "");
+  ok("前提：這組輸入真的踩在線上（判超過、但顯示會是 30%）",
+    r.tone === "warn" && screen.includes("30/40 rule"), `實得 ${r.tone}`);
+  ok("標題不得印出「30%」這個會自打嘴巴的數字",
+    !/吃掉稅前收入的 30(\.0)?%/.test(r.verdict), r.verdict);
+  ok("標題要改講「剛好壓在」", r.verdict.includes("剛好壓在"), r.verdict);
+  ok("房租那一段也要講「剛好壓在」", screen.includes("房租剛好壓在稅前收入 30% 的線上"));
+  ok("剪貼簿的標題列要跟著改", r.clip.split("\n")[0].includes("剛好壓在"), r.clip.split("\n")[0]);
+  const rentLine = r.clip.split("\n").filter(l => l.startsWith("房租"))[0] || "";
+  ok("剪貼簿的房租那一行也要跟著改（這一行 2026-08-17 之前寫死百分比）",
+    rentLine.includes("剛好壓在"), rentLine);
+  ok("剪貼簿的房租行不得留下多餘的 %", !/線上%/.test(rentLine), rentLine);
+
+  /* 沒踩線的時候不可以被這條規則波及：一般情況還是要印出實際百分比。 */
+  const over = runCost({ rate: 34, hours: 38, reg: "reg", rent: 450 });
+  ok("沒踩線 → 標題印實際百分比，不講「剛好壓在」",
+    over.verdict.includes("34.8%") && !over.verdict.includes("剛好壓在"), over.verdict);
+  ok("沒踩線 → 剪貼簿也印實際百分比",
+    over.clip.includes("34.8%") && !over.clip.includes("剛好壓在"),
+    over.clip.split("\n").filter(l => l.startsWith("房租"))[0]);
+})();
+
+/* -------------------------------------------- 居民模式：拆解與合計要對得起來 */
+/* levy 刻意跟所得稅分開顯示（那 2% 拿到 MES 免得掉，所得稅免不掉）。
+   分開之後畫面上就沒有合計，而剪貼簿第二行印的正好是合計——
+   一個數字只出現在對外那一份、畫面上查不到，就沒有人核對得了它。 */
+console.log("\n— 居民模式：所得稅 ＋ levy ＝ 剪貼簿印的合計 —");
+(function () {
+  const money = s => parseFloat(String(s).replace(/,/g, ""));
+  for (const o of [
+    { rate: 25, hours: 25, reg: "resident" },              /* 過渡段 */
+    { rate: 35, hours: 38, reg: "resident", rent: 250 },   /* 全額 2% */
+    { rate: 60, hours: 60, reg: "resident", rent: 800 },   /* 高收入 */
+  ]) {
+    const r = runCost(o);
+    const s = r.html.replace(/<[^>]+>/g, "");
+    const inc = money((s.match(/所得稅 −\$([\d,]+\.\d\d)/) || [, "0"])[1]);
+    const lv = money((s.match(/Medicare levy −\$([\d,]+\.\d\d)/) || [, "0"])[1]);
+    const sum = money((s.match(/兩筆合計預扣 −\$([\d,]+\.\d\d)/) || [, "0"])[1]);
+    const clipTax = money((r.clip.match(/扣稅 \$([\d,]+\.\d\d)/) || [, "0"])[1]);
+    const lab = `$${o.rate}×${o.hours}h`;
+    ok(`${lab} 三個數字都印出來了`, inc > 0 && lv > 0 && sum > 0, `${inc} / ${lv} / ${sum}`);
+    ok(`${lab} 所得稅 ＋ levy ＝ 合計`, Math.abs(inc + lv - sum) < 0.011, `${inc} + ${lv} ≠ ${sum}`);
+    ok(`${lab} 剪貼簿的「扣稅」＝畫面的合計`, Math.abs(clipTax - sum) < 0.011,
+      `剪貼簿 ${clipTax} ／ 畫面 ${sum}`);
+    ok(`${lab} 剪貼簿要單獨列出 levy，不能只給合計`,
+      r.clip.includes("Medicare levy") && r.clip.includes("MES"),
+      r.clip.split("\n").filter(l => l.includes("levy"))[0] || "（沒有 levy 那一行）");
+  }
+  /* 門檻以下不課 levy → 就不該印合計那一行（它會等於所得稅，是一句廢話）。 */
+  const lo = runCost({ rate: 20, hours: 20, reg: "resident" });
+  ok("levy ＝ 0 時不印合計（那一行會跟所得稅一模一樣）",
+    !lo.html.includes("兩筆合計預扣") && lo.html.includes("本來就不課"));
+  ok("levy ＝ 0 時剪貼簿也不提 levy", !lo.clip.includes("Medicare levy"), lo.clip);
+})();
+
+/* ------------------------------------------------ DASP：比例跟著簽證，不跟著稅表 */
+/* 稅表看所得，DASP 看你持哪一種簽證。這兩件事被寫在同一段程式裡，
+   所以「換了稅表模式忘了換 DASP」是這裡唯一的失效方式——而它已經發生過一次。 */
+console.log("\n— DASP 比例：三種身分各印各的 —");
+(function () {
+  const back = h => parseFloat(((h.replace(/<[^>]+>/g, "")
+    .match(/回得到你手上|真正回到你手上的大約/) ? h.replace(/<[^>]+>/g, "") : "")
+    .match(/大約 \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
+  const superOf = h => parseFloat((h.replace(/<[^>]+>/g, "")
+    .match(/另外還有退休金 \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
+
+  const whm = runCost({ rate: 34, hours: 38, reg: "reg" });
+  ok("WHM → 畫面寫 65%，實拿約 35%",
+    whm.html.includes("DASP 稅率是 65%")
+      && Math.abs(back(whm.html) / superOf(whm.html) - 0.35) < 0.01,
+    `super ${superOf(whm.html)} → 實拿 ${back(whm.html)}`);
+  ok("WHM → 剪貼簿同樣寫 65%，而且實拿數字跟畫面一樣",
+    whm.clip.includes("領回課 65%") && whm.clip.includes("$" + back(whm.html).toFixed(2)),
+    whm.clip.split("\n").pop());
+
+  const res = runCost({ rate: 34, hours: 38, reg: "resident" });
+  ok("居民稅表 → 畫面改成 35%，實拿約 65%",
+    res.html.includes("<b>35%</b>")
+      && Math.abs(back(res.html) / superOf(res.html) - 0.65) < 0.01,
+    `super ${superOf(res.html)} → 實拿 ${back(res.html)}`);
+  ok("居民稅表 → 畫面不得再出現打工度假的 65% 當成自己的稅率",
+    res.html.includes("不是打工度假的那個 65%"));
+  ok("居民稅表 → 要講明 PR 一下來資格就永久消失",
+    res.html.includes("永久消失") && res.clip.includes("PR 一下來這一格歸零"));
+  ok("居民稅表 → 剪貼簿的 DASP 稅率跟著改成 35%",
+    res.clip.includes("DASP 課 35%") && !res.clip.includes("領回課 65%"),
+    res.clip.split("\n").pop());
+})();
+
+/* ----------------------------------------- 剪貼簿的稅表標籤要跟著模式走 */
+console.log("\n— 剪貼簿的稅表標籤 —");
+(function () {
+  const label = r => (r.clip.match(/（約 [\d.]+%，([^）]+)）/) || [, ""])[1];
+  const want = [
+    ["reg", "WHM 稅率"],
+    ["unknown", "以「雇主有登記」估的 WHM 稅率"],
+    ["unreg", "雇主未登記，用外國居民稅率"],
+    ["resident", "已換簽，用居民稅表"],
+  ];
+  for (const [reg, expect] of want) {
+    const r = runCost({ rate: 34, hours: 38, reg });
+    ok(`${reg} → 剪貼簿標籤「${expect}」`, label(r).includes(expect), "實得「" + label(r) + "」");
+  }
+  ok("居民模式的標籤不得再說 WHM",
+    !label(runCost({ rate: 34, hours: 38, reg: "resident" })).includes("WHM"));
+  /* 比例要印實際算出來的，不是寫死的級距數字——年收跨過 $45,000 之後就對不上了。 */
+  const hi = runCost({ rate: 40, hours: 70, reg: "reg" });
+  ok("年收跨過第一級距後，剪貼簿的比例不得還是 15%",
+    !/約 15(\.0)?%/.test(hi.clip), hi.clip.split("\n")[1]);
+})();
+
+/* --------------------------------------------- 換簽差額：年差額不是週差額 × 52 */
+console.log("\n— 換簽差額 —");
+(function () {
+  const r = runCost({ rate: 35, hours: 38, reg: "resident" });
+  const s = r.html.replace(/<[^>]+>/g, "");
+  const wk = parseFloat((s.match(/每週(?:少繳|多繳) \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
+  const yr = parseFloat((s.match(/一年(?:少繳|多繳) \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
+  ok("換簽差額要同時給週與年", wk > 0 && yr > 0, `週 ${wk} ／ 年 ${yr}`);
+
+  /* 年差額必須直接用年度數字算，不能把四捨五入過的週差額乘 52。
+     不要用「兩者不相等」來測——某些時薪下它們剛好相等（$35×38 就是），
+     那條斷言會變成在測輸入而不是測邏輯。改成直接對上真正的算式。 */
+  const C2 = sandbox.DATA.cost;
+  const grossW = Math.round(35 * 38 * 100);
+  const annual = grossW * C2.tax.weeksPerYear;
+  const wantY = Math.abs(sandbox.whmTaxCents(annual, true)
+    - (sandbox.residentTaxCents(annual) + sandbox.medicareLevyCents(annual))) / 100;
+  ok("年差額＝年度 WHM 稅 −（年度居民稅 ＋ 年度 levy）",
+    Math.abs(yr - wantY) < 0.011, `畫面 ${yr} ／ 算式 ${wantY.toFixed(2)}`);
+
+  const wantW = Math.abs(Math.round(sandbox.whmTaxCents(annual, true) / C2.tax.weeksPerYear)
+    - (Math.round((sandbox.residentTaxCents(annual) + sandbox.medicareLevyCents(annual))
+        / C2.tax.weeksPerYear))) / 100;
+  ok("週差額＝兩張表各自的週稅相減", Math.abs(wk - wantW) < 0.011,
+    `畫面 ${wk} ／ 算式 ${wantW.toFixed(2)}`);
 })();
 
 /* -------------------------------------------------------------- 單位價格 */
