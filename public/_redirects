@@ -1,0 +1,26 @@
+# Cloudflare Pages 短網址 → 單頁錨點
+# 目的：讓「whv.tw/scam」這種好記、可以在 LINE 裡口述的網址成立。
+# 老鳥在群裡回答問題時願意打的是 /scam，不是一串 41 個字元的網址。
+
+/regional   /#regional   302
+/wage       /#wage       302
+/car        /#car        302
+/rent       /#rent       302
+/scam       /#scam       302
+/after      /#after      302
+/landing    /#landing    302
+/ask        /#ask        302
+
+# 常見別名（有人會憑印象打）
+/visa       /#regional   302
+/88         /#regional   302
+/pay        /#wage       302
+/salary     /#wage       302
+/bond       /#rent       302
+/house      /#rent       302
+/money      /#scam       302
+/fx         /#scam       302
+/help       /#after      302
+/scammed    /#after      302
+/start      /#landing    302
+/tfn        /#landing    302

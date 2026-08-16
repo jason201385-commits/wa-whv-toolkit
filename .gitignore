@@ -1,0 +1,20 @@
+# wrangler 會在專案裡留下 Cloudflare 帳號狀態（account id、帳號名稱，
+# 而帳號名稱通常就是個人 email）。它不隨網站發佈，但會隨第一次 git push 進版控。
+.wrangler/
+
+# 維運者私人的工作筆記。裡面有 Cloudflare 帳號 email、還沒對外的判斷、
+# 以及只對「下一次接續這個專案的人」有意義的流水帳。
+# 對接手者有用的部分已經整理進 README.md 與 public/README.md，那兩份才是對外的正本。
+handoff.md
+!public/handoff.md
+
+# 這個專案沒有 build step、沒有相依套件。下面兩條只是防呆。
+node_modules/
+.env
+.env.*
+!.env.example
+
+# 編輯器與作業系統
+.DS_Store
+Thumbs.db
+*.swp

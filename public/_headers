@@ -1,0 +1,20 @@
+# 會來看這個站的人，有一部分正處在「剛被騙」或「正在跟雇主起衝突」的狀態。
+# 這裡的每一條都是為了不讓這件事外流，或不讓這個頁面被別人拿去包裝。
+#
+# CSP 的代價是零：全站沒有任何外部請求、沒有 fetch、沒有外連字型或圖片，
+# 唯一的例外是 canvas 匯出圖卡（img-src 需要 data: 與 blob:）。
+# 樣式與腳本都內嵌在同一個檔案裡，所以 'unsafe-inline' 是必要的，
+# 但既然沒有任何可注入的外部資料來源，它擋不住的東西這個站本來也沒有。
+
+# HSTS：農場宿舍、青旅、共用 Wi-Fi 是這個族群的日常上網環境，
+# 也正是「第一次連線走 http 被中間人改掉」最容易發生的地方。
+# 刻意不加 preload：那要把網域送進瀏覽器內建的外部名單，移除要等數個月，
+# 屬於撤不回來的動作。這個站還在早期，不值得為它綁死一個網域。
+
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()
+  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'

@@ -1,0 +1,2372 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>西澳打工度假 · 查核工具</title>
+<!-- favicon 內嵌成 data URI，不是外部檔案：全站零外部請求是 CSP 能寫成 default-src 'none' 的前提，
+     為了一個圖示破例不值得。順便消掉瀏覽器每次都去要 /favicon.ico 的那個 404。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111'/%3E%3Cpath d='M8 16.5l5.5 5.5L24 11' stroke='%23f5d90a' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<meta name="description" content="集簽區域、法定時薪、買車查核、押金自保、換匯防詐、落地清單。每個數字都連到澳洲政府官方頁面，標明生效日。">
+<meta name="color-scheme" content="light dark">
+<style>
+/* ============ tokens ============ */
+:root{
+  --paper:#F5F2EC;
+  --card:#FFFFFF;
+  --sunk:#EDE9E1;
+  --ink:#1A1713;
+  --ink-2:#4A443C;
+  --muted:#7C746A;
+  --line:#DFD9CE;
+  --line-soft:#EBE6DC;
+
+  --accent:#1F3A5F;
+  --accent-ink:#FFFFFF;
+  --accent-soft:#E4EAF2;
+
+  --ok:#166B45;
+  --ok-soft:#E2F0E8;
+  --ok-line:#8CC4A9;
+  --warn:#8A5300;
+  --warn-soft:#FAEED6;
+  --warn-line:#DFB463;
+  --bad:#A81F13;
+  --bad-soft:#FBE7E4;
+  --bad-line:#E0938A;
+
+  --shadow:0 1px 2px rgba(26,23,19,.06),0 10px 28px -20px rgba(26,23,19,.4);
+  --cjk:"PingFang TC","Microsoft JhengHei","Noto Sans TC","Hiragino Sans TC",sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Roboto Mono",monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#141310;
+    --card:#1E1C18;
+    --sunk:#262320;
+    --ink:#F0ECE4;
+    --ink-2:#C6BFB4;
+    --muted:#928A7E;
+    --line:#332F29;
+    --line-soft:#2A2723;
+    --accent:#9CBBE0;
+    --accent-ink:#101820;
+    --accent-soft:#1C2735;
+    --ok:#79CFA5;
+    --ok-soft:#152A20;
+    --ok-line:#2F6B4D;
+    --warn:#E5B767;
+    --warn-soft:#2C2213;
+    --warn-line:#6E5526;
+    --bad:#F4998C;
+    --bad-soft:#2E1815;
+    --bad-line:#7A3830;
+    --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px -20px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#141310;--card:#1E1C18;--sunk:#262320;--ink:#F0ECE4;--ink-2:#C6BFB4;--muted:#928A7E;
+  --line:#332F29;--line-soft:#2A2723;--accent:#9CBBE0;--accent-ink:#101820;--accent-soft:#1C2735;
+  --ok:#79CFA5;--ok-soft:#152A20;--ok-line:#2F6B4D;--warn:#E5B767;--warn-soft:#2C2213;--warn-line:#6E5526;
+  --bad:#F4998C;--bad-soft:#2E1815;--bad-line:#7A3830;
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px -20px rgba(0,0,0,.9);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--cjk);font-size:17px;line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.wrap{max-width:760px;margin:0 auto;padding:0 18px}
+
+/* ============ header ============ */
+.top{padding:26px 0 18px;border-bottom:1px solid var(--line)}
+.top h1{margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.top .sub{margin:0;color:var(--muted);font-size:14.5px;line-height:1.55}
+.stamp{
+  display:inline-flex;align-items:center;gap:7px;margin-top:12px;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;
+  background:var(--sunk);color:var(--ink-2);border:1px solid var(--line);
+  border-radius:100px;padding:4px 12px;
+}
+.stamp b{font-weight:700;color:var(--ink)}
+
+/* ============ nav ============ */
+nav{padding:16px 0 4px}
+.navgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.navgrid a{
+  display:flex;flex-direction:column;gap:1px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:12px 14px;text-decoration:none;color:var(--ink);
+  box-shadow:var(--shadow);min-height:62px;justify-content:center;
+}
+.navgrid a:hover{border-color:var(--accent)}
+.navgrid b{font-size:15.5px;font-weight:700;line-height:1.35}
+.navgrid span{font-size:12.5px;color:var(--muted);line-height:1.4}
+.navgrid .u{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.02em}
+
+/* ============ tool ============ */
+.tool{
+  margin:22px 0;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;scroll-margin-top:14px;
+}
+.tool > header{padding:18px 20px 14px;border-bottom:1px solid var(--line-soft)}
+.tool h2{margin:0 0 3px;font-size:20px;font-weight:800;letter-spacing:-.005em;line-height:1.35}
+.tool h2 .slug{font-family:var(--mono);font-size:12px;font-weight:400;color:var(--accent);margin-left:8px;letter-spacing:.02em}
+.tool .q{margin:0;font-size:14.5px;color:var(--muted);line-height:1.55}
+.body{padding:18px 20px 20px}
+
+/* ============ input ============ */
+.ask{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
+.quiz{display:flex;flex-direction:column;gap:13px}
+.quiz .qlead{margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)}
+.quiz .qrow{display:flex;flex-wrap:wrap;gap:9px;align-items:center;justify-content:space-between;
+  padding-top:12px;border-top:1px solid var(--line-soft)}
+.quiz .qrow .qt{flex:1 1 250px;font-size:15px;font-weight:700;line-height:1.5}
+.quiz .qrow select{flex:0 1 200px;font-size:15px;padding:10px 12px}
+.ask label{flex:0 0 100%;font-size:13.5px;font-weight:700;color:var(--ink-2);margin-bottom:-2px}
+input[type=text],input[type=number],select{
+  flex:1 1 150px;min-width:0;font-family:var(--mono);font-size:19px;
+  padding:12px 14px;border:1.5px solid var(--line);border-radius:var(--r);
+  background:var(--paper);color:var(--ink);
+}
+select{font-family:var(--cjk);font-size:16px}
+/* [tabindex] 一定要在裡面：圖卡預覽區是 role="tabpanel" tabindex="0"，
+   靠鍵盤 Tab 進去時如果沒有外框，使用者就不知道焦點跑到哪裡了 */
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{
+  outline:2.5px solid var(--accent);outline-offset:2px
+}
+.btn{
+  font-family:var(--cjk);font-size:16px;font-weight:700;cursor:pointer;
+  padding:12px 20px;border-radius:var(--r);border:1.5px solid var(--accent);
+  background:var(--accent);color:var(--accent-ink);
+}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn:active{transform:translateY(1px)}
+.hint{margin:8px 0 0;font-size:13px;color:var(--muted)}
+
+/* ============ answer ============ */
+.ans{margin:16px 0 0;border-radius:var(--r);border:1.5px solid var(--line);background:var(--sunk);padding:16px 18px}
+.ans[hidden]{display:none}
+.ans.ok{background:var(--ok-soft);border-color:var(--ok-line)}
+.ans.warn{background:var(--warn-soft);border-color:var(--warn-line)}
+.ans.bad{background:var(--bad-soft);border-color:var(--bad-line)}
+.ans .verdict{display:flex;align-items:baseline;gap:10px;font-size:23px;font-weight:800;line-height:1.3;letter-spacing:-.01em}
+.ans.ok .verdict{color:var(--ok)}
+.ans.warn .verdict{color:var(--warn)}
+.ans.bad .verdict{color:var(--bad)}
+.ans .detail{margin:8px 0 0;font-size:15px;line-height:1.65;color:var(--ink)}
+.ans .detail ul{margin:8px 0 0;padding-left:1.2em}
+.ans .detail li{margin-bottom:4px}
+.ans .num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}
+
+.copyrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;padding-top:13px;border-top:1px dashed var(--line)}
+.copyrow .why{flex:1 1 190px;font-size:12.5px;color:var(--muted);line-height:1.45}
+.copybtn{
+  font-family:var(--cjk);font-size:14.5px;font-weight:700;cursor:pointer;
+  padding:9px 15px;border-radius:var(--r);border:1.5px solid var(--accent);
+  background:transparent;color:var(--accent);white-space:nowrap;
+}
+.copybtn.done{background:var(--ok);border-color:var(--ok);color:#fff}
+.copybtn.failed{background:var(--bad);border-color:var(--bad);color:#fff}
+
+/* ============ 可以照抄的一句話 ============ */
+.script{margin-top:12px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--sunk);padding:15px 17px}
+.script > .say{
+  margin:0;padding-left:14px;border-left:3px solid var(--accent);
+  font-size:17.5px;font-weight:700;line-height:1.55;letter-spacing:-.005em;
+}
+.script > .why{margin:10px 0 0;font-size:13px;line-height:1.55;color:var(--muted)}
+.saybig{margin:0;font-size:20px;font-weight:800;line-height:1.5;letter-spacing:-.01em}
+.script .copyrow{margin-top:12px;padding-top:12px;justify-content:flex-end}
+
+/* ============ checklist ============ */
+.gate{margin-top:18px;border:1.5px solid var(--line);border-radius:var(--r);overflow:hidden}
+.gate > .gh{
+  padding:12px 16px;background:var(--sunk);border-bottom:1px solid var(--line);
+  font-size:14.5px;font-weight:700;display:flex;justify-content:space-between;gap:10px;align-items:center;
+}
+.gate > .gh .count{font-family:var(--mono);font-size:13px;color:var(--muted);font-weight:400;white-space:nowrap}
+.gate ul{list-style:none;margin:0;padding:6px 0}
+.gate li{margin:0}
+.gate label{
+  display:flex;gap:12px;align-items:flex-start;padding:11px 16px;cursor:pointer;font-size:15px;line-height:1.55;
+}
+.gate label:hover{background:var(--sunk)}
+.gate input[type=checkbox]{flex:0 0 auto;width:22px;height:22px;margin:3px 0 0;accent-color:var(--ok);cursor:pointer}
+.gate label span{flex:1}
+.gate label small{display:block;color:var(--muted);font-size:13px;margin-top:2px;line-height:1.45}
+.gate input:checked + span{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px}
+.gate input:checked + span small{text-decoration:none}
+.gatefoot{padding:14px 16px;border-top:1px solid var(--line);font-size:15px;font-weight:700;line-height:1.5}
+.gatefoot.locked{background:var(--warn-soft);color:var(--warn)}
+.gatefoot.unlocked{background:var(--ok-soft);color:var(--ok)}
+
+/* ============ red flags ============ */
+.flags{margin:18px 0 0;border-left:4px solid var(--bad);background:var(--bad-soft);border-radius:0 var(--r) var(--r) 0;padding:14px 18px}
+.flags b{display:block;font-size:14.5px;color:var(--bad);margin-bottom:7px}
+.flags ul{margin:0;padding-left:1.15em;font-size:14.5px;line-height:1.6}
+.flags li{margin-bottom:5px}
+.flags li:last-child{margin-bottom:0}
+.flags.rule{border-left-color:var(--accent);background:var(--sunk)}
+.flags.rule b{color:var(--accent)}
+.plainlist{margin:10px 0 0;padding-left:19px;font-size:14px;line-height:1.65}
+.plainlist li{padding:3px 0}
+
+/* ============ 集簽：類別 × 地點的逐項判定 ============ */
+.catlist{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}
+.catlist li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline;
+  padding:9px 11px;border-radius:7px;background:var(--sunk);font-size:14.5px;line-height:1.5}
+.catlist .mk{font-family:var(--mono);font-weight:700;font-size:13px}
+.catlist li.yes .mk{color:var(--ok)}
+.catlist li.no{opacity:.62}
+.catlist li.no .n{text-decoration:line-through;text-decoration-color:var(--line)}
+.catlist .w{display:block;margin-top:3px;font-size:12.5px;color:var(--muted);text-decoration:none}
+
+/* ============ 數字表 / 費率表 ============ */
+.kv{margin:12px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.kv li{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;
+  padding:11px 14px;border-bottom:1px solid var(--line-soft);font-size:14.5px;line-height:1.5}
+.kv li:last-child{border-bottom:0}
+.kv li:nth-child(odd){background:var(--sunk)}
+.kv .v{font-family:var(--mono);font-weight:700;font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kv li.bad .v{color:var(--bad)}
+.kv .n{display:block;margin-top:3px;font-size:12.5px;color:var(--muted)}
+
+/* ============ 電話清單（手機可直接撥） ============ */
+/* 收尾用的一句話。比 .hint 重，但不到 .flags 那種紅色警告 */
+.note{margin:12px 0 0;padding:11px 14px;background:var(--sunk);border-left:3px solid var(--accent);
+  border-radius:0 var(--r) var(--r) 0;font-size:14px;line-height:1.6;color:var(--ink)}
+/* 一般條列。用在證據清單、台灣端流程這類「照著做」的段落 */
+.bullets{margin:10px 0 0;padding-left:1.15em;font-size:14.5px;line-height:1.65}
+.bullets li{margin-bottom:6px}
+.bullets li:last-child{margin-bottom:0}
+/* 兩路分流：先讓人認出自己是哪一種情況，再看要打去哪 */
+.splitwrap{display:grid;gap:10px;margin-top:12px}
+@media(min-width:620px){.splitwrap{grid-template-columns:1fr 1fr}}
+.splitwrap .split{background:var(--sunk);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px}
+.splitwrap .split b{display:block;font-size:14px;color:var(--accent);margin-bottom:5px}
+.splitwrap .split p{margin:0;font-size:14px;line-height:1.6;color:var(--ink)}
+
+.calls{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}
+.calls li{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;
+  padding:10px 13px;border-radius:7px;background:var(--sunk)}
+.calls .t{font-size:14.5px;font-weight:600;line-height:1.45}
+.calls .d{display:block;margin-top:2px;font-size:12.5px;font-weight:400;color:var(--muted)}
+.calls a.tel{font-family:var(--mono);font-weight:700;font-size:16px;letter-spacing:.01em;
+  color:var(--accent);white-space:nowrap;text-decoration:none;border-bottom:1.5px solid transparent}
+.calls a.tel:hover,.calls a.tel:focus-visible{border-bottom-color:var(--accent)}
+
+/* ============ 破除迷思 ============ */
+.myth{margin-top:13px;border:1.5px solid var(--line);border-radius:var(--r);padding:14px 16px;background:var(--sunk)}
+.myth .m{margin:0;font-size:14.5px;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--bad)}
+.myth .r{margin:7px 0 0;font-size:16.5px;font-weight:800;line-height:1.5;letter-spacing:-.005em}
+.myth .d{margin:8px 0 0;font-size:13.5px;line-height:1.65}
+
+/* ============ 圖卡切換 ============ */
+.cardtabs{display:flex;gap:7px;margin:13px 0 11px;flex-wrap:wrap}
+.cardtabs button{font:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  padding:8px 16px;border-radius:999px;border:1.5px solid var(--line);
+  background:var(--sunk);color:var(--muted);transition:none}
+.cardtabs button[aria-selected="true"]{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+
+/* ============ steps ============ */
+ol.steps{list-style:none;counter-reset:s;margin:16px 0 0;padding:0}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:auto 1fr;gap:13px;padding:11px 0;border-bottom:1px solid var(--line-soft)}
+ol.steps li:last-child{border-bottom:0}
+ol.steps li::before{
+  content:counter(s);font-family:var(--mono);font-size:13px;font-weight:700;
+  width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);
+  display:flex;align-items:center;justify-content:center;margin-top:2px;
+}
+ol.steps b{display:block;font-size:15.5px;line-height:1.5}
+ol.steps p{margin:2px 0 0;font-size:14px;color:var(--ink-2);line-height:1.6}
+ol.steps .when{font-family:var(--mono);font-size:11.5px;color:var(--bad);font-weight:700;letter-spacing:.03em}
+/* 這裡把原始網址當可見文字印出來（要讓人看得到自己要去哪一個網域）。
+   grid 軌道的 min-width:auto 會被不可斷的長網址撐開，375px 就橫向溢出。 */
+ol.steps a{word-break:break-word}
+
+/* ============ sources ============ */
+details.src{margin-top:16px;border-top:1px solid var(--line-soft);padding-top:12px}
+details.src summary{cursor:pointer;font-size:13.5px;color:var(--muted);font-weight:700;list-style:none}
+details.src summary::-webkit-details-marker{display:none}
+details.src summary::before{content:"▸ ";color:var(--accent)}
+details.src[open] summary::before{content:"▾ "}
+.srclist{margin:10px 0 0;padding:0;list-style:none;font-size:13.5px;line-height:1.6}
+.srclist li{padding:7px 0;border-bottom:1px solid var(--line-soft);display:grid;grid-template-columns:1fr auto;gap:10px;align-items:baseline}
+.srclist li:last-child{border-bottom:0}
+.srclist a{color:var(--accent);word-break:break-word}
+.srclist .as{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.pending{
+  display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);
+  border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:1px;
+}
+
+/* ============ card ============ */
+#cardwrap{margin-top:16px}
+#cardwrap canvas{width:100%;max-width:340px;height:auto;border:1px solid var(--line);border-radius:var(--r);display:block}
+
+/* ============ footer ============ */
+footer{margin-top:36px;padding:22px 0 40px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px;line-height:1.7}
+footer p{margin:0 0 10px;max-width:62ch}
+footer a{color:var(--accent)}
+.disclaim{background:var(--sunk);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;color:var(--ink-2)}
+
+@media (max-width:520px){
+  body{font-size:16px}
+  .wrap{padding:0 14px}
+  .tool > header,.body{padding-left:15px;padding-right:15px}
+  .ans .verdict{font-size:20px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="top">
+  <h1>西澳打工度假 · 查核工具</h1>
+  <p class="sub">六件在付錢或答應之前該查的事。每個答案都連到澳洲政府官方頁面，並標明生效日。<br>不收集任何資料、沒有帳號、沒有留言板。</p>
+  <div class="stamp">資料生效日 <b id="asof">—</b></div>
+</header>
+
+<nav aria-label="工具">
+  <ul class="navgrid">
+    <li><a href="#regional"><span class="u">/regional</span><b>集簽區域</b><span>這個郵遞區號算不算</span></a></li>
+    <li><a href="#wage"><span class="u">/wage</span><b>時薪紅線</b><span>有沒有低於法定</span></a></li>
+    <li><a href="#car"><span class="u">/car</span><b>買車查核</b><span>$2 就能避免整台被拖走</span></a></li>
+    <li><a href="#rent"><span class="u">/rent</span><b>押金自保</b><span>你到底受不受法律保護</span></a></li>
+    <li><a href="#scam"><span class="u">/scam</span><b>換匯防詐</b><span>轉出去之前的最後一關</span></a></li>
+    <li><a href="#after"><span class="u">/after</span><b>已經轉出去了</b><span>接下來 24 小時的順序</span></a></li>
+    <li><a href="#ask"><span class="u">/ask</span><b>出門前先問</b><span>別為了一則失效貼文白跑</span></a></li>
+    <li><a href="#landing"><span class="u">/landing</span><b>落地清單</b><span>前 72 小時要辦什麼</span></a></li>
+  </ul>
+</nav>
+
+<!-- ================= 集簽 ================= -->
+<section class="tool" id="regional">
+  <header>
+    <h2>集簽區域檢查<span class="slug">/regional</span></h2>
+    <p class="q">在答應這份工作之前，先確認地點和工作類別都算數。算錯的代價是白做 88 天。</p>
+  </header>
+  <div class="body">
+    <div class="ask">
+      <label for="pc">郵遞區號（西澳）</label>
+      <input type="text" id="pc" inputmode="numeric" maxlength="4" placeholder="6503" autocomplete="off">
+      <button class="btn" id="pcgo">查</button>
+    </div>
+    <p class="hint">只涵蓋西澳（6xxx）。<strong>不同工作類別吃不同的地理清單</strong>，所以同一個郵遞區號常常是「這類算、那類不算」——查出來會逐項列給你看。台灣護照走的是 417，這裡只用 417 的規則。</p>
+    <div class="ans" id="pcans" hidden></div>
+
+    <div class="flags rule">
+      <b>88 天怎麼算 —— 算的是日曆日，不是你上了幾天班</b>
+      <ul id="regdays"></ul>
+    </div>
+
+    <details class="src">
+      <summary>申請第二簽時要交的證明（官方清單）</summary>
+      <ul class="plainlist" id="regproof"></ul>
+      <p class="hint" style="margin-top:10px">移民部明文保留直接聯絡你雇主查證的權利。<strong>證明必須涵蓋你申報的全部工作期間</strong>——中間有一段沒有薪資單，那一段就補不回來。</p>
+    </details>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="regflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="regsrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= 時薪 ================= -->
+<section class="tool" id="wage">
+  <header>
+    <h2>時薪紅線檢查<span class="slug">/wage</span></h2>
+    <p class="q">低於法定就是違法，簽了字也一樣。但「法定是多少」不只一個數字——入門級分類、州系統、計件各有各的線，所以下面的題目要照實填。</p>
+  </header>
+  <div class="body">
+    <div class="ask">
+      <label for="rate">對方開的時薪（澳幣，稅前）</label>
+      <input type="number" id="rate" inputmode="decimal" step="0.01" min="0" placeholder="25.00">
+      <select id="etype" aria-label="僱用型態">
+        <option value="casual">Casual（無給薪假）</option>
+        <option value="perm">Part-time / Full-time</option>
+        <option value="piece">按件計酬（piece rate）</option>
+      </select>
+      <label for="esys">雇主的登記型態（決定你適用哪一套系統）</label>
+      <select id="esys" aria-label="雇主的登記型態">
+        <option value="unknown">不知道 / 還沒看到薪資單</option>
+        <option value="nat">名稱有 Pty Ltd → 全國系統</option>
+        <option value="wa">獨資、家庭店，沒有 Pty Ltd → 西澳州系統</option>
+      </select>
+      <label for="eage">你的年齡</label>
+      <select id="eage" aria-label="年齡">
+        <option value="adult">滿 21 歲</option>
+        <option value="junior">未滿 21 歲</option>
+      </select>
+      <label for="ecls">你的 award 分類（入門級的法定時薪比較低，而且是合法的）</label>
+      <select id="ecls" aria-label="award 分類">
+        <option value="unknown">不知道 / payslip 上沒寫</option>
+        <option value="entry">入門級——農場做不到 3 個月，或酒莊不到 6 個月，或雇主說我是 Level 1 / Grade 1</option>
+        <option value="normal">不是入門級——做超過那個期間，或被歸在 Level 2 以上，或沒有 award 涵蓋</option>
+      </select>
+      <button class="btn" id="ratego">查</button>
+    </div>
+    <p class="hint">絕大多數打工度假的工作是 casual。Casual 沒有特休和病假，所以法定時薪要加 25% loading。
+      <b>後面三題不是多問的</b>——西澳同時跑兩套勞資系統，而 award 的入門級分類<b>可以合法低於全國最低工資</b>。
+      任何一題答錯，下面的判定就整個失效。<b>不知道就選「不知道」</b>，這一頁寧可少下判定，也不讓你拿著錯的數字去跟雇主吵。</p>
+    <div class="ans" id="rateans" hidden></div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">這條紅線有四個例外，先看完再拿去用</h3>
+    <p class="hint" style="margin-top:4px" id="syslead"></p>
+    <div class="splitwrap" id="syslist"></div>
+    <ul class="calls" id="syscalls" style="margin-top:14px"></ul>
+
+    <h3 style="margin:26px 0 0;font-size:17px">入門級分類：合法低於「全國最低工資」的那一格</h3>
+    <p class="hint" style="margin-top:4px" id="entrylead"></p>
+    <div class="splitwrap" id="entrylist"></div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">未滿 21 歲：紅線不是這一條</h3>
+    <p class="hint" style="margin-top:4px" id="juniorlead"></p>
+    <ul class="bullets" id="juniorlist"></ul>
+
+    <h3 style="margin:26px 0 0;font-size:17px">你在哪一本 Award？</h3>
+    <p class="hint" style="margin-top:4px" id="awardlead"></p>
+    <div class="splitwrap" id="awardlist"></div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">算件的：葡萄園跟農場的保障不一樣</h3>
+    <p class="hint" style="margin-top:4px" id="piecelead"></p>
+    <div class="splitwrap" id="piecelist"></div>
+    <p class="note" id="piecewarn"></p>
+
+    <h3 style="margin:26px 0 0;font-size:17px">哪些扣款合法，哪些不合法</h3>
+    <ul class="bullets" id="wagededuct"></ul>
+
+    <h3 style="margin:26px 0 0;font-size:17px">沒有紀錄就追不回來</h3>
+    <ul class="bullets" id="wageproof"></ul>
+
+    <h3 style="margin:26px 0 0;font-size:17px">檢舉會不會被取消簽證</h3>
+    <p class="hint" style="margin-top:4px" id="reportlead"></p>
+    <div class="splitwrap" id="reportlist"></div>
+    <ul class="calls" id="wagecalls" style="margin-top:14px"></ul>
+    <p class="note" id="reportnote"></p>
+
+    <h3 style="margin:26px 0 0;font-size:17px">受傷了：這是第三套系統</h3>
+    <p class="hint" style="margin-top:4px" id="injurylead"></p>
+    <ul class="bullets" id="injurylist"></ul>
+    <ul class="calls" id="injurycalls" style="margin-top:14px"></ul>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="wageflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="wagesrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= 買車 ================= -->
+<section class="tool" id="car">
+  <header>
+    <h2>買車前查核<span class="slug">/car</span></h2>
+    <p class="q">私人交易沒有保固、沒有冷靜期。車上如果有沒清的貸款，債權人可以把車從你手上拖走——錢照樣不會退。</p>
+  </header>
+  <div class="body">
+    <h3 style="margin:0;font-size:17px">先問這三件事，再談車況</h3>
+    <p class="hint" style="margin-top:4px" id="prereqlead"></p>
+    <div class="splitwrap" id="carprereq"></div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">$2 的那一次查詢</h3>
+    <p class="hint" style="margin-top:4px" id="ppsrlead"></p>
+    <ul class="bullets" id="ppsrfinds"></ul>
+    <p class="hint" style="margin:14px 0 0"><b>怎麼查才算數</b></p>
+    <ul class="bullets" id="ppsrhow"></ul>
+    <p class="note" id="ppsrwarn"></p>
+
+    <div class="gate" data-gate="car">
+      <div class="gh"><span>付錢之前逐項確認</span><span class="count"></span></div>
+      <ul></ul>
+      <div class="gatefoot locked"></div>
+    </div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">車價不是總價</h3>
+    <div class="splitwrap" id="carcost"></div>
+    <p class="note" id="carcostnote"></p>
+
+    <h3 style="margin:26px 0 0;font-size:17px">西澳跟東部各州不一樣的五件事</h3>
+    <div class="splitwrap" id="carwa"></div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">過戶：兩邊各自有期限</h3>
+    <ul class="bullets" id="cartransfer"></ul>
+
+    <details class="src" style="margin-top:16px">
+      <summary>離境之前要把車處理掉</summary>
+      <ul class="bullets" id="carexit"></ul>
+    </details>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="carflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="carsrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= 押金 ================= -->
+<section class="tool" id="rent">
+  <header>
+    <h2>押金自保<span class="slug">/rent</span></h2>
+    <p class="q">先搞清楚你是哪一種身分——在西澳，分租雅房很多時候<strong>不受租賃法保護</strong>，那時候能救你的只有當下拿到的紙本。</p>
+  </header>
+  <div class="body">
+    <div class="quiz" id="whoq">
+      <p class="qlead">身分不是看你有沒有簽約，也不是看對方自稱房東還是二房東——<strong>合約上寫什麼名稱不決定法律身分</strong>。決定的是下面這四題。</p>
+    </div>
+    <div class="ans" id="whoans" hidden></div>
+    <div class="gate" data-gate="rent">
+      <div class="gh"><span>交錢之前逐項確認</span><span class="count"></span></div>
+      <ul></ul>
+      <div class="gatefoot locked"></div>
+    </div>
+    <div class="ans warn">
+      <div class="verdict">要離開澳洲的話，押金得提前很久開始處理</div>
+      <div class="detail"><ul id="exitbond"></ul></div>
+    </div>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="rentflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="rentsrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= 換匯 ================= -->
+<section class="tool" id="scam">
+  <header>
+    <h2>換匯防詐<span class="slug">/scam</span></h2>
+    <p class="q">這一頁不會告訴你「某某人可不可信」，也不會有名單。它只讓你看清楚：<strong>只有詐騙才會要求的事</strong>。</p>
+  </header>
+  <div class="body">
+    <div class="ans bad" style="margin-top:0">
+      <div class="verdict">一句鐵律，現在就決定</div>
+      <div class="detail" id="ironrule"></div>
+    </div>
+
+    <div class="gate" data-gate="scam">
+      <div class="gh"><span>轉帳之前逐項確認</span><span class="count"></span></div>
+      <ul></ul>
+      <div class="gatefoot locked"></div>
+    </div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">直接複製傳給對方的三句話</h3>
+    <p class="hint" style="margin-top:4px">不用解釋、不用吵。對方不接受，那就是答案，不是再談判的起點。</p>
+    <div id="scripts"></div>
+
+    <div class="flags">
+      <b>只有詐騙才會要求的事</b>
+      <ul id="scamflags"></ul>
+    </div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">那，正常人要換錢怎麼辦</h3>
+    <p class="hint" style="margin-top:4px" id="legallead"></p>
+    <ol class="steps" id="legalsteps"></ol>
+    <p class="hint" id="legalnote"></p>
+
+    <p class="hint" style="margin-top:16px" id="raillead"></p>
+    <ul class="bullets" id="railitems"></ul>
+
+    <div class="flags" style="margin-top:18px">
+      <b>幫人帶現金回台灣之前</b>
+      <ul><li id="cashnote"></li></ul>
+    </div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">可以轉發到任何群的圖卡</h3>
+    <p class="hint" style="margin-top:4px">在 LINE 裡連結多半沒人點，圖才會被轉。長按圖片即可儲存。三張都不必解釋，圖上都寫了。</p>
+    <div class="cardtabs" id="cardtabs" role="tablist" aria-label="選擇圖卡"></div>
+    <div id="cardwrap" role="tabpanel" tabindex="0" aria-label="圖卡預覽"><canvas id="card" width="1080" height="1350" aria-label="可轉發的防詐圖卡"></canvas></div>
+    <div class="copyrow"><span class="why" id="cardwhy"></span><button class="copybtn" id="carddl">下載這張</button></div>
+
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="scamsrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= 已經轉出去了 ================= -->
+<section class="tool" id="after">
+  <header>
+    <h2>已經轉出去了<span class="slug">/after</span></h2>
+    <p class="q">這一頁跟上一頁是兩件事：上面那頁是攔住你，這頁是<strong>錢已經出去之後</strong>。順序很重要——第一步是銀行，不是報警，也不是回群組罵人。時間是唯一還站在你這邊的東西。</p>
+  </header>
+  <div class="body">
+    <ol class="steps" id="scamsteps"></ol>
+
+    <h3 style="margin:26px 0 0;font-size:17px">現在就撥的號碼</h3>
+    <p class="hint" style="margin-top:4px">手機上可以直接點。<strong>所有時段都已經換算成 Perth 時間</strong>——這些專線的官方頁面寫的是東部時間，照抄會讓你在還沒開門的時候一直重撥。</p>
+    <ul class="calls" id="afterbanks"></ul>
+
+    <div class="ans" style="margin-top:22px">
+      <div class="verdict">打不通的時候，先自己做這四件事</div>
+      <div class="detail">
+        <p id="offhourslead"></p>
+        <ul id="offhours"></ul>
+      </div>
+    </div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">轉帳前後五分鐘的證據</h3>
+    <p class="hint" style="margin-top:4px">這張清單上的東西，過了今天多半就補不回來了。先存證據，再去生氣。</p>
+    <ul class="bullets" id="afterevidence"></ul>
+
+    <h3 style="margin:26px 0 0;font-size:17px">錢是從台灣的帳戶出去的嗎？</h3>
+    <p class="hint" style="margin-top:4px" id="twlead"></p>
+    <div class="splitwrap" id="twsplit"></div>
+    <ul class="bullets" id="twsteps"></ul>
+
+    <div class="ans warn" style="margin-top:22px">
+      <div class="verdict">先知道真相，才不會在追款上被騙第二次</div>
+      <div class="detail"><ul id="aftertruth"></ul></div>
+    </div>
+
+    <details class="src" style="margin-top:18px">
+      <summary>被凍結的是「你自己」的帳戶時</summary>
+      <div style="padding:12px 2px 2px">
+        <p class="hint" id="frozenlead" style="margin:0 0 8px"></p>
+        <ul class="bullets" id="frozen"></ul>
+      </div>
+    </details>
+
+    <h3 style="margin:26px 0 0;font-size:17px">需要台灣這邊協助的話</h3>
+    <p class="hint" style="margin-top:4px" id="conlead"></p>
+    <ul class="calls" id="afterconsular"></ul>
+    <p class="hint" id="connote"></p>
+
+    <p class="hint" style="margin-top:22px">錢追不追得回來，不由這一頁決定。但少做其中一步，能追回的機率一定更低。<strong>被騙不是你笨。</strong>對方是靠這個吃飯的，你只是剛好在他今天的名單上。</p>
+
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="aftersrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= 出門前 ================= -->
+<section class="tool" id="ask">
+  <header>
+    <h2>出門前先問一句<span class="slug">/ask</span></h2>
+    <p class="q">群裡的職缺和房源沒有「已徵到」按鈕，過期的貼文會一直掛著。白跑一趟的原因幾乎都不是被騙，是<strong>那則已經沒了，但沒人回來說</strong>。</p>
+  </header>
+  <div class="body">
+    <div class="ans ok" style="margin-top:0">
+      <div class="verdict">出發前傳這一句</div>
+      <div class="detail" id="askbody"></div>
+    </div>
+    <div class="flags rule">
+      <b>三條規則，記住就好</b>
+      <ul id="askrules"></ul>
+    </div>
+    <p class="hint" style="margin-top:14px">這一頁沒有清單、也不會有。第一手資訊留在 LINE 群裡最好——這裡只負責讓已經失效的那些送不了你出門。</p>
+  </div>
+</section>
+
+<!-- ================= 落地 ================= -->
+<section class="tool" id="landing">
+  <header>
+    <h2>落地 72 小時<span class="slug">/landing</span></h2>
+    <p class="q">按時間排。前面沒辦好，後面會被多扣稅或看不了醫生。</p>
+  </header>
+  <div class="body">
+    <div class="gate" data-gate="landing">
+      <div class="gh"><span>依序打勾</span><span class="count"></span></div>
+      <ul></ul>
+      <div class="gatefoot locked"></div>
+    </div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">會直接影響你拿到多少錢的數字</h3>
+    <p class="hint" style="margin-top:4px">前三行的差別，只在於你有沒有在上工前問對一句話。</p>
+    <ul class="kv" id="landnums"></ul>
+
+    <h3 style="margin:26px 0 0;font-size:17px">沒有 Medicare，看病要付多少</h3>
+    <p class="hint" style="margin-top:4px" id="healthlead"></p>
+    <ul class="kv" id="landfees"></ul>
+    <ul class="plainlist" id="healthtips" style="margin-top:13px"></ul>
+
+    <h3 style="margin:26px 0 0;font-size:17px">群裡每個月都會吵一次的幾件事</h3>
+    <div id="landmyths"></div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">上飛機之後就來不及的事</h3>
+    <p class="hint" style="margin-top:4px" id="leavelead"></p>
+    <div class="splitwrap" id="landleave"></div>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="landflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="landsrc"></ul></details>
+  </div>
+</section>
+
+<footer>
+  <div class="disclaim">
+    <strong>這個站不是法律或財務建議，也不是最終權威。</strong>
+    它做的事只有一件：把你需要的那一條規則指出來，並把你送到澳洲政府的官方頁面。
+    任何數字如果跟官方頁面不一樣，<strong>以官方頁面為準</strong>，並請告訴我一聲，我會改。
+  </div>
+  <p>澳洲多數規則在每年 <strong>7 月 1 日</strong> 換版。如果你看到的生效日已經是去年，代表這個站沒人更新了，請直接以官方連結為準。</p>
+  <p>非營利。沒有廣告、沒有推薦回饋、沒有合作仲介。原始碼公開在 <a href="https://github.com/jason201385-commits/wa-whv-toolkit" target="_blank" rel="noopener">github.com/jason201385-commits/wa-whv-toolkit</a>（MIT 授權），任何人都可以接手。看到過期或錯誤的數字，開一個 issue 比寄信有用。</p>
+  <div class="disclaim" style="margin-top:14px">
+    <strong>這個站不會做的四件事，寫在這裡是為了讓你可以拿它問責。</strong>
+    <ul style="margin:8px 0 0;padding-left:1.15em;line-height:1.7">
+      <li><strong>不做職缺表、房源表，或任何「今日有效」的清單。</strong>沒人維護的清單會變成幽靈刊登，害人白跑，而且因為它看起來比 LINE 正式，傷害更大。</li>
+      <li><strong>不指名詐騙者。</strong>西澳與北領地是全澳唯二沒有採納 2021 年誹謗法改革的司法管轄區。這裡只寫手法與交易守則。</li>
+      <li><strong>不收留言、不收表單、沒有登入、沒有資料庫。</strong>任何可寫入的東西都需要每天有人審核，這個站的維運預算是每天五分鐘。</li>
+      <li><strong>不成為最終權威。</strong>每個數字旁邊都有生效日和官方連結。</li>
+    </ul>
+  </div>
+</footer>
+
+</div>
+
+<script>
+/* ==========================================================================
+   DATA — 所有事實集中在這裡。改數字只改這一塊。
+   每一條都要有 src（官方網址）與 asOf（生效日或查證日）。
+   v:false 代表尚未由官方頁面確認，畫面上會標「待核」。
+   ========================================================================== */
+const DATA = {
+  asOf: "2026-08-15",
+
+  /* ---------------- 集簽 ----------------
+     台灣護照走的是 417。462 的合格國家清單沒有台灣，所以這一段只寫 417 的規則。
+     郵遞區號清單直接抄自 Home Affairs 的西澳段；單一號碼寫成數字，區間寫成 [起,迄]（含兩端）。 */
+  regional: {
+    zones: {
+      regional: {
+        label: "指定區域 Regional Australia",
+        wa: [[6041,6044],[6055,6056],6069,6076,[6083,6084],6111,[6121,6126],[6200,6799]],
+        v: true
+      },
+      northern: {
+        label: "澳洲北部 Northern Australia",
+        wa: [6537,6642,6646,6701,6705,6707,[6710,6714],6716,6718,[6720,6722],6725,6726,6728,
+             6740,6743,6751,6753,6754,6758,6760,6762,6765,6770],
+        v: true
+      },
+      remote: {
+        label: "偏遠與極偏遠 Remote and Very Remote",
+        wa: [6161,[6335,6338],6341,6343,6346,6348,[6350,6353],[6355,6359],6361,6363,6365,
+             [6367,6369],6373,6375,6385,6386,[6418,6429],6431,6434,[6436,6438],6440,6443,
+             [6445,6448],6450,6452,[6466,6468],6470,6472,6473,[6475,6477],6479,6480,6484,
+             [6487,6490],6515,[6517,6519],6536,6605,6606,6608,6609,[6612,6614],6616,6620,
+             6623,6625,6627,6628,[6630,6632],6635,[6638,6640],6731,6733,6798,6799],
+        v: true
+      },
+      bushfire: {
+        label: "森林大火宣告區 Bushfire declared areas",
+        wa: [[6030,6038],6055,[6063,6069],[6077,6079],6083,6090,6302,6304,6306,6528,6628,
+             [6630,6632],6635,6640,6642,6646,6705,6721,6722,6725,6726,6753,6758,6760,6762],
+        v: true
+      },
+      disaster: {
+        label: "天災宣告區 Natural disaster declared areas",
+        wa: [[6030,6038],6055,[6063,6069],[6077,6079],6083,6090,[6227,6230],6232,6233,6236,
+             6254,6275,[6280,6282],[6284,6286],6288,6290,6302,6304,6306,6336,6337,6346,6385,
+             [6429,6434],[6436,6438],6440,6442,6443,6450,6528,6532,6535,6536,6623,6628,
+             [6630,6632],6635,6639,6640,6642,6646,6701,6705,6710,[6712,6714],6718,[6720,6722],
+             6725,6726,6728,6740,6743,6753,6758,6760,6762,6765,6770],
+        v: true
+      }
+    },
+    /* 每個工作類別各自吃哪幾張表——這才是最容易算錯的地方 */
+    cats: [
+      {n:"觀光與餐旅（旅館、餐廳、咖啡廳、房務、清潔）", z:["northern","remote"],
+       w:"這一類的範圍最窄。Perth、Margaret River、Bunbury 做餐飲旅宿，一天都不算。"},
+      {n:"農牧：種植、採收、畜牧、剪毛、包裝廠加工", z:["regional"],
+       w:"釀酒、釀造、蒸餾等二次加工官方明文排除。"},
+      {n:"漁業與珍珠養殖", z:["regional"]},
+      {n:"樹木種植與伐採", z:["regional"]},
+      {n:"採礦", z:["regional"]},
+      {n:"營建", z:["regional"]},
+      {n:"森林大火復原（含無薪志工）", z:["bushfire"], w:"限 2019-07-31 之後做的復原工作。"},
+      {n:"天災復原：水災、氣旋（含無薪志工）", z:["disaster"], w:"限 2021-12-31 之後做的復原工作。"}
+    ],
+    known: {
+      "6000":"Perth CBD","6003":"Northbridge","6008":"Subiaco","6050":"Mount Lawley",
+      "6100":"Victoria Park","6108":"Thornlie","6111":"Kelmscott","6150":"Murdoch",
+      "6161":"Rottnest Island","6230":"Bunbury","6280":"Busselton","6285":"Margaret River",
+      "6330":"Albany","6430":"Kalgoorlie","6503":"Gingin","6530":"Geraldton",
+      "6701":"Carnarvon","6714":"Karratha","6721":"Port Hedland","6725":"Broome",
+      "6743":"Kununurra"
+    },
+    days: { second: 88, third: 179, v:true },
+    /* 天數怎麼算 —— 官方算的是「全職員工在 88 個日曆日內會做的天數」，不是你上了幾天班 */
+    howdays: [
+      "第二簽 3 個月＝<b>最少 88 個日曆日</b>；第三簽 6 個月＝<b>最少 179 個日曆日</b>，且須在持第二簽期間完成。",
+      "一天最多算一天。<b>做 10 小時、或同一天跨兩個雇主，還是一天。</b>",
+      "有給薪的國定假日與病假可算；因天氣停工<b>而且沒給薪</b>的日子不能算。",
+      "所有給薪的指定工作都必須依澳洲法令與 award 支薪，<b>低於法定時薪的工作日不算數</b>。",
+      "<b>同一個雇主最多做 6 個月（condition 8547）。</b>超過的部分要事先申請豁免，否則是違反簽證條件。農場常見的「做滿一季再續一季」很容易不知不覺踩過去——<b>換掛靠公司但實際上還是同一個老闆，算同一個雇主。</b>",
+      "<b>送件的截止時間用的是東部時間（AEST／AEDST），不是 Perth 時間。</b>官方明文寫著這個時間<b>就算你人在澳洲境外申請也一樣適用</b>。東部的午夜＝Perth 的晚上 10 點（東部日光節約時間期間是晚上 9 點）。卡在年齡上限或簽證到期日最後一天送件的人，會在自己以為還有兩小時的時候就已經過期。"
+    ],
+    /* 申請時真的會被要求交的東西 */
+    proof: [
+      "Payslip（薪資單）—— 涵蓋你申報的全部工作期間",
+      "澳洲銀行對帳單 —— 要對得上薪資單的入帳",
+      "雇主推薦信／證明（employer reference）",
+      "計件工資協議 —— 若你領計件，須載明每件單價與計量方式",
+      "Group certificate／payment summary／報稅紀錄",
+      "志工型復原工作：主辦或 coordinator 簽名的信，須含護照號碼、工作內容、地點郵遞區號、天數"
+    ],
+    flags: [
+      "雇主口頭保證「這裡一定能集簽」，但拿不出 ABN——ABN Lookup 可以免費查，當場就能查。",
+      "只發現金、沒有任何書面紀錄。<b>Payslip 是法定義務</b>，雇主須在發薪後 1 個工作天內給。",
+      "工作內容跟你以為的不一樣（做的是行政、清潔或二次加工），不屬於指定工作類別。",
+      "地點在指定區域邊界附近，仲介說「差不多啦」。差一個郵遞區號就是全部不算。",
+      "要你先付「工作介紹費」「宿舍保證金」才能開始——WA ScamNet 已列管針對背包客的假農場／假酒莊職缺。",
+      "雇主沒有向 ATO 註冊為 WHM 雇主：那會從第一塊錢就扣 30% 而不是 15%。",
+      "要你自己去辦 ABN 當「contractor」：ATO 明文，實質上是員工就必須用 WHM 稅表課稅。"
+    ],
+    src: [
+      {t:"Home Affairs — Specified work (417) 完整郵遞區號與類別清單", u:"https://immi.homeaffairs.gov.au/what-we-do/whm-program/specified-work-conditions/specified-work-417", as:"2026-08-15", v:true},
+      {t:"Home Affairs — Second Working Holiday visa (417) 證明文件與規費", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/work-holiday-417/second-working-holiday-417", as:"2026-08-15", v:true},
+      {t:"Home Affairs — 6 個月同雇主上限（condition 8547）與豁免", u:"https://immi.homeaffairs.gov.au/what-we-do/whm-program/specified-work-conditions/6-month-work-limitation", as:"2026-08-15", v:true},
+      {t:"Home Affairs — 舉報剝削不會被撤簽（Reporting Protections Pilot）", u:"https://immi.homeaffairs.gov.au/visas/working-in-australia/work-rights-and-exploitation/strengthening-reporting-protections-pilot", as:"2026-08-15", v:true},
+      {t:"Fair Work — Payslip 是雇主的法定義務", u:"https://www.fairwork.gov.au/pay-and-wages/paying-wages/pay-slips", as:"2026-08-15", v:true},
+      {t:"ABN Lookup — 免費查雇主是不是真的在營運", u:"https://abr.business.gov.au/", as:"2026-08-15", v:true},
+      {t:"WA ScamNet — 針對背包客的農場／酒莊假職缺", u:"https://www.scamnet.wa.gov.au/scamnet/Scam_types-Jobs__Investment-Jobs__Employment-Farm_and_vineyard_job_scams_targets_backpackers.htm", as:"2026-08-15", v:true}
+    ]
+  },
+
+  /* ---------------- 工資 ---------------- */
+  wage: {
+    nmw: 26.44, weekly: 1004.90, casualLoading: 0.25, casualMin: 33.05, superRate: 0.12,
+    from: "2026-07-01", v: true,
+
+    /* 西澳州系統（獨資／非法人雇主）的成年地板。與下面 sys.items 的敘述同源，
+       但計算機必須拿結構化的數字，不能從敘述字串裡挖。兩處要一起改。 */
+    state: { nmw: 26.27, weekly: 998.30, casualMin: 32.84, v: true },
+
+    /* ⚠️ 這一段是本站敢不敢下「違法」判定的真正地板，不是上面的 nmw。
+       award 的「入門級分類」合法低於全國最低工資——而園藝 Level 1 與酒莊 Grade 1
+       正好就是集二簽人口最常被歸的那一格。數字是從 FWO 官方 pay guide
+       （Effective 01/07/2026、Published 24/06/2026）逐欄抄下來的，不是推論：
+         MA000028 Level 1 → 週 $978.10、時 $25.74、casual $32.18
+         MA000090 Grade 1（到職前 6 個月）→ 週 $979.90、時 $25.79、casual $32.24
+       取兩者較低的當地板。改 7/1 數字時，這兩個 pay guide 要一起重抓。 */
+    entry: {
+      /* 地板＝兩本較低者。計算機只准拿這兩個數字當「敢下 🛑」的線。 */
+      nmw: 25.74, casualMin: 32.18, from: "2026-07-01", v: true,
+      hort: { nmw: 25.74, casualMin: 32.18, limit: "3 個月<b>行業</b>資歷（之前在別家做過的要算進去）" },
+      wine: { nmw: 25.79, casualMin: 32.24, limit: "到職滿 6 個月" },
+      lead: "<b>「入門級分類」的時薪可以合法低於全國最低工資。</b>這不是漏洞，是 award 裡寫明的分類——而它涵蓋的正好是<b>剛到農場、剛進酒莊的那幾個月</b>，也就是絕大多數集二簽的人。所以看到低於 $26.44 的數字，先問「我是不是還在入門級」，再判斷合不合法。",
+      items: [
+        {k:"園藝 MA000028：Level 1 最多 3 個月", v:"官方 award 原文：Level 1 適用於<b>新進員工</b>，並且「<b>will progress to Level 2 after no more than 3 months' industry experience</b>」——最多 3 個月的<b>行業</b>資歷就必須升到 Level 2。注意是<b>行業</b>資歷不是這一家的年資：<b>你之前在別的農場、別的作物做過的時間要算進去。</b>Level 1 時薪 $25.74、casual $32.18；升上 Level 2 就是 $26.44、casual $33.05。"},
+        {k:"酒莊 MA000090：Grade 1 前 6 個月", v:"分類名稱本身就寫了條件——<b>Grade 1（first 6 months of employment）</b>時薪 $25.79、casual $32.24；<b>做滿 6 個月後同一個 Grade 1 自動變成 $26.44、casual $33.05</b>。所以在酒莊做超過半年還在領 $32.24，那就是欠薪。"},
+        {k:"怎麼查自己被歸在哪一級", v:"看 payslip 或合約上的<b>分類名稱</b>（classification），不是看職稱。上面應該寫 Level 1／Level 2 或 Grade 1／Grade 2。沒寫就是雇主沒盡到 payslip 義務，<b>直接問他「我是哪一級、依哪一本 award」</b>——這句話不帶指控，但會讓對方知道你查過。"},
+        {k:"入門級不是無限期的", v:"<b>時間到了雇主沒有主動升級，就是欠薪，而且是可以往回追討的。</b>把到職日、之前在同業做過的時間、以及每一張 payslip 上的分類都留著——這三樣就是升級爭議唯一有用的證據。"}
+      ]
+    },
+
+    /* 紅線上面的星號之一：西澳有兩套勞資系統，小農場與家庭店常常不在全國那一套裡 */
+    sys: {
+      lead: "上面那條紅線是<b>全國系統</b>的地板。西澳是全澳洲少數<b>同時跑兩套勞資系統</b>的地方——你適用哪一套，取決於<b>雇主的登記型態</b>，跟你做什麼工作無關。",
+      items: [
+        {k:"雇主是 Pty Ltd → 全國系統", v:"Pty Ltd 公司、合夥人裡有 Pty Ltd 的合夥、受託人裡有 Pty Ltd 的信託，以及有實質營業活動的非營利法人，全部走全國系統：<b>時薪 $26.44、casual $33.05</b>（2026-07-01 起），award 走 MA000028、MA000090 那一套。"},
+        {k:"雇主是獨資或非法人 → 西澳州系統", v:"<b>獨資（sole trader）、合夥人裡沒有 Pty Ltd 的非法人合夥、非法人信託、家庭雇主</b>走的是西澳州系統。州系統裡沒有 award 涵蓋的成年（21 歲以上）員工，最低是<b>每週 $998.30、時薪 $26.27、casual $32.84</b>（含 25% loading，2026-07-01 起）——比全國那一條低。<b>小農場、家庭式咖啡店、民宿很多正好是這一類。</b>"},
+        {k:"怎麼判斷", v:"看薪資單或合約上的雇主名稱<b>有沒有 Pty Ltd</b>。沒有就很可能是州系統。州系統另有自己的 WA award，不是聯邦那幾本。判不出來就打 <b>Wageline</b> 問，這支就是專門回答「我到底屬於哪一套」的。"},
+        {k:"這也決定你要找誰", v:"全國系統的欠薪找 <b>Fair Work Ombudsman</b>；西澳州系統的欠薪 <b>Fair Work 管不到</b>，要走西澳自己的管道。<b>打錯機關會被退件，而且沒有人會主動幫你轉。</b>"}
+      ],
+      calls: [
+        {t:"Wageline（西澳州系統專線）", n:"1300 655 266", d:"問「我的雇主屬於哪一套系統」「州系統的最低工資是多少」打這支。", v:true}
+      ]
+    },
+
+    /* 紅線上面的星號之二：21 歲以下不是同一條線，計算機會誤判 */
+    junior: {
+      lead: "<b>未滿 21 歲的法定最低是「按年齡打折」的 junior rate，本頁那條紅線不適用於你。</b>寫這一段是為了不讓你拿本站的數字去做一個站不住腳的指控。",
+      items: [
+        "有 award 的：按<b>該本 award 自己的 junior 百分比表</b>，依年齡打折。各本不一樣。",
+        "沒有 award 的：按 <b>National Minimum Wage order</b> 的年齡百分比表打折。",
+        "<b>如果那本 award 根本沒寫 junior 條款，你就領成人費率</b>——不是自動打折。",
+        "零售與速食類 award 另有一條：<b>18 至 20 歲在同一雇主做滿 6 個月後，領成人費率。</b>",
+        "所以 18 到 20 歲的人被開低於 $33.05 的 casual 時薪，<b>有可能完全合法</b>。要判斷得用官方的 Pay and Conditions Tool 輸入你的年齡與分類。"
+      ]
+    },
+
+    /* 本站最容易害到人的一段：多數中文資料把葡萄園當成園藝，那是錯的 */
+    award: {
+      lead: "<b>「全國最低工資」只適用於沒有 award 涵蓋的人。</b>農場、葡萄園、餐廳、肉品廠全都有自己的 award，數字跟保障都不一樣。先搞清楚你在哪一本，再去查數字——<b>查錯本，等於整份保障都對不上</b>。",
+      items: [
+        {k:"摘水果、蔬菜、種苗、包裝棚", v:"通常是 <b>Horticulture Award（MA000028）</b>。"},
+        {k:"釀酒葡萄園：修枝、照料、採收", v:"<b>不是園藝，是 Wine Award（MA000090）。</b>官方定義涵蓋「wine grape vineyard」的整地、種植、修剪、照料、採收與運送。Margaret River、Great Southern 這些酒莊產區的葡萄工作全部落在這一本。<b>而且勞務派遣公司把人派進酒莊，也一樣適用 Wine Award。</b>"},
+        {k:"餐廳、咖啡廳、飯店、酒吧", v:"Hospitality（MA000009）或 Restaurant（MA000119），看店的型態。週末與國定假日有 penalty rates，那是另外加的。"},
+        {k:"不確定", v:"用官方的 <b>Pay and Conditions Tool</b> 查，輸入行業與職務就會給你自己的分類與數字。<b>不要問群裡「大家時薪多少」——別人的 award 和分類跟你不一定一樣。</b>"}
+      ]
+    },
+
+    /* 計件的兩本 award 保障完全不同，這是整個網站最貴的一個差異 */
+    piece: {
+      lead: "計件（piece rate，按箱、按公斤、按株算錢）在兩本 award 底下的保障<b>完全不一樣</b>。這一格是本頁最重要的地方。",
+      items: [
+        {k:"Horticulture Award：有每日保底", v:"官方明文：計件的全職、部分工時與 casual 員工<b>每一個工作日都有 minimum wage guarantee</b>——當天至少要拿到「該員工的時薪 × 當天工時」。計件算出來比較多就拿多的，比較少就補到保底。另外，雇主設定的件價必須讓「有能力、平均產能」的人每小時比最低時薪多賺至少 <b>15%</b>。"},
+        {k:"Wine Award：沒有保底", v:"官方明文：<b>Wine Award 裡沒有任何條文保證計件員工能拿到最低週薪或最低時薪。</b>件價的規定只有一條——必須讓「平均能力」的人每小時比該分類最低時薪多賺至少 <b>20%</b>。但如果你當天做得比平均慢，<b>沒有任何機制把你補到最低時薪</b>。"}
+      ],
+      warn: "所以在酒莊產區聽到「我們是算件的，做多少領多少」，那句話在 Wine Award 底下是<b>合法且真的沒有下限</b>的。天氣爛、藤況差、你剛學會——這些全部由你自己承擔。<b>要求看書面 piecework agreement，並自己記工時與產量</b>，那是唯一能證明「件價設定不合理」的東西。"
+    },
+
+    /* 扣錢的合法邊界。這是背包客被吃最多的一塊 */
+    deduct: [
+      "薪水<b>必須用錢付</b>。用食宿、農產品、代金券抵薪水，原則上不合法。",
+      "要從薪水扣宿舍費、車費、工具費，必須<b>你書面授權、金額合理，而且主要是為你的利益</b>。三個條件缺一就是違法扣款。",
+      "<b>「先發薪水，再要你把一部分現金還給雇主」＝cashback，是明確違法。</b>對方會說這樣 payslip 才做得漂亮——payslip 漂亮是他的問題，錢少的是你。",
+      "扣完之後<b>不能低於你 award 的最低時薪</b>。「扣完剛好」不是合法的計算方式。",
+      "退休金（super）是<b>額外</b>的 " + "12" + "%，不能從時薪裡挖。雇主說「時薪已經含 super」時，要求他在 payslip 上分開列。"
+    ],
+
+    /* 沒有紀錄就沒有追討。這一段是純操作 */
+    proof: [
+      "<b>Payslip 是法定義務</b>，發薪後一天內就要給你，不是雇主的好意。沒給就是另一項違規。",
+      "<b>自己記工時</b>。Fair Work 有一支免費的官方 App 叫 <b>Record My Hours</b>，記下的紀錄可以直接當證據——不必依賴雇主的班表。",
+      "每天下班順手拍一張「今天做了幾箱／幾株」的照片，計件工作尤其重要。",
+      "薪水進來的那個銀行帳戶紀錄不要刪，離境後也留著。",
+      "群組對話、簡訊、口頭承諾的錄音（西澳允許當事人錄自己參與的對話）——先存下來，之後要不要用再說。"
+    ],
+
+    /* 「檢舉會不會被取消簽證」是最常見的恐懼，而它有官方答案 */
+    report: {
+      lead: "<b>「我去檢舉，簽證會不會被取消？」</b>——這是群裡最常見、也最讓人不敢開口的問題。它有官方答案。",
+      items: [
+        {k:"雇主不能取消你的簽證", v:"官方明文：只有 Home Affairs 能核發、拒絕或取消簽證。<b>雇主拿簽證威脅你，本身就是一種施壓手法，不是他做得到的事。</b>"},
+        {k:"你的權利跟簽證身分無關", v:"官方明文：在澳洲工作的所有人享有相同的最低工作權益與保障，<b>與國籍、簽證身分無關</b>，而且這些權利不會因為你簽了什麼合約就消失。"},
+        {k:"因為被剝削而違反工作條件時的保護", v:"原本的 <b>Assurance Protocol</b>（向 Fair Work 求助且配合調查者，Home Affairs 不會因你違反工作相關簽證條件而取消簽證）<b>目前已因兩項試辦計畫而暫停</b>。現行機制是 Home Affairs 主辦的 <b>Strengthening Reporting Protections Pilot</b>：由參與的政府機關或<b>認可第三方（Accredited Third Party, ATP）</b>認證你確實遭到剝削並協助處理，就適用強化後的通報保護。"},
+        {k:"簽證快到期但案子還沒結", v:"<b>Workplace Justice Visa</b>（Temporary Activity 408 之下）讓你為了處理職場剝削案件<b>留在澳洲最長 12 個月</b>。前提是你的案件經<b>認可第三方（ATP）認證</b>。這條路的存在，意味著「我簽證快到期了只好算了」不再是唯一選項。"}
+      ],
+      calls: [
+        {t:"Fair Work Ombudsman", n:"13 13 94", d:"問薪資、扣款、payslip、award 分類都打這支。免費。", v:true},
+        {t:"Fair Work 口譯服務", n:"13 14 50", d:"先打這支說你要中文，再請他們接 Fair Work。<b>不會英文不是不能檢舉的理由。</b>", v:false}
+      ],
+      note: "<b>可以匿名檢舉</b>，也可以先只是「問問看」而不具名投訴。很多人卡在「檢舉」兩個字太重——先打去問「我這樣的情況合不合法」，那不叫檢舉。"
+    },
+
+    /* 工傷走的是第三套系統。農場與工廠最容易踩，而中文資訊裡幾乎不存在 */
+    injury: {
+      lead: "在工作中受傷，走的<b>不是 Fair Work，也不是 Medicare，是第三套系統：WorkCover WA</b>。農場、工地與工廠是打工度假最常出事的地方，而這一塊在中文社群裡幾乎沒有人講。",
+      items: [
+        "官方原文：<b>任何因工受傷或罹病、需要就醫或需要請假的工作者，都有權申請工傷補償</b>（workers compensation）。這句話沒有排除 casual，也沒有排除簽證身分。",
+        "第一步是<b>當場告訴雇主</b>；第二步是看醫生並取得 <b>First Certificate of Capacity</b>（工作能力證明），這張是整個申請的核心文件，沒有它就開不了案。",
+        "受傷當下就拍照、記下時間地點與在場的人。<b>「先撐一下、下班再說」是最常見的失分點</b>——延遲通報會讓保險公司質疑因果關係。",
+        "雇主收到你的申請表後要在 <b>7 天內</b>轉給他的保險公司；保險公司收到後 <b>14 天內</b>要給你受理或暫緩的書面決定。（<b>這幾個天數我沒能親自開啟 WorkCover WA 的頁面逐字確認</b>，以官方頁為準。）",
+        "被拖、被推、或雇主說「你是 casual 沒有這個」——直接打 WorkCover WA 的免費諮詢專線，不必先跟雇主吵。"
+      ],
+      calls: [
+        {t:"WorkCover WA 諮詢與協助專線", n:"1300 794 744", d:"工傷申請被拖、被拒、或不知道怎麼開始，打這支。免費。", v:true}
+      ]
+    },
+
+    flags: [
+      "只給現金、不給 payslip。Payslip 是法定義務，不是雇主的好意。",
+      "要你自己去辦 ABN 當「contractor」——這多半是把法定責任推給你，還會讓你自己扛稅和保險。",
+      "押第一週或第二週薪水「等你做滿再給」。",
+      "從薪水裡扣宿舍費、交通費、工具費，而且扣到低於法定時薪。",
+      "<b>發完薪水後要你把一部分現金退還給雇主</b>（cashback）——這是明確違法，而且是有組織的手法，不是個別老闆的怪癖。",
+      "計件（piece rate）但沒有任何書面協議，也講不出保障底線。<b>在葡萄園尤其要問清楚是 Wine Award 還是 Horticulture Award——這決定你有沒有保底。</b>",
+      "說「你是 backpacker 所以適用比較低的薪水」——沒有這種東西，法定時薪跟簽證無關。",
+      "用簽證威脅你（「你敢講我就讓你走人／讓你簽不到」）。<b>只有 Home Affairs 能動你的簽證，雇主不能。</b>",
+      "叫你買一張「他們公司自己發的」White Card。White Card（工地安全卡）是<b>各州政府核發</b>的，西澳的主管機關是 WorkSafe WA／DEMIRS，不是雇主，也不是仲介。"
+    ],
+    src: [
+      {t:"Fair Work Ombudsman — Minimum wages（全國最低工資 $26.44／小時、$1,004.90／週，2026-07-01 起）", u:"https://www.fairwork.gov.au/pay-and-wages/minimum-wages", as:"2026-07-01", v:true},
+      {t:"Fair Work — Pay and Conditions Tool（查你自己的 Award 時薪）", u:"https://calculate.fairwork.gov.au/", as:"2026-08-15", v:true},
+      {t:"Fair Work 官方 pay guide — Horticulture MA000028（Level 1 時 $25.74／casual $32.18；Level 2 $26.44／$33.05。Effective 01/07/2026）", u:"https://calculate.fairwork.gov.au/Download/AwardSummary?awardCode=ma000028&fileType=pdf", as:"2026-08-16", v:true},
+      {t:"Fair Work 官方 pay guide — Wine Industry MA000090（Grade 1 前 6 個月時 $25.79／casual $32.24；滿 6 個月 $26.44／$33.05。Effective 01/07/2026）", u:"https://calculate.fairwork.gov.au/Download/AwardSummary?awardCode=ma000090&fileType=pdf", as:"2026-08-16", v:true},
+      {t:"Fair Work — Horticulture Award MA000028 全文（Schedule A：Level 1「will progress to Level 2 after no more than 3 months' industry experience」）", u:"https://awards.fairwork.gov.au/MA000028.html", as:"2026-08-16", v:true},
+      {t:"Fair Work — 入門級分類的修訂（2025-04-01 起 Horticulture／Pastoral 的 introductory classification 有時間上限）", u:"https://www.fairwork.gov.au/newsroom/news/changes-entry-level-classifications-horticulture-award-and-pastoral-award", as:"2026-08-16", v:true},
+      {t:"ATO — 退休金提撥率（SG）：「From 1 July 2025 this is 12% of their ordinary time earnings」", u:"https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-contributions/how-much-super-to-pay", as:"2026-08-16", v:true},
+      {t:"Fair Work Horticulture Showcase — Pay and piece rates（園藝計件有每日保底、件價須高 15%）", u:"https://horticulture.fairwork.gov.au/pay-and-piece-rates", as:"2026-08-15", v:true},
+      {t:"Fair Work Horticulture Showcase — Wine Award 的計件規則（無最低工資保障、件價須高 20%）", u:"https://horticulture.fairwork.gov.au/pay-piecework-rates/how-to-use-piecework-agreements-wine-award", as:"2026-08-15", v:true},
+      {t:"Fair Work — Wine Industry Award MA000090 涵蓋範圍（含葡萄園與勞務派遣）", u:"https://www.fairwork.gov.au/employment-conditions/awards/awards-summary/ma000090-summary", as:"2026-08-15", v:true},
+      {t:"Fair Work — Visa protections：pilot programs（Assurance Protocol 已暫停，改行兩項試辦計畫）", u:"https://www.fairwork.gov.au/find-help-for/visa-holders-migrants/visa-protections-pilot-programs", as:"2026-08-15", v:true},
+      {t:"Home Affairs — Workplace Justice Visa（408，最長 12 個月，須 ATP 認證）", u:"https://immi.homeaffairs.gov.au/Visa-subsite/Pages/work/408-australian-government-endorsed-workplace-justice-pilot.aspx", as:"2026-08-15", v:true},
+      {t:"Home Affairs — Strengthening Reporting Protections Pilot", u:"https://immi.homeaffairs.gov.au/visas/working-in-australia/work-rights-and-exploitation/strengthening-reporting-protections-pilot", as:"2026-08-15", v:true},
+      {t:"Fair Work — Record My Hours（官方免費記工時 App）", u:"https://www.fairwork.gov.au/tools-and-resources/record-my-hours-app", as:"2026-08-15", v:false},
+      {t:"Fair Work — 不合法的扣款與 cashback", u:"https://www.fairwork.gov.au/pay-and-wages/deducting-pay-and-overpayments/deducting-pay", as:"2026-08-15", v:false},
+      {t:"UnionsWA — 西澳唯一的在地認可第三方（ATP）", u:"https://www.unionswa.com.au/", as:"2026-08-15", v:false},
+      {t:"Fair Work — 匿名檢舉", u:"https://www.fairwork.gov.au/about-us/contact-us/report-an-issue-anonymously", as:"2026-08-15", v:false},
+      {t:"西澳政府 — 州系統 award-free 最低工資（每週 $998.30／時薪 $26.27／casual $32.84，2026-07-01 起）", u:"https://www.wa.gov.au/service/employment/employment-and-industrial-relations-matters/minimum-pay-rates-award-free-employees", as:"2026-07-01", v:true},
+      {t:"西澳政府 — 你適用哪一套勞資系統（獨資／非法人 vs Pty Ltd）", u:"https://www.wa.gov.au/organisation/private-sector-labour-relations/which-system-of-employment-law-applies", as:"2026-06-10", v:true},
+      {t:"西澳政府 — 通報欠薪：兩套系統的分辨與 Wageline 1300 655 266", u:"https://www.wa.gov.au/government/multi-step-guides/reporting-wage-theft-western-australia/information-the-state-and-national-industrial-relations-systems", as:"2024-10-31", v:true},
+      {t:"Fair Work — Junior pay rates（未滿 21 歲按年齡打折）", u:"https://www.fairwork.gov.au/pay-and-wages/minimum-wages/junior-pay-rates", as:"2026-08-15", v:false},
+      {t:"西澳政府 — 申請工傷補償（任何因工受傷的工作者都有權申請；1300 794 744）", u:"https://www.wa.gov.au/service/health-care/health-insurance-schemes/claim-workers-compensation", as:"2025-06-25", v:true},
+      {t:"WorkCover WA — Making a claim（7 天／14 天的程序時限）", u:"https://www.workcover.wa.gov.au/workers/understanding-your-rights-obligations-entitlements/making-a-claim/", as:"2026-08-15", v:false}
+    ]
+  },
+
+  /* ---------------- 買車 ---------------- */
+  car: {
+    /* 這一段先擋在最前面：不是「這台車好不好」，是「你買了之後領不領得到牌」 */
+    prereq: {
+      lead: "<b>先確認三件跟車況完全無關、但會讓整筆交易作廢的事。</b>這三件都要在<b>付錢之前</b>問清楚，付完才發現就沒有籌碼了。",
+      items: [
+        {k:"你領得到牌嗎？", v:"官方規定：<b>車子必須主要停放在西澳</b>，你才能在西澳領牌。而且第一次在西澳領牌、又沒有西澳駕照的人，除了 1 份 primary ＋ 1 份 secondary 身分證明，還要填 <b>Form VL186</b>。住背包客棧、沒有穩定住址的人常常卡在這一關——<b>卡住的時間點是你已經付完錢之後</b>。"},
+        {k:"你保得到險嗎？", v:"真正的風險不是保費貴，是<b>保不到</b>。不少澳洲保險公司對持臨時簽證、用海外駕照、居澳未滿一定期間或未滿 25 歲的駕駛加費甚至直接拒保。<b>議價階段就先去拿一份實際報價</b>；等買完再問，你只剩「裸車上路」一個選項。"},
+        {k:"這台車是公司名下的嗎？", v:"$2 的 VIN 查詢有一個盲區，而且剛好打中背包客：擔保權<b>可以只登記在借款人（公司）名下、不帶車輛序號</b>，這種登記用 VIN 查不出來。前雇主車、ex-fleet 的 ute 與 van、農場或礦業公司出清車全都在這個範圍內。是公司車就要求賣方出具清償證明，否則改買個人名下的車。"}
+      ]
+    },
+    ppsr: {
+      lead: "PPSR 是聯邦政府的擔保權登記系統。<b>線上查一次 $2，用電話查是 $7</b>（1300 007 777 是 Assisted Phone Service，多出來的 $5 是人工費）。",
+      finds: [
+        "這台車有沒有<b>未清償的貸款</b>——有的話，債權人可以直接把車從你手上拖走，你的錢不會退。",
+        "是不是<b>贓車</b>。",
+        "有沒有被登記為<b>全損註銷（written-off）</b>。註銷分兩種：statutory write-off 永遠不能再上路，repairable write-off 修好後要重驗才能重新領牌。"
+      ],
+      how: [
+        "VIN 是 <b>17 個字元</b>，<b>要自己從車上抄下來</b>（擋風玻璃下緣、引擎室、駕駛座門柱），不要用賣家傳給你的那一串——那可能是另一台車的。",
+        "<b>查兩次</b>：看中車的時候一次，交錢當天再一次。中間他可以再去借一筆錢。",
+        "<b>把 search certificate 下載存好</b>（PDF 有時間戳）。沒有憑證，法律上等於你沒查過。"
+      ],
+      warn: "「查過了沒問題」是<b>你自己看到憑證</b>才算數。$2 是這整筆交易裡投報率最高的一筆錢。"
+    },
+    gate: [
+      {t:"我自己從車上抄下 17 碼 VIN，並在 PPSR 查過、存下憑證", s:"不要用賣家給的號碼。查完的 PDF 存手機裡。"},
+      {t:"我用車牌在 Transport WA 免費查過 rego 到期日", s:"transport.wa.gov.au/vehicle-rego-check，輸入車牌、即時回覆、免費。賣家口頭說「rego 還有三個月」不算數，10 秒能驗證的事沒有理由相信人。"},
+      {t:"rego 沒有過期超過 15 天", s:"官方原文：過期超過 15 天即視同無牌照，<b>不能過戶</b>，新車主必須先驗車再重新申請牌照。過期超過 3 個月則一定要驗車。"},
+      {t:"如果是外州車牌，我已經把「驗車＋重新領牌」的錢算進總價再談價", s:"外州車一定要跑一次 AIS 法定驗車。珀斯都會區輕型車初驗 A$225.40、複驗 A$153.85（2026/27 費率）。一台 $4,000 的外州車，光檢查加驗車就可能吃掉 $700。"},
+      {t:"賣家的身分證件姓名，跟紙本 vehicle licence 上的登記車主一致", s:"「這是我朋友的車，他叫我幫忙賣」——沒有書面授權就不要買。"},
+      {t:"冷車發動過一次，不是賣家先熱好車等你", s:"很多毛病只在冷車時出現。"},
+      {t:"試駕過，包含上到 80 km/h 以上", s:"變速箱和懸吊的問題只有在速度上來才聽得出來。"},
+      {t:"打開引擎蓋看過有沒有漏油，車底看過有沒有鏽", s:"沿海地區的車鏽蝕很常見。"},
+      {t:"冷氣、雨刷、大燈、電動窗、安全帶都實際按過一次", s:"這些單項修起來都可能超過車價的一成。"},
+      {t:"里程數跟保養手冊上最後一次的紀錄對得起來", s:"調表在西澳違法，官方頁列出的最高罰則是 A$50,000。抓法就是翻保養手冊、比對最後一筆里程。對不上就走人。"},
+      {t:"查過這個車款是正時鏈條還是正時皮帶，並要過更換單據", s:"皮帶有更換里程，斷了通常等於引擎報廢。這一條是通用的機械常識，不是西澳法規。"},
+      {t:"我已經拿到一份可以實際成交的保險報價", s:"不是「應該保得到」，是報價單上有數字。"},
+      {t:"過戶是雙方當場、各自登入 DoTDirect 線上完成，確認成功後我才付尾款", s:"「MR9 我之後幫你寄」是最常見的斷點。對方不寄藍聯，不會免除你自己的 14 天責任。"}
+    ],
+    unlocked: "以上都做完了，可以付尾款。付完之後 14 天內是你的法定期限，不要拖。",
+    /* 車價從來不是總價。這張表是為了讓人在談價之前就把總數算出來 */
+    cost: [
+      {k:"PPSR 查詢", v:"$2 線上／$7 電話"},
+      {k:"印花稅（vehicle licence duty）", v:"車價 $25,000 以下為 2.75%。一台 $5,000 的車＝ $137.50。"},
+      {k:"過戶規費", v:"<b>官方沒有公布金額。</b>網路上流傳的 $16 是舊論壇資料，不要拿來編預算。打 13 11 56 問，或登入 DoTDirect 走到報價那一步再退出。"},
+      {k:"法定驗車（AIS，外州車或 rego 過期太久才需要）", v:"珀斯都會區輕型車初驗 $225.40、複驗 $153.85（2026/27 費率）。區域另計。"},
+      {k:"買前檢查（RAC，非強制）", v:"標準車 10–25 年：會員 $342／非會員 $380；10 年以內：$301／$335。非標準車（4WD、部分歐洲車）10–25 年：$458／$509。<b>超過 25 年不受理。</b>RAC 的檢查含車史報告（貸款、全損、贓車、里程）。"},
+      {k:"第三人財損險", v:"另外買，不含在 rego 裡。金額看車與駕駛條件。"}
+    ],
+    costNote: "<b>買前檢查 ≠ 法定驗車。</b>RAC 那一筆不會給你 Certificate of Inspection，該跑的 AIS 還是要跑。兩筆是分開的錢，要加總。",
+    /* 西澳跟東部州不一樣的地方，錯認會出大事 */
+    wa: [
+      {k:"沒有冷靜期", v:"官方原文：<i>There is no cooling-off period for vehicle sales in Western Australia.</i> 簽名或交錢，任一項做完就沒有反悔空間。被催「今天不決定就賣別人」時，正確反應是走人。"},
+      {k:"私人交易沒有任何保固", v:"官方原文：私人賣的車<b>不受 Motor Vehicle Dealers' Act 的法定保固保障，也不適用 Australian Consumer Law 的消費者保障</b>。台灣人之間私下買賣也一樣——開走之後引擎、變速箱、冷氣壞掉都是你自己的事，對方口頭說「有問題找我」不具法律效力。"},
+      {k:"「跟車商買才有保固」在這個價位是假的", v:"法定保固門檻是售價 ≥ $4,000，再看車齡與里程：≤10 年且 ≤150,000km → 3 個月或 5,000km；10–12 年且 150,000–180,000km → 1 個月或 1,500km。<b>車齡與里程任一項超過該級距就掉一級</b>，超過 12 年或超過 180,000km 就完全沒有。背包客車市場幾乎整片在這條線以外。"},
+      {k:"西澳沒有私家車年檢", v:"跟 NSW、VIC 不同，西澳的私家車不需要每年驗車。所以<b>「它 rego 還很久」完全不能說明車況</b>——那只代表錢繳了。"},
+      {k:"強制險只保人，不保車", v:"Motor Injury Insurance（MII）綁在 rego 裡，由 ICWA 承辦，<b>不能自己挑保險公司</b>。它賠的是車禍造成的<b>人身傷害</b>——不賠你的車、不賠對方的車、不賠任何財物。撞到別人的車要自己賠，除非你另外買了第三人財損險。"}
+    ],
+    /* 過戶：兩個不同的期限，很多人只記得其中一個 */
+    transfer: [
+      "<b>買方 14 天內</b>提出過戶申請，<b>賣方 7 天內</b>把 MR9 的藍聯送交監理。兩邊各自有義務，對方沒做不會免除你的。",
+      "表單是 <b>MR9（Notification of Change of Ownership）</b>：<b>紅聯給買方、藍聯回監理</b>。郵寄地址 GPO Box R1290, Perth WA 6844。",
+      "最安全的成交順序：<b>雙方同時到場、各自登入 DoTDirect、當場線上完成過戶，系統顯示成功後才付尾款。</b>",
+      "如果對方堅持只用紙本：當場拍下對方駕照、紙本 vehicle licence、以及填妥的 MR9。",
+      "<b>規費與印花稅是另一個期限：28 天內繳清。</b>DoT 會在你送件後寄帳單給你。",
+      "法院命令或未清償擔保權會<b>直接擋掉過戶</b>，賣方有義務確保車輛無設定負擔。"
+    ],
+    /* 離境前的反向流程。沒人會提醒你，而且事後補不了 */
+    exit: [
+      "<b>過戶給下一個人，並確認對方真的送件。</b>沒完成的話，之後的超速罰單、停車費、過路費全部寄到你名下。",
+      "如果是註銷牌照而不是過戶：可以<b>申請退還未使用月份的牌照費</b>，但要<b>把車牌交回</b>。",
+      "<b>這兩件事都不能在人離境之後補辦。</b>離境前一週就要處理，不要排在最後一天。"
+    ],
+    flags: [
+      "賣家急著離澳，用「明天就要走」催你當天付錢。<b>WA ScamNet 列出的假賣家劇本就是這一套</b>：價格偏低、有急迫的身世故事、只收轉帳。群裡的「離澳前急售」貼文完全落在這個形狀上。",
+      "不讓你查 VIN，或說「這台車很乾淨不用查」。",
+      "只肯給你 VIN 的照片或文字，不讓你自己走到車邊抄。",
+      "價格明顯低於同款車行情——通常代表有貸款、有事故，或根本不是他的車。",
+      "只肯收現金、不肯簽任何文件、不肯一起去 DoTDirect。",
+      "叫你先付訂金「保留」，人卻還沒見到、車也還沒看到。",
+      "把你導去一個「付款保障平台」的網站——那是假的，錢進去就沒了。",
+      "車輛登記地址、賣家住處、看車地點三者對不上。"
+    ],
+    src: [
+      {t:"PPSR — 二手車查詢（線上 $2、電話 $7）", u:"https://www.ppsr.gov.au/searching/do-used-car-or-vehicle-search", as:"2026-08-15", v:false},
+      {t:"WA Consumer Protection — 買二手車（無冷靜期、私人交易無保固）", u:"https://www.consumerprotection.wa.gov.au/buying-used-car", as:"2026-08-15", v:true},
+      {t:"WA Consumer Protection — 車商法定保固的價格／車齡／里程門檻", u:"https://www.consumerprotection.wa.gov.au/car-warranties", as:"2026-08-15", v:true},
+      {t:"Transport WA — 過戶（rego 過期 15 天即視同無牌照）", u:"https://www.transport.wa.gov.au/licensing/vehicle/buy-sell-transfer/transfer", as:"2026-08-15", v:true},
+      {t:"Transport WA — 買車與過戶（買方 14 天／賣方 7 天）", u:"https://www.transport.wa.gov.au/licensing/vehicle/buy-sell-transfer/buy", as:"2026-08-15", v:true},
+      {t:"Transport WA — 在西澳領牌（須主要停放於 WA、Form VL186）", u:"https://www.transport.wa.gov.au/licensing/vehicle/license-vehicle/western-australia", as:"2026-08-15", v:true},
+      {t:"Transport WA — 法定驗車與費率（初驗 $225.40／複驗 $153.85）", u:"https://www.transport.wa.gov.au/licensing/vehicle/inspected-moved/inspected", as:"2026-08-15", v:true},
+      {t:"wa.gov.au — 免費查車牌的 rego 到期日", u:"https://www.wa.gov.au/service/transport/road-transport/check-your-vehicle-licence-rego-expiry-date", as:"2026-08-15", v:true},
+      {t:"wa.gov.au — 過戶規費與印花稅 28 天內繳清", u:"https://www.wa.gov.au/service/transport/road-transport/pay-your-vehicle-licence-transfer-fees", as:"2026-08-15", v:true},
+      {t:"WA 財政廳 — 車輛印花稅稅率（$25,000 以下 2.75%）", u:"https://www.wa.gov.au/organisation/department-of-treasury-and-finance/vehicle-licence-duty", as:"2026-08-15", v:true},
+      {t:"ICWA — Motor Injury Insurance 只保人身傷害", u:"https://www.icwa.wa.gov.au/motor-injury-insurance", as:"2026-08-15", v:true},
+      {t:"RAC WA — 買前檢查價格與範圍（含車史報告）", u:"https://rac.com.au/car-motoring/car-servicing-and-repair/vehicle-inspections/", as:"2026-08-15", v:true},
+      {t:"Legal Aid WA — 買車注意事項（資訊單張）", u:"https://www.legalaid.wa.gov.au/sites/default/files/Infosheet-%20Tips%20for%20buying%20a%20car.pdf", as:"2025-07-04", v:true},
+      {t:"WA ScamNet — 網路購車的假賣家手法", u:"https://www.scamnet.wa.gov.au/scamnet/Scam_types-Buying_or_selling-Vehicle_scams.htm", as:"2026-08-15", v:false}
+    ]
+  },
+
+  /* ---------------- 押金 ---------------- */
+  rent: {
+    bondMaxWeeks: 4, bondCapRent: 1200, advanceMaxWeeks: 2, bondDays: 14, v:true,
+    hotline: "1300 30 40 54",
+
+    /* 要離境的人最貴的一課：押金的時間軸比你想的長很多 */
+    exit: [
+      {t:"押金只會退到澳洲銀行帳戶", d:"戶頭關掉＝押金拿不回來。澳洲帳戶要留到押金確實入帳為止，不要一離職就關。", v:true},
+      {t:"租客申請押金釋出只能用紙本表格", d:"BondsOnline 只開放給中介與私人房東。人工處理目前多數情況需時 4 週。", v:true},
+      /* ⚠️ 這一條裡有兩個硬編碼的天數（21／30）。清掉這個 v:false 的時候，
+         要回頭核對並改這兩個數字本身，不是只把旗標翻成 true。 */
+      {t:"退租還要先給通知期", d:"週期性租約租客至少 21 天書面通知（Form 22）；固定期租約須在到期前至少 30 天通知。走之前先確認你是哪一種。", v:false},
+      {t:"所以離開西澳前 6–8 週就要開始跑", d:"通知期＋最終檢查＋紙本申請＋人工處理，疊起來就是這個長度。最後一週才想到，錢多半來不及回到你手上。", v:false}
+    ],
+
+    /* 官方判準：同住與否、有沒有服務、能不能把人擋在門外。合約名稱不算數。 */
+    quiz: [
+      {k:"onlease", q:"你的名字，在跟屋主或仲介簽的那份租約上嗎？",
+        y:"在（我是承租人之一）", n:"不在，或我不知道"},
+      {k:"colive",  q:"收你錢的那個人，本人住不住在這間屋子裡？",
+        y:"住在這裡", n:"不住這裡"},
+      {k:"service", q:"你付的錢裡，有沒有含餐、清潔或洗衣？",
+        y:"有含", n:"沒有，只有房間"},
+      {k:"lock",    q:"你的房間，你能不能上鎖、能不能拒絕他進入？",
+        y:"可以，房間是我的", n:"不行，或我是睡共用房間的床位"}
+    ],
+
+    verdicts: {
+      tenant:{k:"ok",h:"你是租客，受《Residential Tenancies Act 1987》保護",
+        d:"押金上限 4 週租金（週租 A$1,200 以下），預付租金上限 2 週，兩者以外沒有其他合法的前期費用。房東必須在收到押金後 14 天內送交 Bonds Administration。<br><strong>不要靠對方傳給你的截圖驗證。</strong>Bonds Administration 會直接把押金記錄寄給押金上的每一個人；你也可以主動打 1300 30 40 54 問「我名下有沒有 bond 紀錄」。這是唯一繞得過二房東的管道。<br>2026-03-30 起，退租時<strong>你自己就可以發起押金釋出申請</strong>，不必等房東（說「只有房東能申請」的中文資訊已經過期）。但注意：<strong>租客只能用紙本表格，不能用 BondsOnline</strong>，人工處理目前多數情況要 4 週。"},
+      subtenant:{k:"ok",h:"你是二房東的租客（sub-tenant），一樣受保護",
+        d:"官方明文：二房東必須把你的押金送交 Bonds Administration，並把<strong>他自己列為 landlord、你列為 tenant</strong>。他說「押金我自己保管」就是違法訊號。你可以打 1300 30 40 54 直接查自己名下有沒有 bond 紀錄，不必問他。<br>另外，二房東分租給你之前，必須先取得主房東或中介的<strong>書面同意</strong>——付錢前要求看主租約裡允許分租的條款。<br><strong>這一條的殘酷版本：</strong>你的租約是掛在他的租約下面的。他自己欠租、被主房東下 breach notice 或終止，主租約一沒，你的也跟著沒，而主房東不欠你任何東西。所以「他有沒有按時繳租」跟你有關，不是他家的事。"},
+      lodger:{k:"bad",h:"你很可能是 lodger — 不受租賃法保護",
+        d:"《Residential Tenancies Act 1987》不適用於 boarder 與 lodger。押金上限、14 天送存、Property Condition Report、進入權通知期、Commissioner 押金裁決——<strong>這些全部都不保護你</strong>，而且你的押金依規定就是不能存進 Bonds Administration。<br>你能依靠的是普通法契約與《Australian Consumer Law》：房屋須 fit for purpose（安全、乾淨、符合你的需要），付費服務超過 A$75 對方必須開收據。爭議走 Magistrates Court 的 minor case claim（上限 A$10,000，雙方原則上都不能請律師，除非法院准許）。<br><strong>沒有書面協議，幾乎打不贏。</strong>書面不是因為不信任對方，是因為那是你唯一的舉證能力。<br>Consumer Protection 只做協商、不會代理你出庭。真的要走法院，找免費的社區法律扶助（Tenancy WA／Circle Green Community Legal）。"},
+      boarder:{k:"bad",h:"你很可能是 boarder（含餐或含服務）— 不受租賃法保護",
+        d:"跟 lodger 一樣被排除在《Residential Tenancies Act 1987》之外，差別只在你付的錢含餐食或服務。那些服務本身受《Australian Consumer Law》的 consumer guarantees 保障，服務費超過 A$75 對方必須開收據。<br>把「含什麼、不含什麼」逐項寫進書面，這是你唯一的籌碼。爭議途徑同 lodger：先書面要求 → Consumer Protection 協助協商 → Magistrates Court minor case claim。"},
+      unsure:{k:"warn",h:"訊號混合，身分不確定 — 請當作不受保護來準備",
+        d:"官方判準是一組指標（同住、供餐或服務、你能不能把人擋在門外），不是一條明確的線。混合時最終認定在 Consumer Protection 或 Magistrate 手上，不是在合約標題上。<br><strong>把書面寫好、收據拿到、照片拍齊——這樣兩種身分下你都站得住。</strong>要確認的話打 " + "1300 30 40 54" + " 說明你的實際居住安排。"}
+    },
+
+    gate: [
+      {t:"我親自進到我要住的那一間房間看過", s:"官方明言：付任何錢或簽約前一定要實地看屋。只看外觀、照片或影片就付錢，是西澳租屋詐騙最主要的入口。"},
+      {t:"我當面問過決定身分的三題，而且留下文字紀錄", s:"他住不住這裡？含不含餐或清潔？我的房間能不能鎖起來拒絕他進入？——這三題決定你有沒有法律保護。"},
+      {t:"我看過主租約正本，確認他真的是承租人，而且允許分租", s:"分租必須有主房東或中介的書面同意，這是法定要求。他拿不出來就是紅旗。"},
+      {t:"金額沒有違法", s:"押金 ≤ 4 週租金（週租 A$1,200 以下），預付租金 ≤ 2 週，option fee ≤ A$50（週租 500 以下）或 A$100（週租 500–1,200）。這三項以外沒有其他合法名目。<br><strong>要去北部工作的人先看一下地圖：</strong>西澳的租務規則以<strong>南緯 26 度線</strong>分欄，option fee 的上限南北不同。Karratha、Port Hedland、Broome、Exmouth 都在線以北，適用的數字跟 Perth 不一樣——用上面這組去對，會對錯。以官方頁面的分欄為準。"},
+      {t:"有書面協議，寫明週租、押金、含不含水電網路、退租通知天數、押金退還條件", s:"就算你是 lodger 也要——尤其是 lodger，因為那是你唯一的依據。訊息紀錄算書面，但要截圖存檔。"},
+      {t:"我用銀行轉帳，備註寫清楚用途；非付現不可時當場拿到收據並拍照", s:"備註寫「bond, room 3, 12 Smith St」。銀行紀錄本身就是證據。付現無憑無據＝等於沒付過。"},
+      {t:"入住當天我會錄一段一鏡到底的影片，再逐項拍照", s:"從大門走進屋、繞過共用區、進到你的房間。床墊正反面、牆面、地板、家電、既有汙漬與破損都要拍，手機時間戳與定位打開。"},
+      {t:"我知道自己的退租通知期是幾天，也知道提前解約要賠什麼", s:"固定期租約提早走，可能要賠剩餘租期的租金、重新出租的廣告費與中介費。這筆通常比押金貴。"},
+      {t:"我要求對方出示已簽署的 Form 1AA（法定住宅租約範本）", s:"官方 2026-01-29 的防詐聲明把這一條列為自保動作。真房東拿得出來，假房東拿不出來——這是成本最低的一次篩選。你如果是 boarder／lodger 不適用這份表格，但「他連這份表格是什麼都答不出來」本身就是訊號。"},
+      {t:"我確認過房間裡有煙霧偵測器，配電箱有 RCD（漏電斷路器）", s:"這兩樣在西澳出租屋是法定安裝義務。違建隔間最常缺這兩樣——它既是你可以主張的違約事由，也是真的會出人命的事。"},
+      {t:"水電怎麼算已經講清楚，而且我知道法定的判準", s:"西澳只有在房屋有<strong>獨立水表且符合節水標準</strong>時，房東才能把用水量費用轉嫁給租客。「大家平均攤」在分租雅房是超收的常態說法，不是法律。"},
+      {t:"我沒有在看到房間之前轉出任何一塊錢", s:"訂金、保留費、誠意金——名字不重要，轉出去就拿不回來。"}
+    ],
+    unlocked: "以上都做完了，這筆押金出事的機率已經很低。照片、影片、對話紀錄記得備份到雲端一份。還有最後一步：付款後一個月內，確認你收到 Bonds Administration 直接寄給你的押金記錄——沒收到就打 1300 30 40 54。",
+
+    flags: [
+      "「先付訂金我才帶你看房」「屋主人在海外，鑰匙用寄的」「這週剛好不能進去看」——官方點名的詐騙話術。",
+      "租金明顯低於同區行情。把房屋照片做反向圖片搜尋，並留意同一個 email 出現在多筆房源。",
+      "押金超過 4 週租金（週租 A$1,200 以下）。官方明文：這是刑事犯罪。",
+      "預付租金超過 2 週，或第一期還沒到期就跟你要下一期。",
+      "除了 option fee、押金、2 週預付租金以外，還冒出「保留費」「看房費」「鑰匙費」。",
+      "二房東說「押金我自己保管，不會送 Bonds Administration」——如果你其實是 sub-tenant，這句話本身就違法。",
+      "付款超過一個月，你還沒收到 Bonds Administration 直接寄給你的押金記錄。",
+      "叫你在空白或還沒填完的 Property Condition Report 上先簽名——等於放棄退租時的全部舉證能力。",
+      "推銷「免押金入住」「月付式押金」「押金保險」（bond replacement）——在西澳明文違法，可檢舉。",
+      "只收現金、只匯私人帳戶，或要求用加密貨幣、禮品卡付款。",
+      "閃避「主租約給我看一下」「屋主或中介是誰」這兩個問題。",
+      "要你把護照正本或簽證文件正本交給對方「保管」。",
+      "「以工換宿」——用勞務抵住宿在澳洲通常不合法，而且那些時數多半不算集簽的 88 天。那是 Fair Work 的問題，不是租屋問題，找錯機關會白跑。"
+    ],
+    src: [
+      {t:"WA Consumer Protection — Rental bonds（押金上限、bond replacement 違法）", u:"https://www.consumerprotection.wa.gov.au/rental-bonds", as:"2026-03-28", v:true},
+      {t:"WA Consumer Protection — Boarders and lodgers（判準與不受保護的範圍）", u:"https://www.consumerprotection.wa.gov.au/boarders-and-lodgers", as:"2026-08-15", v:true},
+      {t:"WA Consumer Protection — Sharing a rental home（二房東的送存與書面同意義務）", u:"https://www.consumerprotection.wa.gov.au/sharing-rental-home-0", as:"2026-08-15", v:true},
+      {t:"WA Consumer Protection — Lodging a bond（14 天送存、官方直接寄記錄給你）", u:"https://www.consumerprotection.wa.gov.au/lodging-bond", as:"2026-08-15", v:true},
+      {t:"WA Consumer Protection — Paying rent（預付上限 2 週、3 天內開收據）", u:"https://www.consumerprotection.wa.gov.au/paying-rent", as:"2026-08-15", v:true},
+      {t:"WA Consumer Protection — Rent bidding, applications and option fees", u:"https://www.consumerprotection.wa.gov.au/rent-bidding-applications-and-option-fees", as:"2026-06-17", v:true},
+      {t:"WA Consumer Protection — Property condition reports（Form 1 與 7 天期限）", u:"https://www.consumerprotection.wa.gov.au/property-condition-reports", as:"2024-11-20", v:true},
+      {t:"WA Consumer Protection — Bond disputes（Commissioner 裁決、10 天與 7 天期限）", u:"https://www.consumerprotection.wa.gov.au/bond-disputes-residential-tenancies", as:"2026-08-15", v:true},
+      {t:"WA Government — 新押金釋出程序：租客可自行申請（2026-03-30 起）", u:"https://www.wa.gov.au/government/media-statements/Cook%20Labor%20Government/New-bond-release-process-in-place-for-WA-renters-and-landlords-20260330", as:"2026-03-30", v:true},
+      {t:"WA Government — 西澳租屋詐騙上升（官方統計與手法）", u:"https://www.wa.gov.au/government/media-statements/Cook%20Labor%20Government/Rise-in-rent-scams-targeting-Western-Australian-tenants--20260129", as:"2026-01-29", v:true},
+      {t:"Magistrates Court of WA — Civil matters（minor case claim 上限 A$10,000）", u:"https://www.magistratescourt.wa.gov.au/C/civil_matters.aspx?uid=1226-6994-1097-9582", as:"2026-08-15", v:true},
+      {t:"WA Consumer Protection — Bond release（租客只能用紙本、人工約 4 週）", u:"https://www.consumerprotection.wa.gov.au/bondrelease", as:"2026-07-22", v:true},
+      {t:"WA Consumer Protection — Rent increases（一年一次、60 天通知）", u:"https://www.consumerprotection.wa.gov.au/rent-increases", as:"2025-10-20", v:true},
+      {t:"WA Consumer Protection — 結束租約與通知期（退租通知天數請以此頁為準）", u:"https://www.consumerprotection.wa.gov.au/ending-tenancy", as:"2026-08-15", v:false},
+      {t:"WA Consumer Protection — Tenants Bulletin 36（「超收押金是刑事犯罪」的原文出處。注意這份是 2022 年公報，同頁還留著已被 2024 年改革取代的「六個月才能漲一次租」，只能用來引這一句）", u:"https://www.consumerprotection.wa.gov.au/publications/dont-let-bond-top-ups-get-you-down-tenants-bulletin-issue-36", as:"2022-07-20", v:true},
+      {t:"WA Consumer Protection — 水電費轉嫁租客的條件（須獨立水表）", u:"https://www.consumerprotection.wa.gov.au/rent-and-other-charges", as:"2026-08-15", v:false},
+      {t:"WA Consumer Protection — 出租屋的煙霧偵測器與 RCD 法定義務", u:"https://www.consumerprotection.wa.gov.au/smoke-alarms-and-rcds", as:"2026-08-15", v:false},
+      {t:"Circle Green Community Legal — 免費租務法律扶助（Tenancy WA）", u:"https://circlegreen.org.au/housing/", as:"2026-08-15", v:false}
+    ]
+  },
+
+  /* ---------------- 出門前 ---------------- */
+  ask: {
+    line: "嗨，請問這則還在嗎？我今天 __ 點可以到。",
+    rules: [
+      "沒有回覆 ＝ 當作沒有。不要「應該還在吧」就出門。",
+      "貼文超過 12 小時 ＝ 一定要先私訊確認再走。",
+      "對方回「還在」但講不出地址或時間 ＝ 也當作沒有。"
+    ],
+    why: "群裡的貼文沒有「已徵到」按鈕，找到人的那一方沒有動機回來說一聲。所以預設是失效，不是有效。"
+  },
+
+  /* ---------------- 換匯 ---------------- */
+  scam: {
+    ironRule: "私人換匯：<strong>對方的錢沒有進到你的帳戶之前，你的錢不准出門。</strong><br>沒有例外，也沒有「先小額試一次」——小額試就是這一次的死法，對方拿的是你的信任，不是那兩百塊。",
+    scripts: [
+      { t:"我只收現金面交，地點你挑，人多的地方就好。", w:"面交是唯一錢貨同時的方式。願意面交的人，九成不是騙子。" },
+      { t:"不能面交的話，你先轉，我確認入帳後馬上轉給你。", w:"線上先轉的那一方永遠是承擔風險的那一方。這句話會篩掉大部分的人。" },
+      { t:"如果要催我先轉，那這筆我就不做了，沒關係。", w:"先說出口，你等一下就不必臨場鼓起勇氣。催促本身就是訊號，不是理由。" }
+    ],
+    gate: [
+      {t:"我們是當面交易，錢和錢同時交換", s:"線上先轉的那一方永遠是承擔風險的那一方。"},
+      {t:"如果不能當面，對方先轉給我，我確認入帳後才轉出", s:"「你先轉我馬上轉」——說這句話的人，有一半不會轉。"},
+      {t:"我看到的是自己銀行 App 裡的入帳紀錄，不是對方傳來的截圖", s:"轉帳完成截圖可以偽造，而且偽造成本是零。"},
+      {t:"匯率沒有明顯優於市場行情", s:"好得不合理的匯率是誘餌，不是好運。"},
+      {t:"對方沒有催我、沒有限時", s:"催促是為了讓你來不及思考。真的要換匯的人不差這十分鐘。"},
+      {t:"收款帳戶的名字，跟我在跟他講話的那個人同名", s:"要你轉到第三人帳戶的，多半是人頭帳戶，你可能同時變成洗錢案的關係人。"},
+      {t:"我沒有一次換超過我輸得起的金額", s:"第一次交易先換小額。信任要靠成本累積，不是靠對方的說法。"}
+    ],
+    unlocked: "以上都成立，可以轉。如果有任何一項沒打勾，那一項就是你等一下會後悔的地方。",
+    /* 群裡永遠會有人問「那我要換錢怎麼辦」。沒有替代路徑的警告，最後只會被無視。 */
+    legal: {
+      lead: "澳洲的匯款業者<strong>依法必須在 AUSTRAC 註冊，而且名冊是公開的</strong>。這代表「這家是不是合法的」不需要問群組，你自己 30 秒就能查完。",
+      steps: [
+        {t:"打開 AUSTRAC 的匯款業者公開名冊", d:"輸入店名或公司名。查不到，就是沒註冊——不要用。", u:"https://online.apps.austrac.gov.au/rsr", v:true},
+        {t:"或直接用銀行匯款", d:"銀行走 SWIFT 系統跨國匯款，慢一點、貴一點，但對方是誰、錢去哪裡都有紀錄。"},
+        {t:"比較四件事，不要只比匯率", d:"匯率、費用（手續費＋佣金＋換匯價差）、到帳時間、對方怎麼領。私人換匯之所以「划算」，是因為它把風險成本轉嫁給你。"}
+      ],
+      note: "2025 年 7 月起，各大銀行陸續上線 <b>Confirmation of Payee</b>：轉帳時輸入戶名會回傳「相符／相近／不符」。<b>它只是提醒，不會擋你</b>——但銀行公會頁面自己寫明：無視「相近／不符」仍然按下去，責任可能依現行付款規範<b>移轉到你身上</b>。群裡最常見的「對方報的名字跟帳戶名不一樣」，答案就在這一格。",
+      /* 「幾分鐘內趕快打電話」這句話，有沒有那幾分鐘是由付款軌道決定的，不是由你決定 */
+      rail: {
+        lead: "還有一件幾乎沒人講：<b>你按下去的是哪一條付款軌道，決定了「趕快打電話」到底有沒有意義</b>。",
+        items: [
+          "<b>PayID／Osko（New Payments Platform）＝即時到帳。</b>RBA 對這條軌道的用字是 <i>final and irrevocable</i>——銀行之間的清算當下就結清，錢在一分鐘內就能被對方領走。所謂「發現得早還來得及」，在這條軌道上多半不成立。",
+          "傳統的 BSB＋帳號直接轉帳（direct entry）是分批清算，<b>可能還有幾個小時的空檔</b>。這是唯一有機會攔的情形。",
+          "所以：金額大、對象不熟時，<b>選慢的那條，不要選 PayID</b>。慢的那條就是你的後悔期。"
+        ]
+      },
+      /* 群裡的「幫忙帶錢回台灣」「面交大額現金」是這條的正面撞擊 */
+      cash: "帶現金進出澳洲，只要<b>等值 A$10,000 以上（含外幣）就必須向海關申報</b>，不申報是刑事犯罪。<b>刻意拆成好幾筆或找人分開帶＝structuring，本身就是獨立的罪</b>，而且是「幫忙的人」一起被辦。群裡的「有人要回台灣嗎？可以幫我帶一點嗎」，就是這一條。"
+    },
+    flags: [
+      "要你先轉，理由是「我這邊網銀有限額」「我在上班不方便」。",
+      "傳來一張「已完成轉帳」的截圖或收據郵件，但你自己的帳戶沒有入帳。<b>憑證可以偽造，成本是零</b>——只信你自己登入看到的餘額。",
+      "收款帳戶的戶名跟對方名字不一樣。",
+      "要你拆成好幾筆、轉到不同的帳戶或不同的 PayID。",
+      "匯率明顯比銀行和匯款商都好很多。",
+      "限時：「十分鐘內要匯完，不然我找別人」。",
+      "剛加入群組沒多久、沒有任何過往互動紀錄，就開始談大額換匯。",
+      "要求改用其他通訊軟體私下談。",
+      "「借你的帳戶收一筆錢，再轉出去，給你抽成」——這叫 money mule（人頭帳戶）。<b>在澳洲是刑事犯罪</b>，判刑範圍自 12 個月到無期徒刑，帳戶也會被銀行關掉。答應的人是你，被起訴的也是你。"
+    ],
+    src: [
+      {t:"WA ScamNet（西澳消費者保護）", u:"https://www.scamnet.wa.gov.au/", as:"2026-08-15", v:true},
+      {t:"Scamwatch — 買賣詐騙的官方警訊清單", u:"https://www.scamwatch.gov.au/types-of-scams/buying-or-selling", as:"2026-08-15", v:true},
+      {t:"AUSTRAC — 匯款業者公開名冊（自己查得到）", u:"https://online.apps.austrac.gov.au/rsr", as:"2026-08-15", v:true},
+      {t:"MoneySmart — 匯錢到海外：正規管道與比較項目", u:"https://moneysmart.gov.au/banking/sending-money-overseas", as:"2026-08-15", v:true},
+      {t:"AFP — money mule（人頭帳戶）是刑事犯罪", u:"https://www.afp.gov.au/news-centre/feature/be-alert", as:"2026-08-15", v:true},
+      {t:"澳洲銀行公會 — Confirmation of Payee", u:"https://www.ausbanking.org.au/scam-safe-accord/confirmation-of-payee/", as:"2026-08-15", v:true},
+      {t:"WA ScamNet — 假付款收據", u:"https://www.scamnet.wa.gov.au/scamnet/Scam_types-Buying_or_selling-Classified_scams-Fake_PayPal_receipt.htm", as:"2026-08-15", v:true},
+      /* Rule of Law Institute 是民間智庫，不是官方。v 的定義是「打開官方頁面確認過」，
+         所以這一條只能是 false——它的內容看起來對，但沒有官方頁面替它背書。 */
+      {t:"2021 誹謗法改革：西澳與北領地未採納（Rule of Law Institute，民間智庫，非官方來源）", u:"https://www.ruleoflaw.org.au/civil/defamation/2021-law-reform/", as:"2026-08-15", v:false},
+      {t:"RBA — NPP 的清算是 final and irrevocable", u:"https://www.rba.gov.au/publications/bulletin/2018/sep/the-new-payments-platform-and-fast-settlement-service.html", as:"2026-08-15", v:true},
+      {t:"AUSTRAC — 帶錢進出澳洲：A$10,000 申報與 structuring", u:"https://www.austrac.gov.au/general-public/moving-money-overseas", as:"2026-08-15", v:true},
+      {t:"AUSTRAC — 未申報最重 2 年徒刑或 500 penalty units", u:"https://www.austrac.gov.au/business/how-comply-guidance-and-resources/reporting/money-brought-or-out-australia-cbm", as:"2026-08-15", v:true}
+    ]
+  },
+
+  /* ---------------- 已經轉出去了 ---------------- */
+  after: {
+    steps: [
+      {w:"第一件事", t:"打電話給你的銀行，說 “I've been scammed, please stop or recall this payment.”",
+       d:'官方一致的第一步就是這個，不是報警。<b>用電話，不要用線上表單</b>——表單會排隊，而排隊的時候錢正在被領走。各行 24 小時通報專線在下面。'},
+      {w:"同一通電話裡", t:"要求對方把這件事開成正式申訴（complaint），並跟你要一個案件編號",
+       d:"沒有編號，後面每一關都要從頭講一次。編號也是之後送 AFCA 的前提。"},
+      {w:"掛掉電話後", t:"保留全部證據，先截圖再說",
+       d:"對話紀錄、對方的帳號與戶名、轉帳明細、對方傳來的任何憑證，全部截圖並備份到雲端。<b>不要先封鎖對方、不要先刪訊息</b>——那些是你唯一的證據。"},
+      {w:"當天", t:"上 ReportCyber 線上報案（這才是對警方的正式報案）",
+       d:'<a href="https://www.cyber.gov.au/report-and-recover/report" target="_blank" rel="noopener">cyber.gov.au/report-and-recover/report</a>。會產生報案編號，銀行與申訴都用得到。WA 政府與 WA Police 的官方分流就是指到這裡。'},
+      {w:"當天", t:"向 WA ScamNet 通報（這是情資通報，跟報案是兩件事）",
+       d:'西澳消費者保護專線 <a href="tel:1300304054">1300 30 40 54</a>。金額小也要報——通報會進統計、可能觸發調查，也可能讓下一個人在你之前收到警示。'},
+      {w:"如果你給過證件", t:"聯絡 IDCARE，對個人免費",
+       d:'護照掃描檔、駕照、住址被對方拿走的話，風險不會停在這一筆。全國專線 <a href="tel:1800595160">1800 595 160</a>／WA 專線 <a href="tel:0870787741">08 7078 7741</a>。<b>官方標示的 07:00–19:00 是東部時間，換算 Perth 是 05:00–17:00</b>（東部日光節約時間期間再提前一小時）。'},
+      {w:"銀行不處理時", t:"先走銀行的內部申訴（IDR），再送 AFCA",
+       d:'順序不能跳。先給銀行機會處理；沒在合理時間內回覆、或你不接受結果，才送 AFCA。AFCA 對消費者免費，<a href="tel:1800931678">1800 931 678</a>（<b>墨爾本時間 09:00–17:00 ＝ Perth 07:00–15:00；墨爾本日光節約時間期間提前一小時＝ Perth 06:00–14:00</b>）。<b>但先看清楚 AFCA 現在能判什麼</b>：目前它只能判銀行有沒有違反它<b>既有的</b>義務，不是判「你被騙了銀行要不要賠」——後者要到 2027-03-31 才開始。'},
+      {w:"永遠不要做", t:"不要接受任何「我可以幫你把錢追回來」的提議",
+       d:"Scamwatch 明文：詐騙者會回頭找已經被騙過的人，再騙一次。<b>所有主動找上門、收費或抽成的追款服務，一律當作第二次詐騙。</b>"},
+      {w:"永遠不要做", t:"不要在群組公開指名對方",
+       d:"你人在西澳。西澳與北領地是全澳洲唯二沒有採納 2021 年誹謗法改革的司法管轄區，沒有「重大損害門檻」，也沒有法定的公共利益抗辯。要提醒別人，<b>講手法，不要講人</b>。"}
+    ],
+    banks: [
+      {t:"CommBank（CBA）", n:"13 2221", d:"官方標示 24 小時。這是四大行裡唯一明確寫 24/7 的一支。", v:true},
+      {t:"NAB", n:"13 22 65", d:"官方標示 24/7 fraud support；海外 +61 3 8641 9083；可疑簡訊轉寄 0476 220 003；商業客戶 13 10 12。", v:true},
+      {t:"ANZ 網路銀行詐騙", n:"13 33 50", d:"海外 +61 3 9683 8833。官方頁只保證 App 內訊息 24 小時，<b>沒有</b>說電話線 24 小時。", v:true},
+      {t:"ANZ 金融卡與信用卡", n:"13 22 73", d:"海外 +61 3 9683 9999。", v:true},
+      {t:"Westpac 詐騙專線", n:"1300 364 294", d:"海外 +61 2 9155 7777。<b>不是 24 小時</b>——雪梨時間週一至週五 08:00–20:00，換算 Perth 是 06:00–18:00（雪梨日光節約時間期間提前一小時＝05:00–17:00）。可疑簡訊轉寄 0497 132 032，可疑信件寄 hoax@westpac.com.au。", v:true},
+      {t:"澳洲網路安全熱線", n:"1300 292 371", d:"24 小時，1300 CYBER1。", v:true},
+      {t:"WA Police（非緊急）", n:"131 444", d:"生命有立即危險請撥 000。", v:true}
+    ],
+    /* 電話打不通時的第一動作。西澳的週末＋東部時間的營業時段＝這一格會救到人。 */
+    offhours: {
+      lead: "<b>如果現在是週末或半夜，而你的銀行專線不是 24 小時：不要坐著等開門。</b>先在 App 裡自己動手，這幾件事不需要打電話：",
+      items: [
+        "<b>凍結卡片</b>（App 裡通常叫 Lock card / Freeze card）——可以自己解，不是註銷，做錯了損失是零。",
+        "把網路銀行的<b>轉帳額度調到最低</b>，或直接關掉 PayID 付款。",
+        "在 App 內的訊息／回報功能留下紀錄，<b>時間戳會證明你是第幾分鐘發現的</b>。這在之後爭執「你有沒有及時通報」時是唯一的客觀證據。",
+        "同一時間把證據存好（下面那張清單），等專線開門時一次講完，不要邊講邊找。"
+      ]
+    },
+    /* 轉帳前後五分鐘的證據。事後補不回來的都在這裡。 */
+    evidence: [
+      "轉帳收據或明細截圖，<b>要看得到時間</b>（含分鐘）。",
+      "對方的 PayID／BSB／帳號，以及轉帳畫面上<b>系統顯示出來的戶名</b>——那個戶名是銀行給的，不是對方講的。",
+      "整段對話的<b>匯出檔，不是截圖</b>。LINE 可以匯出純文字紀錄；截圖會漏掉被收回的訊息與時間軸。",
+      "貼文網址，並馬上丟一次網頁存檔（web.archive.org）。對方刪文只要三秒。",
+      "如果轉帳時出現過 Confirmation of Payee 的比對結果（Match／Close match／No match），<b>那個畫面要留</b>。",
+      "ReportCyber 的報案編號——拿到後<b>要回頭給銀行</b>，那是銀行內部升級處理的依據。"
+    ],
+    /* 換匯詐騙有一半的錢根本不在澳洲。澳洲這邊做到死也凍不到台灣的帳戶。 */
+    taiwan: {
+      lead: "<b>先分清楚錢是從哪個帳戶出去的——這決定你該打去哪一國。</b>",
+      split: [
+        {k:"從澳洲帳戶轉出（AUD）", v:"走上面那一整套：澳洲的銀行 → ReportCyber → WA ScamNet。台灣這邊幫不上忙。"},
+        {k:"從台灣帳戶轉出（TWD）", v:"<b>只有台灣這一邊凍得住。</b>澳洲的銀行、澳洲的警察，對台灣的帳戶沒有任何權限——先打台灣，不要先打澳洲。"}
+      ],
+      items: [
+        "<b>時差是零。</b>西澳和台灣都是 UTC+8，台灣的銀行客服和警察現在就在上班——不必等到明天，也不必算時間。這是你在澳洲被騙時<b>唯一</b>比在歐美好的地方。",
+        "<b>先打你自己的台灣銀行客服</b>（號碼在卡片背面與官網，都有 +886 開頭的境外號碼），要求「通報疑似詐騙、對受款帳戶通報警示」。銀行端的圈存是以小時計的，慢一天通常就沒了。",
+        "165 是<b>三碼短碼，官方沒有公布境外撥打的號碼</b>。人在澳洲請走 <a href=\"https://165.npa.gov.tw\" target=\"_blank\" rel=\"noopener\">165.npa.gov.tw</a> 的線上報案，或請台灣的家人代撥 165。",
+        "台灣的流程是：報案／165 通報 → 警方通知金融機構將對方列為<b>警示帳戶</b> → 若款項已再轉出，由銀行通報後手銀行圈存。<b>整條鏈都是從你那一通電話開始的</b>，你不打，沒有人會替你啟動。"
+      ]
+    },
+    /* 被凍的是你自己的帳戶時。對打工度假的人這是連鎖災難：薪水進不來、房租繳不了。 */
+    frozen: {
+      lead: "<b>如果被凍結的是你自己的帳戶</b>（你收了一筆來路不明的錢、或替人代收代轉）：",
+      items: [
+        "這在澳洲通常是 AML/CTF 的合規凍結，不是懲罰，但<b>它不會自己解開</b>，而且期間薪水進不來、房租扣不掉。",
+        "帶<b>護照、簽證證明、雇主的僱用契約或 payslip</b>親自跑一趟分行——電話客服解不了這件事。",
+        "要求對方<b>書面說明理由</b>，並當場開一件正式申訴（IDR），拿到申訴編號。",
+        "同時去開一個<b>別家銀行</b>的帳戶並通知雇主改匯，不要把薪水押在同一個被凍的帳戶上等結果。",
+        "「借帳戶收一筆錢再轉出去，給你抽成」——這不只是帳戶被關。<b>它會同時撞到簽證的品格條款，第二簽第三簽直接沒了。</b>"
+      ]
+    },
+    /* 這一段是為了不讓人抱著錯誤期待去打那通電話 */
+    truth: [
+      "MoneySmart 官方原文：<b>錢一旦轉給詐騙者，幾乎不可能拿回來。</b>這不是為了讓你放棄，是為了讓你不要在追款上再被騙第二次。",
+      "銀行的「誤轉帳」救濟<b>救不了你</b>。ePayments Code 條文明講，那套機制是給打錯帳號用的，「不涵蓋因詐騙而轉出款項的情形」。而且它是<b>自願性規範</b>，只有簽署的機構受拘束。",
+      "WA 政府原文：警方調查詐騙的重點<b>不是幫被害人追回款項</b>，而且不是每一件都會被調查。這不代表不用報——報案編號是你後面每一關的入場券。",
+      "澳洲目前<b>沒有</b>強制銀行賠付詐騙損失的制度。Scams Prevention Framework 已於 2025-02-20 立法，但多數義務要到 2027-03-31 才適用；AFCA 也要到那時才受理詐騙申訴。<b>在那之前，防線只有你自己。</b>"
+    ],
+    consular: {
+      lead: "西澳歸<b>駐澳大利亞代表處（坎培拉）</b>領務轄區，不是雪梨、也不是墨爾本。",
+      items: [
+        {t:"駐澳大利亞代表處 24 小時急難救助專線", n:"0412 967 539", d:"自澳洲境內撥；海外 +61-412-967-539"},
+        {t:"領務組（上班時間）", n:"+61 2 6120 1030", d:"週一至週五 09:00–17:00（坎培拉時間），領務受理 09:00–12:00、14:00–16:00"},
+        {t:"旅外國人急難救助全球免付費專線", n:"800-0885-0885", dial:"0011 800 0885 0885", d:"自澳洲撥：先撥 0011，再撥 800-0885-0885。<b>這一列的連結已經幫你加上 0011</b>——直接撥 800 開頭在澳洲不會通。"}
+      ],
+      note: "急難救助專線處理的是人身安全、意外、遭拘留等狀況。<b>單純的財務損失請走銀行與 ReportCyber</b>，代表處無法代為追款。"
+    },
+    src: [
+      {t:"WA 政府 — 詐騙該報去哪（官方分流）", u:"https://www.wa.gov.au/service/security/law-enforcement/report-fraud", as:"2026-08-15", v:true},
+      {t:"Scamwatch — 被騙之後怎麼辦", u:"https://www.scamwatch.gov.au/stop-check-protect/what-to-do-if-youve-been-scammed", as:"2026-08-15", v:true},
+      {t:"ReportCyber — 線上報案", u:"https://www.cyber.gov.au/report-and-recover/report", as:"2026-08-15", v:true},
+      {t:"WA ScamNet — 給受害者的協助", u:"https://www.scamnet.wa.gov.au/scamnet/Help_and_support-Help_for_scam_victims.htm", as:"2026-08-15", v:true},
+      {t:"IDCARE — 身分與網路支援（對個人免費）", u:"https://www.idcare.org/contact", as:"2026-08-15", v:true},
+      {t:"Scamwatch — 追款詐騙（第二次詐騙）", u:"https://www.scamwatch.gov.au/types-of-scams/money-recovery-scams", as:"2026-08-15", v:true},
+      {t:"ASIC — 金融申訴要先走 IDR 再送 AFCA", u:"https://www.asic.gov.au/about-asic/contact-us/reporting-misconduct-to-asic/disputes-with-financial-firms", as:"2026-08-15", v:true},
+      {t:"ASIC — ePayments Code 是自願性規範", u:"https://www.asic.gov.au/regulatory-resources/financial-services/epayments-code/", as:"2026-08-15", v:true},
+      {t:"ePayments Code 全文（誤轉帳定義不含詐騙）", u:"https://download.asic.gov.au/media/lloeicwb/epayments-code-published-02-june-2022.pdf", as:"2022-06-02", v:true},
+      {t:"ACCC — Scams Prevention Framework 生效時程", u:"https://www.accc.gov.au/about-us/scams-prevention-framework", as:"2026-08-15", v:true},
+      {t:"MoneySmart — 被騙之後", u:"https://moneysmart.gov.au/check-and-report-scams/what-to-do-if-youve-been-scammed", as:"2026-08-15", v:true},
+      {t:"駐澳大利亞代表處（轄區含西澳）", u:"https://www.roc-taiwan.org/au/post/42.html", as:"2026-08-15", v:true},
+      {t:"外交部 — 旅外國人急難救助專線", u:"https://www.boca.gov.tw/cp-56-2523-8636d-1.html", as:"2026-08-15", v:true},
+      {t:"警政署 — 165 專線費用與線上報案（未公布境外撥打號碼）", u:"https://www.npa.gov.tw/ch/app/faq/view?module=faq&id=2144&serno=A1078837", as:"2026-08-15", v:true},
+      {t:"165 全民防騙網 — 線上報案", u:"https://165.npa.gov.tw/", as:"2026-08-15", v:true},
+      {t:"金管會銀行局 — 警示帳戶聯防機制與詐騙款項返還", u:"https://law.banking.gov.tw/Chi/GetLawFile.ashx?FileID=0000242483", as:"2026-08-15", v:false},
+      {t:"ANZ — 詐騙與盜刷通報專線", u:"https://www.anz.com.au/security/report-fraud/", as:"2026-08-15", v:true},
+      {t:"Westpac — 詐騙通報專線與時段", u:"https://www.westpac.com.au/security/report-fraud/", as:"2026-08-15", v:true},
+      {t:"NAB — 詐騙通報專線", u:"https://www.nab.com.au/about-us/security/how-to-report-fraud", as:"2026-08-15", v:true},
+      {t:"CommBank — 詐騙與盜刷通報", u:"https://www.commbank.com.au/support/security/report-fraud.html", as:"2026-08-15", v:true},
+      {t:"AFCA — 聯絡方式與消費者專線 1800 931 678（頁面擋 bot，號碼與時段由站內搜尋取得，未逐字核對）", u:"https://www.afca.org.au/about-afca/contact-us", as:"2026-08-16", v:false}
+    ]
+  },
+
+  /* ---------------- 落地 ---------------- */
+  landing: {
+    gate: [
+      {t:"【第 1 天】線上申請 TFN（稅號）", s:"ATO 官網申請，費用 A$0，不必寄任何文件。人必須已經在澳洲境內才能申請。28 天內郵寄到你填的澳洲地址——所以要先有一個收得到信的地址。<b>28 天內不要重複申請，會更慢。</b>"},
+      {t:"【第 1 天】開澳洲銀行帳戶", s:"雇主只匯澳洲帳戶。挑選重點：無月費、ATM 費用、國際匯款手續費。開戶一定會查證件——那是 AML/CTF 法規要求，不是刁難你。"},
+      {t:"【第 1 天】辦手機門號", s:"預付卡也一樣要查證件（姓名、生日、住址），護照可用，這是 ACMA 的法定要求。<b>要去農場的話，先查那個地區哪家電信商有訊號。</b>"},
+      {t:"【第 1 週】買醫療保險", s:"台灣<b>不在</b>澳洲互惠醫療協定的 11 國名單內，Medicare 不適用於你，也沒有 bulk billing。沒保險進一次急診就是四位數起跳（見下方費率）。"},
+      {t:"【上工前】把 TFN 交給雇主，並問一句「你有沒有向 ATO 註冊為 WHM 雇主？」", s:"沒給 TFN → 全額扣 45%。有 TFN 但雇主沒註冊 → 從第一塊錢扣 30%。有 TFN 且雇主有註冊 → 前 A$45,000 只扣 15%。<b>這一句話的價差是你薪水的 15–30%。</b>"},
+      {t:"【上工前】填 super choice form，或確認雇主用的是你既有的基金", s:"沒交表，雇主會向 ATO 查你的 stapled fund（跟著你走的既有基金）並匯進去。<b>2026-07-01 起實施 Payday Super：每次發薪就要付，且須在 7 個工作天內到帳。</b>沒到帳就是欠你。"},
+      {t:"【第 1 個月】自己記每一天的工時", s:"自己記，不要只信雇主的系統。這是之後追討欠薪唯一能用的東西。同時每期都要拿到 payslip——雇主須在發薪後 1 個工作天內給。"}
+    ],
+    unlocked: "行政的部分辦完了。接下來把重點放在工時紀錄和 payslip——那才是之後真的會用到的。",
+    /* 一眼可見的數字。全部來自 ATO 現行稅表。 */
+    numbers: [
+      {k:"沒給雇主 TFN", v:"扣 45%", n:"就全部給付金額扣繳，不分級距。", bad:true},
+      {k:"有 TFN，雇主沒向 ATO 註冊為 WHM 雇主", v:"扣 30%", n:"用外國居民稅率，從第一塊錢起。", bad:true},
+      {k:"有 TFN，雇主有註冊", v:"扣 15%", n:"前 A$45,000；A$45,001–135,000 為 30%。"},
+      {k:"雇主退休金提撥率", v:"12%", n:"2026-07-01 起改為每次發薪就付，7 個工作天內到帳。"},
+      {k:"離境後領回退休金（DASP）", v:"課 65%", n:"打工度假者專屬稅率，遠高於一般臨時居民的 35%。線上申請免費。", bad:true}
+    ],
+    /* 沒有 Medicare 的實際價目。這是勸人買保險唯一有效的方式。 */
+    health: {
+      lead: "WA 公立醫院對沒有 Medicare 的人收全額。以下是 <b>2026-07-01 起生效</b>的現行費率，單位澳幣：",
+      fees: [
+        {k:"急診 Triage 1（最緊急）", v:"$2,655"},
+        {k:"急診 Triage 2", v:"$1,630"},
+        {k:"急診 Triage 3", v:"$1,180"},
+        {k:"急診 Triage 4", v:"$775"},
+        {k:"急診 Triage 5（最輕）", v:"$524"},
+        {k:"門診（每次就診）", v:"$397"},
+        {k:"住院・過夜（每日）", v:"$3,417"},
+        {k:"住院・當日出院", v:"$3,258"}
+      ],
+      tips: [
+        "非緊急狀況<b>先看 GP</b>（家庭醫師，預約制），比急診便宜非常多。澳洲是 GP 守門人制，專科要由 GP 轉診。",
+        '找最近的 GP：healthdirect <a href="tel:1800022222">1800 022 222</a>。真正的緊急狀況才撥 000。',
+        "醫院可以在治療前要求你<b>預先付款</b>，金額按預估天數估算。就算有保險，仍可能有自付差額。",
+        "<b>在西澳，救護車不是免費的。</b>西澳的救護服務由 St John WA 經營，採<b>使用者付費</b>——州政府補貼的是費率，不是幫你付。減免只給 65 歲以上的西澳居民與偏遠地區的 CABF 會員，你兩者都不是。買保險時<b>要確認裡面含 ambulance cover</b>，這一項常常被單獨排除。",
+        "<b>你可能會被收你根本用不到的 Medicare levy（2%）。</b>如果你在報稅時被認定為稅務居民，系統會預設你要繳這 2%——但你沒有 Medicare。要免掉它，得先向 Services Australia 申請 <b>Medicare Entitlement Statement（MES）</b>，證明你當年度沒有 Medicare 資格，報稅時填在「豁免類別 3」。<b>MES 最久要等 8 週，而且每一個年度都要重新申請一次</b>——所以人還在澳洲、還收得到信的時候就去辦。",
+        '英文不夠用時撥 <b>TIS National <a href="tel:131450">131 450</a></b>：內政部的官方電話口譯，24 小時、150 種以上語言。<b>但「免費」是有條件的，而且條件剛好卡到你</b>——見下一條。',
+        '<b>TIS 的免費口譯，對台灣打工度假者在私人 GP 診所是不成立的。</b>官方頁面原文寫得很清楚：私人醫師使用 Free Interpreting Service 的前提，是替「具 Medicare 資格的人」提供「可申請 Medicare 給付的服務」。你兩個條件都不符合，所以<b>診所可以合法地拒絕替你叫免費口譯</b>。<br>還是可以用的場合：<b>政府機關</b>（撥去 ATO、Services Australia、Fair Work 時，費用由對方吸收）、<b>藥局</b>、<b>工會</b>、<b>房仲與地方政府</b>。<b>公立醫院</b>走的是州政府自己的口譯安排，不是 TIS 這一套——到現場直接說「I need an interpreter, Mandarin」，那是醫院的責任。真的沒有別的路時，也可以自己在 TIS 開個人帳戶自費。'
+      ]
+    },
+    /* 群裡每個月都會吵一次的三件事 */
+    myths: [
+      {m:"「台灣駕照只能開 3 個月，之後要換澳洲駕照。」", r:"錯，那條規定的對象是澳洲公民與永久居民。",
+       d:"Transport WA 官方 FAQ 明文：以觀光、就學或<b>臨時工作</b>身分來 WA 的訪客，不需要換 WA 駕照，只要海外駕照現行有效就可以一直開。打工度假屬於這一類。但駕照必須隨身攜帶，且不能過期。"},
+      {m:"「住滿半年就算稅務居民，可以用 18,200 免稅額退一大筆。」", r:"對台灣人不成立。這是中文社群裡被轉最多次的錯誤建議。",
+       d:"要適用居民稅率，<b>兩個條件必須同時成立</b>：①你是稅務居民，而且②你的國籍屬於稅務協定含「非歧視條款（NDA）」的國家。ATO 列出的 NDA 名單只有八個：Chile、Finland、Germany、Israel、Japan、Norway、Turkey、United Kingdom。<b>台灣不在名單上</b>，所以就算你被認定為稅務居民，前 A$45,000 仍然是 15%，沒有免稅額。那個「英國人打贏官司拿回退稅」的案子（Addy v Commissioner of Taxation）靠的正是英澳協定的 NDA 條款——台灣人套用不了。"},
+      {m:"「找人代辦 TFN 比較快。」", r:"錯，TFN 線上申請免費，而且代辦不會比較快。",
+       d:"任何人向你收費代辦 TFN 都是在騙你。核發時間一律是收到完整申請起 28 天內。"},
+      {m:"「以後真的要換 WA 駕照，反正台灣人免試。」", r:"已經不是了。",
+       d:"Austroads 的 Experienced Driver Recognition 類別已於 2025-04-30 終止，自 2025-11-01 起 WA 不再有此類別。台灣原本在那 16 個免試國家／地區名單內。現在要轉換，須通過筆試與路考（PDA），且非全英文的駕照要附認可翻譯。"}
+    ],
+    /* 這一段的每一件事，上飛機之後就做不到了。放在落地頁是故意的——要在還來得及的時候看到。 */
+    leaving: {
+      lead: "<b>下面這幾件事，一離境就變得非常難、甚至不可能。</b>寫在這裡不是催你走，是因為它們全部要在你人還在澳洲、還有澳洲門號和收得到信的地址時處理。",
+      items: [
+        {k:"不要關掉澳洲銀行帳戶", v:"ATO 自己的 DASP 頁面就寫著要保留。退休金退款（DASP）、報稅退稅、雇主補發的欠薪，全部只會匯進澳洲帳戶。帳戶關了，錢就卡在半空中。"},
+        {k:"myGov 開好並連結 ATO", v:"人在澳洲、還收得到簡訊驗證碼的時候辦。離境後手機號碼一停，兩階段驗證就過不去，之後每一步都要走人工。"},
+        {k:"報稅：截止日是 10 月 31 日", v:"財政年度 7/1–6/30。<b>2026-10-31 是星期六，依 ATO 的順延規則，2025–26 年度自行報稅實際順延到 2026-11-02（星期一）。</b>逾期又有應補稅款的話，繳款期限是 11 月 21 日，之後開始計息。"},
+        {k:"Medicare Entitlement Statement 先申請", v:"最久要等 8 週。這是免掉 2% Medicare levy 的唯一憑據，人不在澳洲時補辦會非常麻煩。"},
+        {k:"DASP 要等簽證失效且人已離境才能申請", v:"線上申請免費，不要找人代辦。WHM 的稅率是 65%，比一般臨時居民的 35% 高——這個數字沒得談，先知道才不會被「幫你退到八成」的廣告騙。"},
+        {k:"車要處理掉", v:"沒過戶或沒退牌照的話，罰單會一直寄給你，而且退牌照與退未用完的牌照費<b>都不能在離境後辦</b>。細節在 /car。"},
+        {k:"最後一份 payslip 與工時紀錄自己留一份", v:"雇主的系統你登出之後就進不去了。追欠薪唯一能用的東西就是這些。"}
+      ]
+    },
+    flags: [
+      "有人說可以「幫你辦 TFN」並收費——TFN 是免費的，自己線上申請就好。",
+      "有人叫你「借用」或「共用」別人的 TFN 或 ABN。這是稅務詐欺，被抓的是你。",
+      "雇主說「你先做，TFN 之後再補」，然後一直不補——那段期間你會被扣 45%。",
+      "雇主答不出「有沒有向 ATO 註冊為 WHM 雇主」。答不出來，多半就是沒有。",
+      "仲介收「工作媒合費」才給你工作機會。",
+      "薪水裡從來沒出現過 super，或 payslip 上沒有基金名稱與提撥金額——兩者都是 payslip 的法定必載項目。"
+    ],
+    src: [
+      {t:"ATO — 外國護照持有人申請 TFN（免費）", u:"https://www.ato.gov.au/individuals-and-families/tax-file-number/apply-for-a-tfn/foreign-passport-holders-permanent-migrants-and-temporary-visitors-tfn-application", as:"2026-06-22", v:true},
+      {t:"ATO — Schedule 15：打工度假者稅表（含未給 TFN 的 45%）", u:"https://www.ato.gov.au/tax-rates-and-codes/schedule-15-tax-table-for-working-holiday-makers", as:"2026-07-01", v:true},
+      {t:"ATO — 打工度假者稅務總覽（雇主未註冊＝30%）", u:"https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/coming-to-australia/working-holiday-makers", as:"2026-06-03", v:true},
+      {t:"ATO — Payday Super（2026-07-01 起）", u:"https://www.ato.gov.au/businesses-and-organisations/super-for-employers/payday-super/about-payday-super", as:"2026-07-01", v:true},
+      {t:"ATO — 離境退還退休金 DASP（WHM 稅率 65%）", u:"https://www.ato.gov.au/individuals-and-families/super-for-individuals-and-families/super/temporary-residents-and-superannuation/departing-australia-superannuation-payment-dasp", as:"2026-04-21", v:true},
+      {t:"Services Australia — 互惠醫療協定的 11 國名單（無台灣）", u:"https://www.servicesaustralia.gov.au/about-reciprocal-health-care-agreements", as:"2026-08-15", v:true},
+      {t:"WA Health — 費率手冊（Medicare ineligible 急診與住院）", u:"https://www.health.wa.gov.au/~/media/Corp/Documents/Reports-and-publications/Fees-and-charges/WA-Health-Fees-and-Charges-Manual.pdf", as:"2026-07-01", v:true},
+      {t:"South Metropolitan Health — 海外訪客的就醫費用與 GP 建議", u:"https://smhs.health.wa.gov.au/Our-care/Hospital-treatment-costs-for-overseas-visitors-and-students", as:"2026-08-15", v:true},
+      {t:"TIS National — 電話口譯 131 450（24 小時）", u:"https://www.tisnational.gov.au/en/Our-services/Language-services/Phone-interpreting", as:"2026-08-15", v:true},
+      {t:"TIS National — 私人醫師的免費口譯以病人具 Medicare 資格為前提", u:"https://www.tisnational.gov.au/Our-services/Free-Interpreting-Service/Eligible-groups/Private-medical-practitioners", as:"2026-08-15", v:true},
+      {t:"Transport WA — 海外駕照：訪客不必換照", u:"https://www.transport.wa.gov.au/licensing/drivers-licence/visit-move-wa/moving-from-overseas", as:"2026-03-03", v:true},
+      {t:"WA 政府公告 — 海外駕照免試認可制度變更", u:"https://www.wa.gov.au/government/announcements/changes-the-recognition-of-overseas-drivers-licences-coming-wa-residents", as:"2026-03-06", v:true},
+      {t:"ACMA — 預付卡門號的身分查核要求", u:"https://www.acma.gov.au/id-checks-prepaid-mobiles", as:"2026-08-15", v:true},
+      {t:"基礎建設部 — 沒有任何電信商訊號時打不通 000", u:"https://www.infrastructure.gov.au/media-communications/phone/triple-zero/how-call-triple-zero-000", as:"2026-08-15", v:true},
+      {t:"MoneySmart — 怎麼挑交易帳戶", u:"https://moneysmart.gov.au/banking/transaction-accounts-and-debit-cards", as:"2026-07-30", v:true},
+      {t:"ATO — NDA 國家的稅務居民 WHM 才適用居民稅率（台灣不在名單）", u:"https://www.ato.gov.au/individuals-and-families/coming-to-australia-or-going-overseas/coming-to-australia/taxation-of-australian-resident-whms-from-nda-countries", as:"2026-08-15", v:true},
+      {t:"ATO — 報稅截止日 10 月 31 日；遇假日順延至下一個工作日", u:"https://www.ato.gov.au/individuals-and-families/your-tax-return/lodging-your-tax-return/due-dates-for-lodging-and-paying", as:"2026-08-15", v:false},
+      {t:"Services Australia — Medicare Entitlement Statement（最久 8 週）", u:"https://www.servicesaustralia.gov.au/medicare-entitlement-statement", as:"2026-08-15", v:true},
+      {t:"ATO — 沒有 Medicare 資格者的 Medicare levy 豁免", u:"https://www.ato.gov.au/individuals-and-families/medicare-and-private-health-insurance/medicare-levy/medicare-levy-exemption/not-entitled-to-medicare-benefits", as:"2026-08-15", v:true},
+      {t:"St John WA — 救護車採使用者付費", u:"https://www.stjohnwa.com.au/ambulance-and-health-services/metro-ambulance-service/metro-ambulance-fees", as:"2026-08-15", v:true},
+      {t:"healthdirect — 全國健康諮詢專線 1800 022 222（24 小時，護理師接聽）", u:"https://www.healthdirect.gov.au/contact-us", as:"2026-08-16", v:true}
+    ]
+  },
+
+  /* ---------------- 可轉發的圖卡 ----------------
+     在 LINE 裡連結多半沒人點，圖才會被轉。所以圖上必須自己講完一件事，
+     不能只是「詳見網站」。文字一律純文字——canvas 不吃標籤。 */
+  cards: [
+    {
+      id:"fx", tab:"換匯", accent:"#F4998C",
+      title:["轉出去之前","先看這 6 條"],
+      eyebrow:"只有詐騙才會要求的事",
+      items:[
+        "要你先轉，理由是「網銀有限額」「我在上班不方便」",
+        "傳來「已完成轉帳」的截圖，但你的帳戶沒有入帳",
+        "收款帳戶的戶名，跟你在講話的那個人不同名",
+        "要你拆成好幾筆，轉到不同帳戶或不同 PayID",
+        "匯率好得不合理，而且限你十分鐘內決定",
+        "「借你帳戶收錢再轉出，給你抽成」＝人頭帳戶，在澳洲是刑事犯罪"
+      ],
+      foot:{ h:"已經轉出去了？第一件事是打給銀行", s:"不是報警，也不是回群組罵人。越快聯絡，錢還在的機會越大。" }
+    },
+    {
+      id:"bond", tab:"押金", accent:"#F4998C",
+      title:["付押金之前","先看這 6 條"],
+      eyebrow:"西澳法規明文禁止的事",
+      items:[
+        "「先付訂金我才帶你看房」「屋主人在海外，鑰匙用寄的」",
+        "押金超過 4 週租金（週租 A$1,200 以下）——官方明文：這是刑事犯罪",
+        "預付租金超過 2 週，或冒出「保留費」「看房費」「鑰匙費」",
+        "二房東說「押金我自己保管，不會送 Bonds Administration」",
+        "叫你在空白的 Property Condition Report 上先簽名",
+        "推銷「免押金入住」「押金保險」——在西澳明文違法"
+      ],
+      foot:{ h:"押金拿不拿得回來，看你的法律身分", s:"不是看你有沒有簽約。看的是他住不住在這裡、有沒有供餐、你的房間能不能上鎖。" }
+    },
+    {
+      id:"ask", tab:"出門前", accent:"#E5B767",
+      title:["出門前","先問這一句"],
+      eyebrow:"白跑一趟的原因幾乎都不是被騙",
+      items:[
+        "「嗨，請問這則還在嗎？我今天 __ 點可以到。」",
+        "沒有回覆 ＝ 當作沒有。不要「應該還在吧」就出門",
+        "貼文超過 12 小時 ＝ 一定要先私訊確認再走",
+        "對方回「還在」但講不出地址或時間 ＝ 也當作沒有"
+      ],
+      foot:{ h:"群裡的貼文沒有「已徵到」按鈕", s:"找到人的那一方沒有動機回來說一聲。所以預設是失效，不是有效。" }
+    }
+  ]
+};
+
+/* ==========================================================================
+   render
+   ========================================================================== */
+const $ = s => document.querySelector(s);
+const el = (t,c,h) => { const n=document.createElement(t); if(c)n.className=c; if(h!=null)n.innerHTML=h; return n; };
+const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SITE = location.origin && location.origin !== "null" ? location.origin + location.pathname : "";
+
+$("#asof").textContent = DATA.asOf;
+
+/* ---- 紅旗 ---- */
+/* 紅旗清單的內容是自己寫的，允許用 <b> 標重點 */
+/* ---- 時薪 ---- */
+(function(){
+  const W = DATA.wage;
+  /* 以下字串都是自己寫的 HTML，允許 <b>，所以不 escape */
+  const html = (sel, s) => { const n=$(sel); if(n) n.innerHTML = s; };
+  const li = (sel, arr) => { const u=$(sel); if(u) arr.forEach(x=>u.appendChild(el("li",null,x))); };
+  const cards = (sel, list) => {
+    const w = $(sel); if(!w) return;
+    list.forEach(x=>{
+      const d = el("div","split");
+      d.appendChild(el("b", null, esc(x.k)));
+      d.appendChild(el("p", null, x.v));
+      w.appendChild(d);
+    });
+  };
+
+  html("#syslead", W.sys.lead);
+  cards("#syslist", W.sys.items);
+  calls("#syscalls", W.sys.calls);
+
+  html("#entrylead", W.entry.lead);
+  cards("#entrylist", W.entry.items);
+
+  html("#juniorlead", W.junior.lead);
+  li("#juniorlist", W.junior.items);
+
+  html("#awardlead", W.award.lead);
+  cards("#awardlist", W.award.items);
+
+  html("#piecelead", W.piece.lead);
+  cards("#piecelist", W.piece.items);
+  html("#piecewarn", W.piece.warn);
+
+  li("#wagededuct", W.deduct);
+  li("#wageproof", W.proof);
+
+  html("#reportlead", W.report.lead);
+  cards("#reportlist", W.report.items);
+  calls("#wagecalls", W.report.calls);
+  html("#reportnote", W.report.note);
+
+  html("#injurylead", W.injury.lead);
+  li("#injurylist", W.injury.items);
+  calls("#injurycalls", W.injury.calls);
+})();
+
+/* ---- 買車 ---- */
+(function(){
+  const C = DATA.car;
+  /* 以下字串都是自己寫的 HTML，允許 <b> 與 <i>，所以不 escape */
+  const html = (sel, s) => { const n=$(sel); if(n) n.innerHTML = s; };
+  const li = (sel, arr) => { const u=$(sel); if(u) arr.forEach(x=>u.appendChild(el("li",null,x))); };
+  const cards = (sel, list) => {
+    const w = $(sel); if(!w) return;
+    list.forEach(x=>{
+      const d = el("div","split");
+      d.appendChild(el("b", null, esc(x.k)));
+      d.appendChild(el("p", null, x.v));
+      w.appendChild(d);
+    });
+  };
+
+  html("#prereqlead", C.prereq.lead);
+  cards("#carprereq", C.prereq.items);
+
+  html("#ppsrlead", C.ppsr.lead);
+  li("#ppsrfinds", C.ppsr.finds);
+  li("#ppsrhow", C.ppsr.how);
+  html("#ppsrwarn", C.ppsr.warn);
+
+  cards("#carcost", C.cost);
+  html("#carcostnote", C.costNote);
+  cards("#carwa", C.wa);
+  li("#cartransfer", C.transfer);
+  li("#carexit", C.exit);
+})();
+
+function flags(id, arr){ const u=$(id); if(!u)return; arr.forEach(f=>u.appendChild(el("li",null,f))); }
+flags("#regflags", DATA.regional.flags);
+flags("#wageflags", DATA.wage.flags);
+flags("#carflags", DATA.car.flags);
+flags("#rentflags", DATA.rent.flags);
+flags("#scamflags", DATA.scam.flags);
+flags("#landflags", DATA.landing.flags);
+
+/* ---- 來源 ---- */
+function sources(id, arr){
+  const u=$(id); if(!u)return;
+  arr.forEach(s=>{
+    const li=el("li");
+    li.appendChild(el("span",null,
+      '<a href="'+esc(s.u)+'" target="_blank" rel="noopener noreferrer">'+esc(s.t)+'</a>'+
+      (s.v===false?'<span class="pending">待核</span>':'')));
+    li.appendChild(el("span","as",esc(s.as)));
+    u.appendChild(li);
+  });
+}
+sources("#regsrc", DATA.regional.src);
+sources("#wagesrc", DATA.wage.src);
+sources("#carsrc", DATA.car.src);
+sources("#rentsrc", DATA.rent.src);
+sources("#scamsrc", DATA.scam.src);
+sources("#aftersrc", DATA.after.src);
+sources("#landsrc", DATA.landing.src);
+
+/* ---- 閘門式清單 ---- */
+function buildGate(key, items, unlockedMsg){
+  const g = document.querySelector('[data-gate="'+key+'"]'); if(!g) return;
+  const ul = g.querySelector("ul"), foot = g.querySelector(".gatefoot"), cnt = g.querySelector(".count");
+  const store = "wa-gate-"+key;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(store) || "{}"); } catch(e){ saved = {}; }
+
+  /* 無痕模式與部分 in-app 瀏覽器（LINE 內建就是）會讓 localStorage 直接丟例外。
+     靜默吞掉的話，人關掉分頁再回來會發現勾選全沒了，卻不知道為什麼。 */
+  let persist = true;
+
+  items.forEach((it,i)=>{
+    const li = el("li");
+    const lab = el("label");
+    const cb = el("input"); cb.type="checkbox"; cb.dataset.i=i; cb.checked = !!saved[i];
+    /* it.s 是自己寫的說明，允許 <b>；it.t 仍然 escape */
+    const sp = el("span", null, esc(it.t) + (it.s ? '<small>'+it.s+'</small>' : ''));
+    lab.appendChild(cb); lab.appendChild(sp); li.appendChild(lab); ul.appendChild(li);
+    cb.addEventListener("change", ()=>{
+      saved[i] = cb.checked;
+      try { localStorage.setItem(store, JSON.stringify(saved)); }
+      catch(e){ persist = false; }
+      paint();
+    });
+  });
+
+  function paint(){
+    const boxes = [...ul.querySelectorAll("input")];
+    const done = boxes.filter(b=>b.checked).length;
+    cnt.textContent = done + " / " + boxes.length;
+    if(done === boxes.length){
+      foot.className = "gatefoot unlocked";
+      foot.textContent = "✅ " + unlockedMsg;
+    } else {
+      foot.className = "gatefoot locked";
+      foot.textContent = "⚠️ 還有 " + (boxes.length-done) + " 項沒確認。沒打勾的那一項，就是等一下會出事的地方。";
+    }
+    if(!persist) foot.textContent += "（這個瀏覽器不讓網頁存資料，關掉分頁後勾選不會留著。）";
+  }
+  paint();
+}
+buildGate("car", DATA.car.gate, DATA.car.unlocked);
+buildGate("rent", DATA.rent.gate, DATA.rent.unlocked);
+buildGate("scam", DATA.scam.gate, DATA.scam.unlocked);
+buildGate("landing", DATA.landing.gate, DATA.landing.unlocked);
+
+/* ---- 步驟清單（d 是我自己寫的 HTML，允許連結與 tel:） ---- */
+function steps(sel, list){
+  const ol = $(sel); if(!ol) return;
+  list.forEach(s=>{
+    const li = el("li");
+    li.appendChild(el("div", null,
+      '<span class="when">'+esc(s.w)+'</span><b>'+esc(s.t)+'</b><p>'+s.d+'</p>'));
+    ol.appendChild(li);
+  });
+}
+steps("#scamsteps", DATA.after.steps);
+
+/* ---- 可以直接撥的號碼 ---- */
+/* c.d 是自己寫的說明，允許 <b>；c.t 仍然 escape */
+function calls(sel, list){
+  const ul = $(sel); if(!ul) return;
+  list.forEach(c=>{
+    const li = el("li");
+    li.appendChild(el("span","t",
+      esc(c.t) + (c.v === false ? '<span class="pending">待核</span>' : '') +
+      '<span class="d">' + c.d + '</span>'));
+    /* dial 是「從澳洲手機實際要撥的字串」。沒寫就等於跟顯示號碼一樣。
+       國際免付費號碼（台灣的 800-0885-0885）直接撥不通，一定要前置 0011。 */
+    const a = el("a","tel", esc(c.n));
+    a.href = "tel:" + (c.dial || c.n).replace(/[^\d+]/g,"");
+    li.appendChild(a);
+    ul.appendChild(li);
+  });
+}
+
+/* ---- 已經轉出去了 ---- */
+(function(){
+  const A = DATA.after;
+  /* 這幾段全部是自己寫的 HTML，允許 <b> 與 <a> */
+  const li = (sel, arr) => { const u=$(sel); if(u) arr.forEach(x=>u.appendChild(el("li",null,x))); };
+  const html = (sel, s) => { const n=$(sel); if(n) n.innerHTML = s; };
+
+  calls("#afterbanks", A.banks);
+  html("#offhourslead", A.offhours.lead);
+  li("#offhours", A.offhours.items);
+  li("#afterevidence", A.evidence);
+  li("#aftertruth", A.truth);
+
+  html("#twlead", A.taiwan.lead);
+  const sp = $("#twsplit");
+  if(sp) A.taiwan.split.forEach(x=>{
+    const d = el("div","split");
+    d.appendChild(el("b", null, esc(x.k)));
+    d.appendChild(el("p", null, x.v));
+    sp.appendChild(d);
+  });
+  li("#twsteps", A.taiwan.items);
+
+  html("#frozenlead", A.frozen.lead);
+  li("#frozen", A.frozen.items);
+
+  const c = A.consular;
+  html("#conlead", c.lead);
+  calls("#afterconsular", c.items);
+  html("#connote", c.note);
+})();
+
+/* ---- 換匯的合法替代路徑 ---- */
+(function(){
+  const L = DATA.scam.legal;
+  const lead = $("#legallead"); if(lead) lead.innerHTML = L.lead;
+  const ol = $("#legalsteps"); if(!ol) return;
+  L.steps.forEach(s=>{
+    const li = el("li");
+    /* 這裡也要吃 v:false。少了這一行，這一區就是旗標黑洞——
+       資料標了「待核」畫面卻照樣呈現成已查證，比不標更糟。 */
+    li.appendChild(el("div", null,
+      '<b>' + esc(s.t) + (s.v === false ? '<span class="pending">待核</span>' : '') + '</b><p>' + esc(s.d) +
+      (s.u ? '<br><a href="' + esc(s.u) + '" target="_blank" rel="noopener noreferrer">' + esc(s.u) + '</a>' : '') +
+      '</p>'));
+    ol.appendChild(li);
+  });
+  const note = $("#legalnote"); if(note) note.innerHTML = L.note;
+
+  const rl = $("#raillead"); if(rl) rl.innerHTML = L.rail.lead;
+  const ru = $("#railitems"); if(ru) L.rail.items.forEach(x=>ru.appendChild(el("li",null,x)));
+  const cash = $("#cashnote"); if(cash) cash.innerHTML = L.cash;
+})();
+
+/* ---- 落地：數字、費率、迷思 ---- */
+(function(){
+  const kv = (sel, list) => {
+    const ul = $(sel); if(!ul) return;
+    list.forEach(x=>{
+      const li = el("li", x.bad ? "bad" : null);
+      li.appendChild(el("span", null,
+        esc(x.k) + (x.n ? '<span class="n">' + esc(x.n) + '</span>' : '')));
+      li.appendChild(el("span","v", esc(x.v)));
+      ul.appendChild(li);
+    });
+  };
+  kv("#landnums", DATA.landing.numbers);
+
+  const H = DATA.landing.health;
+  const lead = $("#healthlead"); if(lead) lead.innerHTML = H.lead;
+  kv("#landfees", H.fees);
+  const tips = $("#healthtips");
+  if(tips) H.tips.forEach(x => tips.appendChild(el("li", null, x)));
+
+  /* 卡片式的 k/v。值裡面允許 <b>，所以不 escape */
+  const cards = (sel, list) => {
+    const w = $(sel); if(!w) return;
+    list.forEach(x=>{
+      const d = el("div","split");
+      d.appendChild(el("b", null, esc(x.k)));
+      d.appendChild(el("p", null, x.v));
+      w.appendChild(d);
+    });
+  };
+  const L = DATA.landing.leaving;
+  const ll = $("#leavelead"); if(ll) ll.innerHTML = L.lead;
+  cards("#landleave", L.items);
+
+  const wrap = $("#landmyths");
+  if(wrap) DATA.landing.myths.forEach(m=>{
+    const c = el("div","myth");
+    c.appendChild(el("p","m", esc(m.m)));
+    c.appendChild(el("p","r", esc(m.r)));
+    c.appendChild(el("p","d", m.d));
+    wrap.appendChild(c);
+  });
+})();
+
+/* ---- 可貼回 LINE 的答案 ---- */
+function copyRow(container, text, why, opts){
+  opts = opts || {};
+  const old = container.querySelector(".copyrow"); if(old) old.remove();
+  const label = opts.label || "複製這段貼回群組";
+  const row = el("div","copyrow");
+  row.appendChild(el("span","why", esc(why || "")));
+  const b = el("button","copybtn",label);
+  b.addEventListener("click", async ()=>{
+    /* 傳給對方的私訊不掛網址——那是對話，不是轉發 */
+    const payload = text + (!opts.noSite && SITE ? "\n查核工具：" + SITE : "");
+    let ok = true;
+    try {
+      await navigator.clipboard.writeText(payload);
+    } catch(e){
+      const ta = document.createElement("textarea");
+      ta.value = payload; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.select();
+      /* execCommand 回 false 也算失敗——不能讓人以為複製成功了，
+         結果貼進群組是空的 */
+      try { ok = document.execCommand("copy") !== false; } catch(e2){ ok = false; }
+      ta.remove();
+    }
+    if(ok){
+      b.textContent = "已複製 ✓"; b.classList.add("done");
+    } else {
+      b.textContent = "複製失敗，請長按選取"; b.classList.add("failed");
+    }
+    /* 還原成呼叫端當初給的標籤，不是寫死那一句 */
+    setTimeout(()=>{ b.textContent = label; b.classList.remove("done","failed"); }, 2600);
+  });
+  row.appendChild(b);
+  container.appendChild(row);
+}
+
+/* ---- 出門前先問（唯一能解「跟著失效貼文白跑」的東西，是一句話，不是一個清單） ---- */
+(function(){
+  const body = $("#askbody"); if(!body) return;
+  body.innerHTML =
+    '<p class="saybig">「' + esc(DATA.ask.line) + '」</p>' +
+    '<p style="margin:11px 0 0">' + esc(DATA.ask.why) + '</p>';
+  copyRow(body, DATA.ask.line, "把「__」改成你能到的時間，直接私訊原 PO。",
+          {label:"複製這句", noSite:true});
+  const ul = $("#askrules");
+  if(ul) DATA.ask.rules.forEach(r => ul.appendChild(el("li", null, esc(r))));
+})();
+
+/* ---- 換匯：鐵律 + 三句話 ---- */
+(function(){
+  const ir = $("#ironrule");
+  if(ir) ir.innerHTML = DATA.scam.ironRule;
+  const wrap = $("#scripts"); if(!wrap) return;
+  DATA.scam.scripts.forEach(s=>{
+    const card = el("div","script");
+    card.appendChild(el("p","say", "「" + esc(s.t) + "」"));
+    card.appendChild(el("p","why", esc(s.w)));
+    copyRow(card, s.t, "", {label:"複製這句", noSite:true});
+    wrap.appendChild(card);
+  });
+})();
+
+/* ---- 集簽 ----
+   清單裡的項目可以是單一號碼，也可以是 [起,迄]（含兩端）。 */
+function inRanges(n, list){
+  return list.some(r => Array.isArray(r) ? (n >= r[0] && n <= r[1]) : n === r);
+}
+
+(function(){
+  const d = $("#regdays");
+  if(d) DATA.regional.howdays.forEach(x => d.appendChild(el("li", null, x)));
+  const p = $("#regproof");
+  if(p) DATA.regional.proof.forEach(x => p.appendChild(el("li", null, esc(x))));
+})();
+
+$("#pcgo").addEventListener("click", checkPc);
+$("#pc").addEventListener("keydown", e=>{ if(e.key==="Enter") checkPc(); });
+
+function checkPc(){
+  const raw = ($("#pc").value||"").trim();
+  const box = $("#pcans");
+  box.hidden = false;
+  if(!/^\d{4}$/.test(raw)){
+    box.className = "ans warn";
+    box.innerHTML = '<div class="verdict">請輸入四位數郵遞區號</div><div class="detail">例如 <span class="num">6503</span>。這個工具只涵蓋西澳（6 開頭）。</div>';
+    return;
+  }
+  const n = +raw;
+  const place = DATA.regional.known[raw] ? "（" + DATA.regional.known[raw] + "）" : "";
+  if(n < 6000 || n > 6999){
+    box.className = "ans warn";
+    box.innerHTML = '<div class="verdict">這不是西澳的郵遞區號</div><div class="detail">本工具只涵蓋西澳（6000–6999）。其他州請直接查官方清單。</div>';
+    return;
+  }
+
+  /* 這個郵遞區號命中了哪幾張表 */
+  const zin = {};
+  for(const k in DATA.regional.zones) zin[k] = inRanges(n, DATA.regional.zones[k].wa);
+
+  /* 逐類別判定：一個類別只要命中它認的任何一張表就算 */
+  const cats = DATA.regional.cats.map(c => ({ c, ok: c.z.some(k => zin[k]) }));
+  const yes = cats.filter(x => x.ok);
+
+  const rows = cats.map(x =>
+    '<li class="' + (x.ok ? "yes" : "no") + '">' +
+      '<span class="mk">' + (x.ok ? "算" : "不算") + '</span>' +
+      '<span class="n">' + esc(x.c.n) +
+        (x.ok && x.c.w ? '<span class="w">' + esc(x.c.w) + '</span>' : '') +
+      '</span>' +
+    '</li>').join('');
+
+  let cls, verdict, lead;
+  if(yes.length === cats.length){
+    cls = "ok"; verdict = "全部類別都算";
+    lead = "在這裡，下列每一種指定工作的天數都可以計入。";
+  } else if(yes.length){
+    cls = "warn"; verdict = "有些算、有些不算 — 看你做哪一種";
+    lead = "同一個地點，換一種工作內容結果就不一樣。<strong>先確認你實際做的是哪一類</strong>，再答應。";
+  } else {
+    cls = "bad"; verdict = "一天都不算";
+    lead = "這個郵遞區號不在任何一張指定清單上。在這裡工作的天數<strong>不能</strong>用來申請第二簽或第三簽，不論你做的是哪一種工作。";
+  }
+
+  box.className = "ans " + cls;
+  box.innerHTML =
+    '<div class="verdict">' + verdict + '</div>' +
+    '<div class="detail">' +
+      '<p><span class="num">' + esc(raw) + '</span>' + esc(place) + '　' + lead + '</p>' +
+      '<ul class="catlist">' + rows + '</ul>' +
+      '<p style="margin-top:12px">另外，<strong>關鍵 COVID-19 醫療照護工作</strong>全澳皆可計入，不受地點限制。' +
+      '指定區域與指定工作的認定權在 Home Affairs，<strong>務必自己再核對一次官方清單</strong>——本站只是導讀。</p>' +
+    '</div>';
+
+  const line = raw + place + "（西澳）集簽判定\n" +
+    cats.map(x => (x.ok ? "✅ " : "❌ ") + x.c.n).join("\n") +
+    "\n\n認定權在 Home Affairs，以官方清單為準。查詢日 " + DATA.asOf;
+  copyRow(box, line, "群組裡有人問的時候，直接貼這段，附出處比空口回答有用。");
+}
+
+/* ---- 時薪 ---- */
+$("#ratego").addEventListener("click", checkRate);
+$("#rate").addEventListener("keydown", e=>{ if(e.key==="Enter") checkRate(); });
+
+/* 這是全站唯一會主動產生「你的雇主違法」這種指控的地方，所以適用性是
+   前置條件，不是附註。順序刻意是：先確定適用哪一條線 → 才敢下判定。
+   ① 未滿 21 歲 → 直接不判，junior rate 依年齡打折，站上沒有金額可依據
+   ② 不知道雇主型態 → 只有低於「兩條線裡較低那條」才敢說違法 */
+function checkRate(){
+  const v = parseFloat($("#rate").value);
+  const type = $("#etype").value;
+  const sys  = $("#esys").value;
+  const age  = $("#eage").value;
+  const cls  = $("#ecls").value;
+  const box = $("#rateans");
+  box.hidden = false;
+
+  const warn = (title, body) => {
+    box.className = "ans warn";
+    box.innerHTML = '<div class="verdict">'+title+'</div><div class="detail">'+body+'</div>';
+  };
+  /* 錢一律換成「分」再比。浮點數直接比會讓 32.8375 判成低於 32.84，
+     然後印出「每小時少了 $0.00，這仍然違法」——那段話貼到群組裡等於自砸可信度。 */
+  const c = x => Math.round(x * 100);
+  const M = x => '<span class="num">$' + x.toFixed(2) + '</span>';
+
+  if(!(v > 0) || !isFinite(v)){
+    warn("請輸入時薪", "填對方開給你的稅前時薪。");
+    return;
+  }
+  /* 舊版的護欄是 1000，於是「$900」會被當成時薪判 ✅——那個人其實正在被低薪。
+     這個族群不會有人時薪破 200，所以寧可擋下來問清楚。 */
+  if(v > 200){
+    warn("這看起來不是時薪",
+      '<p>欄位要填的是<strong>每小時</strong>的稅前金額，不是週薪或月薪。' +
+      '你填的 <span class="num">$'+v.toFixed(2)+'</span> 比較像一週或一個月的總額。</p>' +
+      '<p>週薪要換算：<strong>週薪 ÷ 當週實際工時</strong>，再把換算出來的數字填進來。' +
+      '（參考：全國系統 part／full-time 的法定週薪是 '+M(DATA.wage.weekly)+'／38 小時，西澳州系統是 '+M(DATA.wage.state.weekly)+'。）</p>' +
+      '<p>如果你真的是每小時 $'+v.toFixed(2)+'，那這一頁的紅線對你沒有意義。</p>');
+    return;
+  }
+
+  /* ① 年齡閘門：站上沒有 junior 金額（官方頁未能逐字核對），所以不下判定 */
+  if(age === "junior"){
+    warn("未滿 21 歲——這條線不適用你",
+      '<p>未滿 21 歲的法定最低是<strong>按年齡打折的 junior rate</strong>，不是這一頁的紅線。' +
+      '所以 18–20 歲被開低於 <span class="num">$'+DATA.wage.casualMin.toFixed(2)+'</span> 的 casual 時薪，' +
+      '<strong>有可能完全合法</strong>。</p>' +
+      '<p><strong>本站不提供 junior 金額</strong>——各本 award 的百分比表不一樣，我們沒有逐字核對過官方頁，' +
+      '不想給你一個拿去指控雇主卻站不住腳的數字。' +
+      (sys === "wa"
+        ? '你填的是州系統，<strong>Fair Work 的 Pay and Conditions Tool 查不到你這一套</strong>，要打 Wageline <a href="tel:1300655266">1300 655 266</a> 問。'
+        : '請用官方的 Pay and Conditions Tool 輸入年齡與分類查。') + '</p>' +
+      '<p>另外兩件跟你有關的事：<strong>如果那本 award 根本沒寫 junior 條款，你領的是成人費率</strong>；' +
+      '零售與速食類 award 裡，18–20 歲在同一雇主做滿 6 個月後也是成人費率。往下看「兩個例外」那一段。</p>');
+    copyRow(box,
+      "我未滿 21 歲，法定最低是按年齡打折的 junior rate，不是全國那條 $" + DATA.wage.casualMin.toFixed(2) + "。\n" +
+      (sys === "wa"
+        ? "我的雇主是西澳州系統（沒有 Pty Ltd），要問 Wageline 1300 655 266 才查得準。\n"
+        : "要用 Fair Work 的 Pay and Conditions Tool 輸入年齡與分類才查得準。\n") +
+      "（如果那本 award 沒寫 junior 條款，就是領成人費率。）",
+      "被說「你未成年所以就是這個價」的時候，貼這段。");
+    return;
+  }
+
+  const E = DATA.wage.entry;
+  const isCasual = type === "casual";
+  const superAmt = +(v * DATA.wage.superRate).toFixed(2);
+  const superTail = '<p style="margin-top:10px">另外：雇主還必須<strong>額外</strong>提撥退休金，不能從時薪裡扣。以這個數字計算約 '+M(superAmt)+'／小時（'+(DATA.wage.superRate*100)+'%）。</p>';
+  const beforeYouFight = '<p style="margin-top:10px">拿這段去對峙之前，先確認兩件事：payslip 上的<strong>分類名稱</strong>（Level／Grade 幾）和你的<strong>到職月數</strong>。這兩個錯了，上面整段都會錯。</p>';
+
+  /* ② 計件閘門。計件沒有「開給你的時薪」可以直接比，而且兩本 award 的保障天差地別：
+     園藝有每日保底、酒莊完全沒有。舊版拿換算時薪去比地板，會對酒莊計件工下違法判定——
+     但站上自己在下面寫著「Wine Award 底下合法且真的沒有下限」。這兩句話不能同時存在。 */
+  if(type === "piece"){
+    const useEntry = cls === "entry";
+    const hc = useEntry ? E.hort.casualMin : DATA.wage.casualMin;
+    const hp = useEntry ? E.hort.nmw       : DATA.wage.nmw;
+    box.className = "ans warn";
+    box.innerHTML = '<div class="verdict">⚠️ 計件不看時薪地板——先確定你在哪一本 Award</div><div class="detail">' +
+      '<p>你換算下來是 '+M(v)+'／小時。<strong>這個數字合不合法，完全取決於你在哪一本 award</strong>，不是取決於它有沒有低於最低工資。</p>' +
+      (sys === "wa"
+        ? '<p><strong>但你填的是西澳州系統。</strong>園藝 MA000028 與酒莊 MA000090 都是<strong>聯邦</strong> award，管不到州系統的雇主。西澳州系統的計件規定<strong>本站沒有核對過</strong>，不敢給你數字——打 Wageline <a href="tel:1300655266">1300 655 266</a> 問「州系統的計件有沒有保底」。下面兩段只有在你其實屬於全國系統時才適用。</p>'
+        : '') +
+      '<p><strong>園藝 MA000028：有每日保底。</strong>官方明文，計件的全職、部分工時與 casual 員工<strong>每一個工作日</strong>都要拿到「你自己分類的時薪 × 當天工時」。' +
+      '以你填的分類，那個時薪是 casual '+M(hc)+'／part-full '+M(hp)+'。' +
+      '<strong>你換算下來低於它，就是欠薪</strong>，件價還必須讓「平均產能」的人每小時比最低時薪多賺 15%。</p>' +
+      '<p><strong>酒莊 MA000090：沒有保底。</strong>官方明文，Wine Award 裡<strong>沒有任何條文</strong>保證計件員工拿得到最低週薪或時薪。' +
+      '件價只有一條要求——必須讓「平均能力」的人每小時比該分類最低時薪多賺 20%。' +
+      '所以在酒莊換算出 '+M(v)+' 這個數字，<strong>很可能是合法的</strong>，而你唯一的施力點是「件價設定不合理」。</p>' +
+      '<p>兩本都一樣要做的事：<strong>要求看書面 piecework agreement</strong>，並且自己每天記工時與產量。沒有這兩樣，件價爭議一定輸。</p>' +
+      superTail + beforeYouFight + '</div>';
+    copyRow(box,
+      "我是計件（piece rate），換算時薪 $" + v.toFixed(2) + "。\n" +
+      "園藝 MA000028 有每日保底（我這一級是 casual $" + hc.toFixed(2) + " / part-full $" + hp.toFixed(2) + " × 當天工時），酒莊 MA000090 沒有保底。\n" +
+      "請問我適用哪一本，以及可以看一下書面的 piecework agreement 嗎？\n" +
+      "（" + DATA.wage.from + " 起生效的數字。）",
+      "問件價之前先問「我在哪一本」，貼這段。");
+    return;
+  }
+
+  /* ③ 分類閘門 ＋ 系統閘門。
+     hard  = 敢下 🛑 的線。分類沒確定時降到「已核對過的最低入門級費率」——
+             因為 award 的入門級合法低於全國最低工資，照 NMW 判會做出假指控。
+     clear = 敢下 ✅ 的線。系統沒填時要高過兩條線裡較高的那條，才算沒有懸念。 */
+  const ordNat = isCasual ? DATA.wage.casualMin       : DATA.wage.nmw;
+  const ordSta = isCasual ? DATA.wage.state.casualMin : DATA.wage.state.nmw;
+  const entNat = isCasual ? E.casualMin               : E.nmw;
+  const typeLabel = isCasual ? "casual（含 25% loading）" : "part／full-time";
+
+  const ordFloor = sys === "nat" ? ordNat : sys === "wa" ? ordSta : Math.min(ordNat, ordSta);
+  /* 名稱不寫死「州系統」——哪一年兩條線倒過來，寫死的字會靜默標錯 */
+  const lowName  = c(ordSta) <= c(ordNat) ? "州系統" : "全國系統";
+  const highName = c(ordNat) >= c(ordSta) ? "全國系統" : "州系統";
+  const ordName = sys === "nat" ? "全國系統的" + typeLabel + "地板"
+                : sys === "wa"  ? "西澳州系統的" + typeLabel + "地板"
+                : "兩套系統裡<strong>較低</strong>的那條（" + lowName + "）";
+  const hard  = cls === "normal" ? ordFloor : Math.min(entNat, ordFloor);
+  const clear = sys === "unknown" ? Math.max(ordNat, ordSta) : ordFloor;
+  const clearName = sys === "unknown" ? "兩套系統裡<strong>較高</strong>的那條（" + highName + "）" : ordName;
+
+  let tone, verdict, detail, clip;
+
+  if(c(v) < c(hard)){
+    const diff = +(hard - v).toFixed(2);
+    tone = "bad"; verdict = "🛑 低於法定最低工資";
+    detail = '<p>對方開 '+M(v)+'／小時。' +
+      (cls === "normal"
+        ? '你填的是<strong>一般分類</strong>，所以適用的是'+ordName+' '+M(hard)+'。'
+        : '你的分類還沒確定，所以這裡用的不是最低工資，而是<strong>本站逐欄核對過的最低入門級費率</strong> '+M(hard)+'（Horticulture MA000028 Level 1）——連這條都不到。') +
+      '<strong>每小時少了 '+M(diff)+'。</strong></p>' +
+      '<p>一週做 38 小時的話，一週少 '+M(+(diff*38).toFixed(2))+'。</p>' +
+      (sys === "unknown" && cls === "normal"
+        ? '<p>這個判定<strong>不需要先確定雇主屬於哪一套系統</strong>——它連比較低的那條線都不到。</p>'
+        : '') +
+      '<p><strong>就算你簽了字同意，這仍然違法。</strong>先不要當場翻臉——留好 payslip、自己記工時，之後可以匿名檢舉並追討。</p>' +
+      (cls !== "normal"
+        ? '<p>本站逐欄核對過的是<strong>園藝 MA000028 與酒莊 MA000090</strong>，它們涵蓋絕大多數集二簽的工作。你如果在別本 award（餐飲、肉品加工…），入門級費率不一樣——' +
+          (sys === "wa" ? '而且州系統要打 Wageline 問，Fair Work 的工具查不到你這一套。</p>' : '用官方的 Pay and Conditions Tool 查你自己那本。</p>')
+        : '') +
+      (sys === "wa"
+        ? '<p><strong>你這一套 Fair Work 管不到。</strong>西澳州系統的欠薪要走西澳自己的管道，打錯機關會被退件。先打 Wageline <a href="tel:1300655266">1300 655 266</a>。</p>'
+        : '');
+    clip = "🛑 低於法定 $" + hard.toFixed(2) + "，每小時少 $" + diff.toFixed(2) +
+           (cls === "normal" ? "" : "（比的是入門級費率，不是最低工資）");
+
+  } else if(c(v) < c(clear)){
+    /* 這一段就是舊版會誤判成違法的區間。可能有兩個原因同時成立，逐條列出來 */
+    tone = "warn"; verdict = "⚠️ 可能合法，也可能違法——先確認再行動";
+    const reasons = [];
+    if(cls !== "normal" && c(v) < c(ordFloor)){
+      reasons.push('<li><strong>你還在不在入門級分類？</strong>' +
+        '園藝 MA000028 的 <b>Level 1</b>（casual '+M(E.hort.casualMin)+'／part-full '+M(E.hort.nmw)+'）最多只到 '+E.hort.limit+' 為止；' +
+        '酒莊 MA000090 的 <b>Grade 1</b>（casual '+M(E.wine.casualMin)+'／part-full '+M(E.wine.nmw)+'）到 '+E.wine.limit+' 為止。' +
+        '兩本期滿都跳到 casual '+M(DATA.wage.casualMin)+'／part-full '+M(DATA.wage.nmw)+'。' +
+        '<strong>還在期限內＝合法；期限過了還領這個數字＝欠薪，而且可以往回追討。</strong></li>');
+    }
+    if(sys === "unknown" && c(v) < c(ordNat)){
+      reasons.push('<li><strong>雇主屬於哪一套系統？</strong>' +
+        '西澳州系統的地板是 '+M(ordSta)+'，全國系統是 '+M(ordNat)+'。看雇主名稱有沒有 <b>Pty Ltd</b>——' +
+        '但<strong>招牌上看不出來的情況很常見</strong>：受託人是 Pty Ltd 的信託、合夥人裡有 Pty Ltd 的合夥，名稱都不帶 Pty Ltd，卻走全國系統。' +
+        '判不出來就打 Wageline 問「我的雇主屬於哪一套」。</li>');
+    }
+    detail = '<p>對方開 '+M(v)+'／小時。<strong>這個數字本身不足以判定違法</strong>——下面每一項都可能讓它變成合法：</p>' +
+      '<ul class="bullets">' + reasons.join('') + '</ul>' +
+      '<p>確認完之後才知道該不該追。<strong>先問清楚再指控，不要拿錯的那條線去跟雇主吵</strong>——用錯的線去對峙，你之後真的有理時也不會有人聽。</p>' +
+      '<p>問清楚的兩支電話：<strong>Fair Work</strong> <a href="tel:131394">13 13 94</a>（全國系統）、<strong>Wageline</strong> <a href="tel:1300655266">1300 655 266</a>（西澳州系統，也回答「我屬於哪一套」）。</p>';
+    clip = "⚠️ 不足以判定違法：" + (reasons.length > 1 ? "分類與雇主系統都還沒確認" : (cls !== "normal" && c(v) < c(ordFloor) ? "還沒確認我是不是入門級分類" : "還沒確認雇主屬於哪一套系統"));
+
+  } else {
+    const eq = c(v) === c(clear);
+    tone = "ok"; verdict = eq ? "✅ 剛好等於法定最低" : "✅ 沒有低於法定最低";
+    /* Pay and Conditions Tool 是 Fair Work 的工具，只涵蓋全國系統。
+       州系統的人照著查會查到一本管不到自己的 award，比不查更糟。 */
+    detail = '<p>對方開 '+M(v)+'／小時，'+(eq ? '<strong>剛好等於</strong>' : '高於')+clearName+' '+M(clear)+'。</p>' +
+      (eq ? '<p>踩線不違法，但你<strong>一分錢的緩衝都沒有</strong>——只要 award 分類比你以為的高一級，或有 penalty rate 沒算進去，就會變成欠薪。</p>' : '') +
+      '<p>但這只是<strong>地板</strong>。你所屬的行業 Award 可能規定更高（園藝、肉品加工、餐飲各有不同），週末和國定假日還有 penalty rates。' +
+      (sys === "wa"
+        ? '你是州系統，<strong>不要用 Fair Work 的 Pay and Conditions Tool</strong>——那個工具查不到你這一套。西澳的 award 摘要要問 Wageline <a href="tel:1300655266">1300 655 266</a>。</p>'
+        : '用官方的 Pay and Conditions Tool 查你的 Award 才準。</p>') +
+      (sys === "wa"
+        ? '<p>還有一件事：<strong>名稱沒有 Pty Ltd，不代表一定是州系統。</strong>受託人是 Pty Ltd 的信託、合夥人裡有 Pty Ltd 的合夥都走全國系統，門檻是 '+M(ordNat)+'。' +
+          (c(v) < c(ordNat)
+            ? '<strong>這個時薪低於那條線——你如果選錯了，結論會整個反過來。</strong>不確定就打 Wageline 確認雇主型態。</p>'
+            : '這個時薪仍然高於它，所以兩種情況都過關。</p>')
+        : '') +
+      (sys === "unknown"
+        ? '<p>你沒填雇主型態，不過上面比的是<strong>兩條線裡較高的那條</strong>，所以兩套系統都過關。</p>'
+        : '');
+    clip = (eq ? "✅ 剛好等於法定 $" : "✅ 高於法定 $") + clear.toFixed(2);
+  }
+
+  detail += superTail + beforeYouFight;
+  box.className = "ans " + tone;
+  box.innerHTML = '<div class="verdict">'+verdict+'</div><div class="detail">'+detail+'</div>';
+
+  const sysLine = sys === "nat" ? "全國系統（雇主有 Pty Ltd）"
+                : sys === "wa"  ? "西澳州系統（獨資／非法人雇主）"
+                : "雇主系統未確認（州系統 $" + ordSta.toFixed(2) + "／全國 $" + ordNat.toFixed(2) + "）";
+  const clsLine = cls === "normal" ? "一般分類（非入門級）"
+                : cls === "entry"  ? "入門級分類（園藝 Level 1／酒莊 Grade 1）"
+                : "award 分類未確認";
+  copyRow(box,
+    "時薪 $" + v.toFixed(2) + "（" + (isCasual ? "casual" : "part/full-time") + "，21 歲以上）→ " + clip +
+    "\n適用：" + sysLine + "；" + clsLine +
+    "\n退休金 " + (DATA.wage.superRate*100) + "% 要另外給，不能從時薪扣\n" +
+    "（" + DATA.wage.from + " 起生效。未滿 21 歲另有 junior rate，計件另有規則。）",
+    "有人問「這個薪水合不合法」，貼這段比爭論有效。");
+}
+
+/* ---- 押金身分 ---- */
+/* ---- 離境前的押金時程 ---- */
+(function(){
+  const u = $("#exitbond"); if(!u) return;
+  DATA.rent.exit.forEach(x=>{
+    u.appendChild(el("li", null,
+      '<strong>' + esc(x.t) + '</strong>' +
+      (x.v === false ? '<span class="pending">待核</span>' : '') +
+      /* x.d 跟 c.d／it.s 一樣是自己寫的說明欄位，依體例不 escape，允許 <b> */
+      '<br>' + x.d));
+  });
+})();
+
+/* ---- 身分判定 ----
+   官方判準是同住與否、有沒有供餐或服務、你能不能把人（包括他）擋在門外。
+   不是「有沒有簽約」，也不是合約上寫什麼名稱。 */
+(function(){
+  const wrap = $("#whoq"), box = $("#whoans");
+  if(!wrap || !box) return;
+  const ans = {};
+
+  DATA.rent.quiz.forEach(q=>{
+    const row = el("div","qrow");
+    row.appendChild(el("span","qt", esc(q.q)));
+    const sel = el("select");
+    /* 題目文字只在旁邊的 span 裡，螢幕閱讀器讀到這個 select 會是「無標籤下拉選單」。
+       四題全都一樣，使用者聽到的是連續四個沒有名字的控制項。 */
+    sel.setAttribute("aria-label", q.q);
+    sel.innerHTML = '<option value="">— 請選擇 —</option>' +
+      '<option value="y">' + esc(q.y) + '</option>' +
+      '<option value="n">' + esc(q.n) + '</option>';
+    sel.addEventListener("change", ()=>{ ans[q.k] = sel.value; decide(); });
+    row.appendChild(sel);
+    wrap.appendChild(row);
+  });
+
+  function decide(){
+    if(DATA.rent.quiz.some(x => !ans[x.k])){ box.hidden = true; return; }
+    let key;
+    if(ans.onlease === "y"){
+      key = "tenant";
+    } else {
+      /* 指向 boarder / lodger 的三個訊號 */
+      const sig = (ans.colive === "y" ? 1 : 0)
+                + (ans.service === "y" ? 1 : 0)
+                + (ans.lock === "n" ? 1 : 0);
+      if(sig === 0)       key = "subtenant";
+      else if(sig === 1)  key = "unsure";
+      else                key = (ans.service === "y") ? "boarder" : "lodger";
+    }
+    const r = DATA.rent.verdicts[key];
+    box.hidden = false;
+    box.className = "ans " + r.k;
+    box.innerHTML = '<div class="verdict">' + esc(r.h) + '</div><div class="detail"><p>' + r.d + '</p></div>';
+    const plain = r.d.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "");
+    copyRow(box, "西澳分租身分判定：" + r.h + "\n\n" + plain,
+            "群裡有人問「我這樣到底算不算租客」，貼這段比爭論有用。");
+  }
+})();
+
+/* ---- 可轉發的圖卡（三張，共用一塊 canvas） ---- */
+(function(){
+  const c = $("#card"); if(!c) return;
+  const g = c.getContext("2d");
+  const W = c.width, H = c.height;
+  const PAD = 72, TOP = 400, BOT = H - 232;   /* 內文可用的垂直範圍 */
+  let cur = 0;
+
+  const face = () => getComputedStyle(document.body).fontFamily;
+
+  /* 逐字斷行——中文沒有空白可以斷。measure 模式只算高度不畫。 */
+  function wrap(text, x, y, maxW, lh, measure){
+    let line = "", yy = y;
+    for(const ch of text){
+      if(g.measureText(line + ch).width > maxW && line){
+        if(!measure) g.fillText(line, x, yy);
+        line = ch; yy += lh;
+      } else line += ch;
+    }
+    if(line && !measure) g.fillText(line, x, yy);
+    return yy + lh;
+  }
+
+  /* 條列在給定字級下總共要多高 */
+  function blockHeight(items, size, lh, gap){
+    g.font = "500 " + size + "px " + face();
+    let y = 0;
+    items.forEach(t => { y = wrap(t, 0, y, W - PAD*2 - 56, lh, true) + gap; });
+    return y;
+  }
+
+  function draw(){
+    const card = DATA.cards[cur];
+
+    g.fillStyle = "#14110D"; g.fillRect(0,0,W,H);
+    g.fillStyle = card.accent; g.fillRect(0,0,W,18);
+
+    g.fillStyle = "#FFFFFF";
+    g.font = "800 74px " + face();
+    card.title.forEach((t,i) => g.fillText(t, PAD, 150 + i*90));
+
+    g.fillStyle = "#E5B767";
+    g.font = "600 30px " + face();
+    g.fillText(card.eyebrow, PAD, 150 + card.title.length*90 + 22);
+
+    g.strokeStyle = "#3A342C"; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(PAD, 348); g.lineTo(W-PAD, 348); g.stroke();
+
+    /* 條列多的時候自動降一級字，不要讓它壓過下面的結語 */
+    let size = 34, lh = 48, gap = 22;
+    if(blockHeight(card.items, size, lh, gap) > BOT - TOP){ size = 30; lh = 42; gap = 17; }
+
+    let y = TOP;
+    card.items.forEach(t=>{
+      g.fillStyle = card.accent;
+      g.font = "800 " + size + "px " + face();
+      g.fillText("✕", PAD, y);
+      g.fillStyle = "#F0ECE4";
+      g.font = "500 " + size + "px " + face();
+      y = wrap(t, PAD + 56, y, W - PAD*2 - 56, lh, false) + gap;
+    });
+
+    g.strokeStyle = "#3A342C";
+    g.beginPath(); g.moveTo(PAD, BOT); g.lineTo(W-PAD, BOT); g.stroke();
+
+    g.fillStyle = "#79CFA5";
+    g.font = "800 38px " + face();
+    g.fillText(card.foot.h, PAD, H-166);
+    g.fillStyle = "#928A7E";
+    g.font = "400 28px " + face();
+    wrap(card.foot.s, PAD, H-116, W - PAD*2, 38, false);
+    g.fillStyle = "#7C746A";
+    g.font = "400 24px " + face();
+    g.fillText("西澳打工度假查核工具 · " + DATA.asOf + (SITE ? " · " + SITE.replace(/^https?:\/\//,"") : ""), PAD, H-40);
+
+    c.setAttribute("aria-label", card.title.join("") + "：" + card.eyebrow);
+    const why = $("#cardwhy");
+    if(why) why.textContent = "檔名會是「" + card.tab + "防詐-" + DATA.asOf + ".png」。";
+  }
+
+  function safeDraw(){ try{ draw(); }catch(e){ /* 字體未就緒時忽略 */ } }
+
+  /* 分頁 */
+  const tabs = $("#cardtabs");
+  /* role="tab" 只標一半比不標更糟——螢幕閱讀器會宣告「分頁 1／4」然後
+     方向鍵不會動。所以 aria-controls、tabpanel、roving tabindex 一起補齊。 */
+  function selectTab(i){
+    cur = i;
+    tabs.querySelectorAll("button").forEach((x,j)=>{
+      x.setAttribute("aria-selected", j===i ? "true" : "false");
+      x.tabIndex = j===i ? 0 : -1;
+    });
+    safeDraw();
+  }
+  DATA.cards.forEach((card,i)=>{
+    const b = el("button", null, esc(card.tab));
+    b.type = "button";
+    b.setAttribute("role","tab");
+    b.setAttribute("aria-controls","cardwrap");
+    b.setAttribute("aria-selected", i === 0 ? "true" : "false");
+    b.tabIndex = i === 0 ? 0 : -1;
+    b.addEventListener("click", ()=>selectTab(i));
+    b.addEventListener("keydown", e=>{
+      const n = DATA.cards.length;
+      let j = -1;
+      if(e.key === "ArrowRight") j = (i+1) % n;
+      else if(e.key === "ArrowLeft") j = (i-1+n) % n;
+      else if(e.key === "Home") j = 0;
+      else if(e.key === "End") j = n-1;
+      if(j < 0) return;
+      e.preventDefault();
+      selectTab(j);
+      tabs.querySelectorAll("button")[j].focus();
+    });
+    tabs.appendChild(b);
+  });
+
+  safeDraw();
+  if(document.fonts && document.fonts.ready){ document.fonts.ready.then(safeDraw); }
+
+  $("#carddl").addEventListener("click", ()=>{
+    try{
+      const a = document.createElement("a");
+      a.download = DATA.cards[cur].tab + "防詐-" + DATA.asOf + ".png";
+      a.href = c.toDataURL("image/png");
+      document.body.appendChild(a); a.click(); a.remove();
+    }catch(e){
+      alert("如果沒有自動下載，請直接長按上面的圖片儲存。");
+    }
+  });
+})();
+</script>
+</body>
+</html>
