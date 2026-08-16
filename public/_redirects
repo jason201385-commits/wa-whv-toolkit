@@ -4,6 +4,7 @@
 
 /regional   /#regional   302
 /wage       /#wage       302
+/cost       /#cost       302
 /car        /#car        302
 /rent       /#rent       302
 /scam       /#scam       302
@@ -16,6 +17,10 @@
 /88         /#regional   302
 /pay        /#wage       302
 /salary     /#wage       302
+/live       /#cost       302
+/food       /#cost       302
+/tax        /#cost       302
+/budget     /#cost       302
 /bond       /#rent       302
 /house      /#rent       302
 /money      /#scam       302

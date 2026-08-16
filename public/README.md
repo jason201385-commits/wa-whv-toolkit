@@ -4,12 +4,13 @@
 
 非營利。沒有廣告、沒有推薦回饋、沒有合作仲介。
 
-## 八個區塊
+## 九個區塊
 
 | 錨點 | 主題 | 這一段真正在防的事 |
 |---|---|---|
 | `/regional` | 集簽郵遞區號與天數 | 做完 88 天才發現郵遞區號不算、或同一雇主超過 6 個月（condition 8547）。送件截止時間用**東部時間**，Perth 的人以為還有兩小時。 |
 | `/wage` | 時薪紅線 | **西澳同時跑兩套勞資系統**——雇主是獨資／非法人（很多小農場、家庭店）走州系統，地板比全國那條低（casual $32.84 vs $33.05）。另外**未滿 21 歲是 junior rate，不適用這條線**。**葡萄園是 Wine Award（MA000090）不是園藝 Award**，Wine Award 的計件工**沒有最低工資保障**，園藝有每日保底。工傷走的是**第三套系統 WorkCover WA**，Fair Work 管不到。 |
+| `/cost` | 活不活得下去 | **雇主有沒有登記成 WHM employer，決定你被扣 15% 還是 30%**——同樣的時薪，年薪 $45,000 以下差距是整整一年的多扣。房租貴不貴不用感覺判斷，用官方的 30/40 rule（房租佔稅前收入 >30% 即住房壓力）。超市大字的售價不能比，要比小字的**單位價格**（>1,000 m² 的超市依法必須標，ALDI 與多數亞超不到門檻所以不標）。 |
 | `/car` | 買車 | 西澳**沒有冷靜期**、私人交易**沒有任何保固**。外加三個會讓整筆交易作廢的前置條件：領不領得到牌、保不保得到險、是不是公司名下的車。 |
 | `/rent` | 押金 | 分租雅房很可能是 boarder/lodger，**不受租賃法保護**。押金只退到澳洲帳戶、租客只能紙本申請、人工要 4 週——離境前 6–8 週就要啟動。 |
 | `/scam` | 換匯與付款 | 澳洲的即時支付（NPP／Osko）**最終且不可撤銷**。錢一出去就沒有「撤銷轉帳」這個動作。 |
@@ -26,6 +27,7 @@
 | 不做 | 為什麼 |
 |---|---|
 | **職缺表／房源表／任何「今日有效」清單** | 維運者一離開就變成幽靈刊登，害人白跑。看起來比 LINE 正式，所以傷害更大。**這種頁面不准上線，除非它能在 48 小時沒人更新時自動清空。** |
+| **「Perth 一週菜錢大約 $XXX」這種生活費行情** | 同上——**行情會過期，而且不會有人發現它過期了**。`/cost` 的解法是把「金額」跟「判準」分開：**金額由使用者自己填**，站上只提供三種不會腐壞的東西——**法定算式**（ATO 稅級距）、**官方公告價**（Transperth 票價、Containers for Change 10¢）、**比例判斷**（房租佔稅前收入幾成、這筆錢要工作幾小時）。<br>**這是 `DATA.cost` 的硬規則，`test/cost.test.js` 有一條測試在擋**：`DATA.cost.save` 裡不准出現「每週…$數字」這種寫死的生活費金額。 |
 | **指名的詐騙黑名單** | 西澳與北領地是全澳洲唯二沒有採納 2021 年誹謗法改革的司法管轄區——沒有「重大損害門檻」、沒有法定公共利益抗辯。公開指名的風險在這裡最高。改用去識別化的「手法」與「交易守則」。 |
 | **留言板／表單／登入／資料庫** | 任何可寫入的東西都需要審核。審核需要每天有人在。這個站的維運預算是每天 5 分鐘。 |
 | **LINE bot** | 推播按收訊人數計費，一則摘要進 500 人的群＝計 500 則。而且一個群只能有一個 bot，需要管理員同意。 |
@@ -46,9 +48,12 @@ public/               ← 部署目錄。只有這裡面的東西會上線。
   README.md           這份。
   handoff.md          說明樁，不是真的交接文件（原因寫在裡面）。
 test/
-  wage.test.js        時薪判定的回歸測試。`node test/wage.test.js`，零相依套件。
-                      它直接從 index.html 挖出 DATA 與 checkRate() 來跑，所以測到的
-                      一定是正式版程式碼，不是抄一份出來的副本。
+  wage.test.js        時薪判定的回歸測試（28 個案例）。`node test/wage.test.js`
+  cost.test.js        生活成本試算的回歸測試（68 個案例）。`node test/cost.test.js`
+                      兩支都零相依套件，都直接從 index.html 挖出 DATA 與要測的函式來跑，
+                      所以測到的一定是正式版程式碼，不是抄一份出來的副本。
+                      只有這兩條路徑有測試，因為只有它們會主動說出會改變使用者行為的話
+                      （「你的雇主違法」「你正在被多扣稅」「你的房租超過官方判準」）。
 README.md             給接手者的公開說明：為什麼會有這個站、怎麼跑測試、怎麼部署。
 LICENSE               MIT。
 handoff.md            維運者的私人工作筆記。**不上線，也不進版控**（見 .gitignore）。
@@ -132,30 +137,59 @@ curl -s https://wa-whv.pages.dev/ | sha256sum
 |---|---|---|---|
 | **2026-07-02**（已過，本版即為此次結果） | Jason | 全國最低工資、casual loading、退休金提撥率、各 Award 時薪 | `fairwork.gov.au` 的 minimum wages 頁；州系統看 `commerce.wa.gov.au` Wageline |
 | **2026-07-02**（同上，2026-08-16 補入） | Jason | ⭐ **入門級分類費率**（`DATA.wage.entry`）——它才是計算機敢不敢下「違法」的地板 | 兩份官方 pay guide PDF，**`curl` 抓得到，WebFetch 會 timeout**：<br>`calculate.fairwork.gov.au/Download/AwardSummary?awardCode=ma000028&fileType=pdf`<br>`calculate.fairwork.gov.au/Download/AwardSummary?awardCode=ma000090&fileType=pdf` |
-| **2027-07-02** | Jason | 同上（含入門級），外加 AIS 驗車費率、RAC 檢查費 | 同上 ＋ `wa.gov.au` 的 vehicle inspection 費率頁 |
+| **2026-07-02**（同上，`/cost` 新增） | Jason | ⭐ **ATO 打工度假者稅級距**（`DATA.cost.tax`）——15%／30% 這兩個數字直接決定試算機吐出來的每週淨收入 | `ato.gov.au` 的 Working holiday makers 頁與 Schedule 15。**最新公布的是 2025–26 表；第一級距 $0–$45,000 課 15c 自 2020–21 起未變**，所以「數字沒變」不等於「沒查」 |
+| **2027-01-05** | Jason | ⭐ **Transperth 票價**（`DATA.cost.fares`）——現行版本 **2026-01-01 生效**，這是每年 1 月調的，不跟 7 月那批 | `transperth.wa.gov.au` 的 fares 頁。SmartRider 折扣欄位是機械換算（×0.9／×0.8），**只要抄對 Go Anywhere 現金價，其餘由 `DATA` 推導**，不要各抄各的 |
 | **2027-01-05** | Jason | 集簽指定區域郵遞區號、指定工作類別定義；順便看**入門級分類的時間上限有沒有再改**（2025-04-01 改過一次） | `immi.homeaffairs.gov.au` 的 specified work 頁；`awards.fairwork.gov.au/MA000028.html` 的 Schedule A（全文，`curl` 可讀） |
+| **2027-07-02** | Jason | 同上（含入門級、稅級距），外加 AIS 驗車費率、RAC 檢查費 | 同上 ＋ `wa.gov.au` 的 vehicle inspection 費率頁 |
+| **2027-01-05** | Jason | Containers for Change 的每個容器退款金額與**可退容器範圍**（2026 年擴大到葡萄酒、烈酒、濃縮果汁、大瓶果汁、調味乳） | `containersforchange.com.au`。金額若從 10¢ 變動，`DATA.cost` 與 `/cost` 的省錢卡要一起改 |
 | **每次動 `DATA` 時** | 改的人 | 手上這一條的 `as` 有沒有跟著改 | 就在你正在編的那一行 |
 | **每次動 `checkRate()` 時** | 改的人 | `node test/wage.test.js` 有沒有全過 | 就在專案根目錄 |
+| **每次動 `checkCost()`／`whmTaxCents()`／`comparePrice()` 時** | 改的人 | `node test/cost.test.js` 有沒有全過 | 同上。票價那組測試**從 `DATA.cost.fares` 讀值**，所以改了 `DATA` 而忘了改別處會直接紅給你看 |
 
 ⚠️ **入門級費率跟最低工資是兩件事，不能只更新一個。**award 的入門級分類（園藝 MA000028 Level 1、
 酒莊 MA000090 Grade 1）**合法低於全國最低工資**，而這兩格正好是集二簽人口最常被歸進去的。
 `DATA.wage.nmw` 跟 `DATA.wage.entry` 每年都要各抓各的來源，抄一個去推另一個必錯。
 
-`v:false` 不是排程項目，是待辦清單——**下一次打開這個檔案時就處理**，不要等到 7 月。
+`v:false` 與 `pending:true` 不是排程項目，是待辦清單——**下一次打開這個檔案時就處理**，不要等到 7 月。
 
-### 目前仍待官方確認的項目（`v:false`）
+### 目前仍待官方確認的項目（`v:false` 與 `pending:true`）
 
 ```bash
-grep -o 'v:false[},]' public/index.html | wc -l
+grep -o 'v:false[},]' public/index.html | wc -l    # 22
+grep -o 'pending:true' public/index.html | wc -l   # 1
 ```
 
-**現在是 19**（2026-08-16 更新）。⚠️ 不要用 `grep -o 'v:false'`（少了後面那個字元類）——它會連**註解裡提到
-`v:false` 這個字串**的行一起算進去。後面的 `[},]` 就是用來只取真正的旗標。
-另外這條 `grep` **只抓 `v:false` 這種沒有空格的寫法**：`DATA` 裡還有幾個區塊級旗標寫成 `v: true`（有空格），
-那些不是來源條目，本來就不該進這個計數。
-這 19 筆的組成（可在瀏覽器 console 走一次 `DATA` 驗證）：
-**16 筆是帶官方網址的來源條目**（另有 100 筆 `v:true`，合計 116 筆來源全都帶旗標），
-**3 筆是沒有網址的內容卡片**——`Fair Work 口譯服務`、`退租還要先給通知期`、`所以離開西澳前 6–8 週就要開始跑`。
+⚠️ **這兩條 `grep` 是粗估，不是清單。**要拿到真正可對帳的數字，跑這個（零相依，直接從 `index.html` 挖 `DATA`）：
+
+```bash
+node -e "const fs=require('fs'),vm=require('vm');const h=fs.readFileSync('public/index.html','utf8');const i=h.indexOf('const DATA = {');let d=0,e=-1;for(let k=i;k<h.length;k++){const c=h[k];if(c==='{')d++;else if(c==='}'&&--d===0){e=k+1;break}}const x={out:null};vm.createContext(x);vm.runInContext(h.slice(i,e)+';out=DATA;',x);let T=0,F=0;for(const k of Object.keys(x.out)){const s=x.out[k]&&x.out[k].src;if(Array.isArray(s)){const f=s.filter(o=>o.v===false).length;console.log(k.padEnd(9),String(s.length).padStart(3),'筆　待核',f);T+=s.length;F+=f}}console.log('合計'.padEnd(9),String(T).padStart(3),'筆　待核',F)"
+```
+
+**2026-08-16 的實際結果：**
+
+| 區塊 | 來源 | 待核 |
+|---|---:|---:|
+| regional | 7 | 0 |
+| wage | 23 | 6 |
+| cost | 13 | 3 |
+| car | 14 | 2 |
+| rent | 18 | 4 |
+| scam | 11 | 1 |
+| after | 21 | 2 |
+| landing | 21 | 1 |
+| **合計** | **128** | **19** |
+
+**22 個 `v:false` 減掉這 19 筆來源條目，剩下的 3 筆不住在 `.src` 裡**——它們是沒有網址的內容卡片，由別的 renderer 印出「待核」：`DATA.wage.report.calls[1]`（Fair Work 口譯服務）、`DATA.rent.exit[2]`（退租還要先給通知期）、`DATA.rent.exit[3]`（所以離開西澳前 6–8 週就要開始跑）。
+
+**再加上 1 個 `pending:true`**（`DATA.cost.save.items[7]`）——`/cost` 的卡片渲染器已經把 `v` 用在別的地方（判斷要不要輸出 HTML），所以卡層另開了一個旗標名。**這是唯一一個不叫 `v:false` 的待核標記，數的時候不要漏。**
+
+於是全站的對帳等式是：
+
+```js
+document.querySelectorAll('.pending').length   // 22 + 1 = 23
+```
+
+⚠️ 另外兩個會讓你算錯的坑：**(1)** 不要用 `grep -o 'v:false'`（少了後面那個字元類）——它會連註解裡提到這個字串的行一起算。**(2)** 這條 `grep` 只抓沒有空格的 `v:false`；`DATA` 裡還有幾個區塊級旗標寫成 `v: true`（有空格），那些不是來源條目，本來就不該進計數。
 
 集中在這幾類：
 
@@ -177,6 +211,16 @@ grep -o 'v:false[},]' public/index.html | wc -l
 - **WorkCover WA 的 7 天／14 天程序時限** — `workcover.wa.gov.au` 對 WebFetch 回 403（頁面與 PDF 都是）。
   站上已就這幾個天數寫明「未親自逐字確認，以官方頁為準」。**受傷資格那句與 1300 794 744 是從
   `wa.gov.au` 鏡像頁逐字確認過的**，只有天數待核。
+- **`/cost` 的三筆，全都卡在 bot 防護**（三個頁面都回 challenge 或 403，拿不到原文逐字比對）：
+  **ACCC 的 Unit Pricing Code**（「>1,000 m² 的實體超市與所有線上超市必須標單位價格」這個門檻）、
+  **AIHW 的 30/40 rule**（「收入後 40% 家戶、房租佔稅前收入 >30% 即住房壓力」的定義）、
+  **REIWA 的 Perth 各區租金中位數**。
+  ⚠️ 前兩條是**試算機實際拿來判斷的判準**，不是背景說明——30% 這個門檻直接決定使用者看到 ✅ 還是 ⚠️。
+  第三條站上**只放連結不抄數字**，所以它待核的代價比前兩條小。
+- **`/cost` 的降價標籤卡（`pending:true`，不是 `v:false`）** — 「生鮮熟食接近保存期限會貼降價標」這件事本身
+  沒有官方頁可引，而**網路上流傳的「幾點幾分貼」全是個人經驗**。
+  站上的處理方式是**刻意不給時間**，並在卡片裡寫明「給了就是編的」。
+  **清這個旗標的正確方式是找到官方或連鎖總部的公開說明，不是去抄一個論壇上的時間。**
 
 ### 已知的錯誤來源（不要再引）
 

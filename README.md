@@ -9,6 +9,7 @@
 ```
 /regional  集二簽郵遞區號與 88 天，還有 condition 8547
 /wage      時薪紅線（西澳有兩套勞資系統，地板不只一條）
+/cost      活不活得下去：扣完稅付完房租還剩什麼、怎麼判斷貴不貴
 /car       買車：沒有冷靜期、私人交易沒有保固
 /rent      押金上限、分租雅房到底受不受保護、退租時程
 /scam      換匯與付款：哪些付款軌道還追得回來
@@ -17,7 +18,7 @@
 /ask       在群裡問之前，先問對問題
 ```
 
-八個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
+九個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
 
 ---
 
@@ -36,6 +37,7 @@
 | 不做 | 為什麼 |
 |---|---|
 | 職缺表／房源表／任何「今日有效」清單 | 維運者一離開就變成幽靈刊登。因為看起來比 LINE 正式，害人白跑的傷害**更大**。 |
+| 「Perth 一週菜錢大約 $XXX」這種生活費行情 | 同上。`/cost` 的做法是**金額由使用者自己填，站上只提供判準**——稅是法定算式、車資是官方公告價、貴不貴用比例（房租佔稅前收入幾成、這筆錢要工作幾小時）。三種都不會因為沒人維護就變錯。 |
 | 指名的詐騙黑名單 | 西澳與北領地是全澳唯二沒有採納 2021 年誹謗法改革的司法管轄區。這裡只寫手法，不寫人。 |
 | 留言板／表單／登入／資料庫 | 任何可寫入的東西都要每天有人審核。這個站的維運預算是每天五分鐘。 |
 | LINE bot | 推播按收訊人數計費；一則摘要進 500 人的群＝計 500 則。而且一個群只能有一個 bot。 |
@@ -52,12 +54,13 @@
 ```
 public/               ← 部署目錄。只有這裡面的東西會上線。
   index.html          整個站。所有事實集中在檔案底部 <script> 裡的 DATA 物件。
-  _redirects          短網址（/scam、/wage …）
+  _redirects          短網址（/scam、/wage、/cost …）
   _headers            安全標頭：CSP、HSTS、Referrer-Policy: no-referrer 等
   README.md           資料維護手冊：改資料的規則、複核日曆、已知的錯誤來源
   handoff.md          說明樁，不是文件（原因寫在裡面）
 test/
   wage.test.js        時薪判定的回歸測試
+  cost.test.js        生活成本試算的回歸測試（稅級距、房租佔比、單位價格）
 ```
 
 沒有 `package.json`，因為沒有相依套件。要跑的只有 Node（測試用）跟一個瀏覽器。
@@ -76,22 +79,35 @@ python -m http.server 8787 --bind 127.0.0.1 --directory public
 
 ```bash
 node test/wage.test.js
+node test/cost.test.js
 ```
 
-零相依套件，28 個案例。它**直接從 `index.html` 挖出 `DATA` 與 `checkRate()` 用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
+零相依套件，合計 96 個案例（時薪 28、生活成本 68）。兩支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
 
-**動過 `checkRate()` 或 `DATA.wage` 就一定要跑。**
+**動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`。**
 
-涵蓋：輸入護欄、浮點數邊界、入門級分類的假指控情境、兩套勞資系統、計件三分支、剪貼簿文字必須與畫面判定同一個符號、每條路徑都要有退休金提醒。
+只有這兩條路徑有測試，因為只有它們會主動對使用者說出會改變他行為的話：
+
+- `wage.test.js` — 「你的雇主違法」。涵蓋輸入護欄、浮點數邊界、入門級分類的假指控情境、兩套勞資系統、計件三分支、剪貼簿文字必須與畫面判定同一個符號、每條路徑都要有退休金提醒。
+- `cost.test.js` — 「你的雇主沒登記所以你每週被多扣 $XXX」「你的房租超過官方判準」「存到目標要 N 週」。涵蓋 ATO 五個稅級距邊界、未登記雇主的 30% 分支、30/40 rule 的踩線與越線、票價必須來自 `DATA.cost.fares` 不能寫死、支出剛好等於收入時不得印出 `$-0.00`、以及「這一區不得出現寫死的生活費金額」這條設計約束本身。
 
 ### 語法與旗標檢查
 
 ```bash
 node -e "const fs=require('fs');const m=fs.readFileSync('public/index.html','utf8').match(/<script>([\s\S]*)<\/script>/);fs.writeFileSync('chk.js',m[1])" && node --check chk.js
-grep -o 'v:false[},]' public/index.html | wc -l
+grep -o 'v:false[},]' public/index.html | wc -l    # 目前 22
+grep -o 'pending:true' public/index.html | wc -l   # 目前 1
 ```
 
-第二條數的是「待核」旗標。**把它跟瀏覽器裡的 `document.querySelectorAll('.pending').length` 對一次**——兩邊對不上就代表有 renderer 讀不到旗標，畫面上會有一筆沒標「待核」的未查證資料。這個 bug 真的發生過。
+後兩條數的是「待核」旗標，而**站上有兩種標記法**：`v:false` 標單一來源，`pending:true` 標整張卡（`/cost` 的卡片渲染器已經把 `v` 用在別的地方，所以卡層另開一個旗標）。**兩個數字加起來要等於瀏覽器裡的 `document.querySelectorAll('.pending').length`**：
+
+```js
+document.querySelectorAll('.pending').length   // 要等於 22 + 1 = 23
+```
+
+對不上就代表有 renderer 讀不到旗標，畫面上會有一筆沒標「待核」的未查證資料。這個 bug 真的發生過。
+
+⚠️ 只數 `v:false` 會少算，只看 `.srclist` 也會少算——有 3 筆 `v:false` 不住在來源清單裡，是由別的 renderer 印出來的。**加了新的 renderer 就要回來更新這一段**，否則下一個人會拿一個不完整的檢查去對，然後把「對不上」誤判成 bug。
 
 ### 部署
 
