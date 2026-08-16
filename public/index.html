@@ -2726,6 +2726,18 @@ function checkCost(){
     box.innerHTML = '<div class="verdict">' + h + '</div><div class="detail">' + d + '</div>';
   };
 
+  /* 格式器放在護欄**之前**：以前它們定義在下面，於是護欄自己的訊息只能用字串串接
+     （`"$" + rateCap`），變成全檔唯一繞過格式器的金額。現在 nmw 是 26.44、上界剛好
+     是三位數所以看不出來，但這條規則的成立是靠數字剛好小，不是靠設計。
+     金額只有這一組格式器，畫面與剪貼簿共用。指定 en-AU 而不是跟著系統語系跑——
+     golden 快照要在別人的機器上也長一樣。 */
+  const c = x => Math.round(x * 100);          /* 元 → 分 */
+  const fmt = cents => (cents / 100).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = cents => "$" + fmt(cents);                            /* 純文字：剪貼簿用 */
+  const m = cents => '<span class="num">' + money(cents) + '</span>'; /* 畫面用 */
+  const whole = n => n.toLocaleString("en-AU");                       /* 整數：稅級距、年收 */
+  const pct = (a, b) => b === 0 ? 0 : Math.round(a * 1000 / b) / 10;
+
   if(rate === null || !isFinite(rate) || rate <= 0 || hours === null || !isFinite(hours) || hours <= 0){
     return bail("請先填時薪和每週工時", "<p>其他欄位可以空著，但這兩個沒有就算不出任何東西。時薪填<strong>稅前</strong>的——對方報「到手多少」的話，那個數字不能拿來算。</p>");
   }
@@ -2735,7 +2747,7 @@ function checkCost(){
      不另外維護一個寫死的數字（那種數字沒有人會回來更新）。 */
   const rateCap = Math.round(DATA.wage.nmw * 10);
   if(rate > rateCap){
-    return bail("時薪超過 $" + rateCap + "，這個數字先確認一下",
+    return bail("時薪超過 " + money(c(rateCap)) + "，這個數字先確認一下",
       "<p>更常見的情況是多打了一個位數，或者把「一週領多少」填進了時薪那一格。<br>如果真的是這個數字，那這一頁幫不上忙——它算的是「這樣過不過得下去」，而那個問題你已經沒有了。</p>");
   }
   if(hours > 80){
@@ -2743,19 +2755,17 @@ function checkCost(){
       "<p>不是不可能，但更常見的情況是把「兩週的工時」填成一週。<br>如果真的是一週 " + hours + " 小時，那要看的不是這一頁——長時間工作有安全與加班費的問題，先看 <a href=\"#wage\">/wage</a>。</p>");
   }
 
-  const c = x => Math.round(x * 100);          /* 元 → 分 */
-  /* 金額只有這一個格式器，畫面與剪貼簿共用。
-     以前畫面走 toFixed(2)（印出 $2730.00）而稅級距走 toLocaleString（印出 $18,200），
-     同一句話裡兩種寫法；時薪欄多打一個位數還會印出 $44000000603.85 這種讀不動的東西。
-     指定 en-AU 而不是讓它跟著系統語系跑——golden 快照要在別人的機器上也長一樣。 */
-  const fmt = cents => (cents / 100).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const money = cents => "$" + fmt(cents);                            /* 純文字：剪貼簿用 */
-  const m = cents => '<span class="num">' + money(cents) + '</span>'; /* 畫面用 */
-  const whole = n => n.toLocaleString("en-AU");                       /* 整數：稅級距、年收 */
   const rateTxt = money(c(rate));
-  const pct = (a, b) => b === 0 ? 0 : Math.round(a * 1000 / b) / 10;
 
   const grossW = Math.round(rate * hours * 100);          /* 稅前週薪（分） */
+  /* 時薪與工時都通過了護欄，兩者的乘積仍然可以進位到 0（例如 $0.001 × 1 小時）。
+     grossW 是後面每一個百分比的分母：它是 0 的話，pct() 一律回 0，於是
+     「房租佔稅前收入 0%」會配上「你在線上」。擋在這裡，不要讓一頁的判定
+     建立在一個等於零的分母上。 */
+  if(grossW <= 0){
+    return bail("這個時薪與工時算出來的週薪是 " + money(0),
+      "<p>兩個數字本身都通過了檢查，但乘起來不到一分錢，後面每一個比例的分母都會是零。<br>先確認時薪那一格填的是<strong>每小時</strong>的金額。</p>");
+  }
   const reg = $("#ctax").value;                            /* unknown / reg / unreg / resident */
   const isRes = reg === "resident";
   const isReg = reg !== "unreg";                           /* 不知道的話，先以「有登記」估——低估稅比高估安全 */
@@ -2778,19 +2788,30 @@ function checkCost(){
   const bills = $("#cbills").value;
   const tr = $("#ctrans").value;
 
-  /* 負數以前跟「沒填」走同一條路安靜歸零：填 -500 的人會看到「你沒有填任何支出」，
-     然後拿到一個偏高、卻長得完全正常的結餘。安靜的錯比擋下來危險，
-     尤其這一份是要貼進群組的。油錢只有選了「開車」才看——沒選就不該被舊值擋住。 */
-  const neg = [["#crent", "房租"], ["#cfood", "伙食"]]
+  /* 支出欄只有三種合法狀態：留白、0、正數；其餘一律擋。
+     這裡以前是**兩個各自判斷的地方**：守門用 `isFinite(v) && v < 0` 找負數，
+     amt() 用 `!isFinite(v)` 歸零。於是 `-1e999`（parseFloat 得 -Infinity）
+     在守門端「不算負數」而放行，到了計算端又被當成 0——房租憑空消失、結餘偏高、
+     畫面上一切正常。同一個問題問兩次就會得到兩個答案，而這正是加這道門要擋的那種錯。
+     現在只留一個分類器，守門與計算都從它取值。
+     油錢只有選了「開車」才檢查——沒選就不該被那一格的舊值擋住。 */
+  const grade = sel => {
+    const v = num(sel);
+    if(v === null) return null;                  /* 留白 */
+    return (isFinite(v) && v >= 0) ? v : "bad";  /* 負數、Infinity、NaN 一律 bad */
+  };
+  const badIn = [["#crent", "房租"], ["#cfood", "伙食"]]
     .concat(tr === "car" ? [["#ccar", "油錢"]] : [])
-    .filter(p => { const v = num(p[0]); return v !== null && isFinite(v) && v < 0; })
+    .filter(p => grade(p[0]) === "bad")
     .map(p => p[1]);
-  if(neg.length){
-    return bail(neg.join("、") + "填了負數，先改一下",
-      "<p>負的支出算不出東西。這一格以前會被當成沒填，於是你會拿到一個偏高、卻看起來很正常的結餘——那比直接擋下來危險。</p><p>把它改成正數，或者留白。</p>");
+  if(badIn.length){
+    return bail(badIn.join("、") + "填的不是有效金額，先改一下",
+      "<p>支出不能是負數，也不能是算不出來的數字。這一格要是被當成「沒填」跳過去，"
+      + "你會拿到一個偏高、卻看起來完全正常的結餘——那比直接擋下來危險。</p>"
+      + "<p>把它改成 0 以上的數字，或者留白。</p>");
   }
 
-  const amt = sel => { const v = num(sel); return v === null || !isFinite(v) ? 0 : c(v); };
+  const amt = sel => { const v = grade(sel); return (v === null || v === "bad") ? 0 : c(v); };
   const rentW = amt("#crent");
   const foodW = amt("#cfood");
 
@@ -2806,9 +2827,15 @@ function checkCost(){
   /* 判準一：房租佔稅前收入的比例（ABS／AIHW 的 30/40 rule）。 */
   const rentPct = pct(rentW, grossW);
   const overStress = rentW > 0 && rentW > grossW * C.stress;
-  /* 判定用的是嚴格大於 30%，顯示的百分比卻四捨五入到小數一位。$300.01／$1000
-     會印出「30%」再說「超過 30%」——同一句話自打嘴巴。踩線的情形一律改用文字。 */
-  const hairline = overStress && rentPct <= C.stress * 100;
+  /* 判定用的是嚴格大於 30%，顯示的百分比卻四捨五入到小數一位，於是顯示值剛好是
+     30.0% 的那一段，兩邊都會自打嘴巴：$300.01／$1,000 印「30%」再說「超過 30%」，
+     $300.00／$1,000 印「30%」再說「低於 30%」。上一輪只修了超過的那一側，
+     下面那一側原封不動——一個判準兩個側邊，只修一側等於沒修完。
+     踩線的條件與 overStress 無關，就是**顯示值等於 30.0**；哪一側由 overStress 分。
+     門檻先過一次 round 再比：`C.stress * 100` 是浮點乘積，不能拿去跟 pct() 的
+     輸出做 === 比較。pct() 回傳的一律是 x/10，所以兩邊都收斂到同一個表示法。 */
+  const stressPct = Math.round(C.stress * 1000) / 10;
+  const hairline = rentW > 0 && rentPct === stressPct;
   /* 踩線的時候「30%」這個數字不能單獨出現，所以踩線版是一整個子句、不是一個百分比。
      兩種句型各留一份，而且要挨在一起：畫面與剪貼簿都只准從這兩個裡面挑，不准自己再組一次。
      2026-08-17 剪貼簿就是自己組了一次（`rentPct + "%"`），印出「稅前的 30%（超過 30%）」，
@@ -2835,7 +2862,12 @@ function checkCost(){
   } else if(overStress){
     tone = "warn";
     verdict = "⚠️ 撐得住，但房租" + rentShareShort;
-    clip = "⚠️ 房租" + rentShare + "（官方判準是超過 30%）";
+    /* 這一行以前是 `clip = … + "（官方判準是超過 30%）"`——自己帶一組括號，
+       下面 clipNotes 收尾時再接一組，於是「房租過重」同時掛任何一條附註
+       （未登記、低於法定最低）就印出兩組括號。畫面走 notes 陣列所以只有一組。
+       第三次踩到同一個形狀了：附註**一律**進陣列，沒有例外，收尾只准有一處。 */
+    clip = "⚠️ 房租" + rentShare;
+    clipNotes.push("官方判準是超過 30%");
   } else if(reg === "unreg"){
     /* 錢是夠用，但整年被多扣稅。這種情況不該給一個乾淨的 ✅——
        ✅ 會讓人以為沒事要處理，實際上要處理的是雇主的登記狀態。 */
@@ -2868,8 +2900,8 @@ function checkCost(){
   const belowMin = rate < DATA.wage.casualMin;
   if(belowMin){
     const floorTxt = rate < DATA.wage.nmw
-      ? '時薪低於全國最低 $' + DATA.wage.nmw.toFixed(2)
-      : '時薪低於 casual 最低 $' + DATA.wage.casualMin.toFixed(2);
+      ? '時薪低於全國最低 ' + money(c(DATA.wage.nmw))
+      : '時薪低於 casual 最低 ' + money(c(DATA.wage.casualMin));
     /* ✅ 要兩份一起換。只換 verdict 的話，畫面是 ⚠️ 而貼進群組的那份是 ✅——
        這一整輪抓到的三個錯全是同一個形狀：兩份輸出各自組裝，改了看得見的那份。 */
     if(tone === "ok"){
@@ -2890,8 +2922,8 @@ function checkCost(){
   d += '<p><strong>稅前週薪</strong> ' + m(grossW) + '（' + rateTxt + ' × ' + hours + ' 小時）</p>';
 
   if(belowMin){
-    d += '<p>你填的 ' + rateTxt + ' 低於全國 casual 最低 $' + DATA.wage.casualMin.toFixed(2)
-       + (rate < DATA.wage.nmw ? '，也低於不含 casual loading 的 $' + DATA.wage.nmw.toFixed(2) : '')
+    d += '<p>你填的 ' + rateTxt + ' 低於全國 casual 最低 ' + m(c(DATA.wage.casualMin))
+       + (rate < DATA.wage.nmw ? '，也低於不含 casual loading 的 ' + m(c(DATA.wage.nmw)) : '')
        + '。<strong>下面照你填的數字算下去，但它算的是「這樣過不過得下去」，不是「這樣合不合法」。</strong>'
        + '<br>合不合法要看你的年齡（未滿 21 歲有 junior rate）、僱用形態、以及適用哪一本 award'
        + '——那幾件事這一頁不知道，<a href="#wage">/wage</a> 才問得完。<strong>先去問完再回來算錢。</strong></p>';
@@ -2924,16 +2956,19 @@ function checkCost(){
     /* 上面刻意把兩筆拆開講（那 2% 拿得到 MES 就免得掉，所得稅免不掉）。
        但拆開之後，畫面上就沒有任何一個地方寫著「這週總共被扣多少」——
        而剪貼簿的第二行印的正好是那個合計。同一次計算，一個數字只在對外那一份出現，
-       畫面上查不到，等於沒有人能核對它。所以合計要補回來，位置在拆解的後面。 */
+       畫面上查不到，等於沒有人能核對它。所以合計要補回來，位置在拆解的後面。
+       兩段共用同一個條件，就寫成同一個 if：兩個相鄰的 `if(levyW > 0)` 是在邀請
+       下一個人往中間插東西——而這一段自己剛剛就是那樣被插壞的。 */
     if(levyW > 0){
       d += '<p><strong>兩筆合計預扣</strong> −' + m(taxW) + '（約 ' + taxPct + '%）。</p>';
-    }
 
-    /* 這是整個居民模式唯一真的替使用者省到錢的地方，不能只丟進來源清單帶過。 */
-    if(levyW > 0){
-      /* 「這筆」與「有機會」中間不要留空格：中文之間的空白在畫面上就是一個孤兒缺口，
-         而它在原始碼裡看起來只像是接字串時的排版。渲染成純文字讀才會發現。 */
-      d += '<p>這筆錢<strong>有機會整筆免掉</strong>，一年是 ' + m(medicareLevyCents(annual)) + '。'
+      /* 這是整個居民模式唯一真的替使用者省到錢的地方，不能只丟進來源清單帶過。
+         主詞寫死成「那 2%」，不用「這筆錢」：上一行的合計是所得稅＋levy，
+         用代名詞的話最近的先行詞就變成那個合計數，而免得掉的只有 levy 這一筆，
+         兩者差了快一個數量級。那不是文氣問題，是會讓人算錯自己能退多少錢。
+         中文與中文之間不要留空格：在畫面上是一個孤兒缺口，在原始碼裡卻只看起來
+         像接字串時的排版，要渲染成純文字讀才會發現。 */
+      d += '<p>那 2% 的 Medicare levy <strong>有機會整筆免掉</strong>，一年是 ' + m(medicareLevyCents(annual)) + '。'
          + '台灣不在互惠醫療協定的 11 國名單內，PR 下來之前你沒有 Medicare 資格，'
          + '而 ATO 允許沒有資格的人申請豁免——憑證是 Services Australia 的 '
          + '<b>Medicare Entitlement Statement</b>（MES）。ATO 自己頁面上的示範案例就是一個 482 簽證的人。'
@@ -2984,7 +3019,7 @@ function checkCost(){
   const rows = [];
   if(rentW > 0) rows.push(["房租", rentW, bills === "farm" ? "包吃住，直接從薪水扣" : bills === "exc" ? "不含水電網路" : "含水電網路"]);
   if(foodW > 0) rows.push(["伙食", foodW, ""]);
-  if(transW > 0) rows.push(["通勤", transW, tr === "car" ? "自己填的油錢" : "每天來回 2 趟 Go Anywhere × 5 天，$" + fare.toFixed(2) + "／趟"]);
+  if(transW > 0) rows.push(["通勤", transW, tr === "car" ? "自己填的油錢" : "每天來回 2 趟 Go Anywhere × 5 天，" + money(c(fare)) + "／趟"]);
 
   if(rows.length){
     d += '<p style="margin-top:12px"><strong>每週支出</strong>（只算你填的項目）</p><ul class="bullets">';
@@ -2993,10 +3028,17 @@ function checkCost(){
          + (r[2] ? '。' + r[2] : '') + '</span></li>';
     });
     d += '</ul>';
-    /* 「這三項」只有在真的填了三項時才成立——只填房租的人看到「這三項」會以為算錯了。 */
+    /* 「這三項」只有在真的填了三項時才成立——只填房租的人看到「這三項」會以為算錯了。
+       另一個坑：支出換算出來的時數會超過實際工時（結餘為負時必然如此），
+       那時候「工作 20 小時，其中 24.2 小時是在付這 2 項」是子集比全集大，
+       讀起來像算錯。超過就換一種講法——那才是負結餘真正的意思。 */
+    const items = rows.length === 1 ? rows[0][0] : '這 ' + rows.length + ' 項';
+    const spendHrs = netRate === 0 ? null : spendW / netRate;
     d += '<p><strong>' + (leftW < 0 ? '每週短少' : '每週剩下') + '</strong> ' + m(Math.abs(leftW))
-       + '　（工作 ' + hours + ' 小時，其中 <strong>' + hrs(spendW) + ' 小時</strong>是在付'
-       + (rows.length === 1 ? rows[0][0] : '這 ' + rows.length + ' 項') + '）</p>';
+       + (spendHrs !== null && spendHrs > hours
+          ? '　（' + items + '要 <strong>' + hrs(spendW) + ' 小時</strong>才付得完，而你一週只工作 ' + hours + ' 小時）'
+          : '　（工作 ' + hours + ' 小時，其中 <strong>' + hrs(spendW) + ' 小時</strong>是在付' + items + '）')
+       + '</p>';
   } else {
     d += '<p style="margin-top:12px">你沒有填任何支出，所以上面的結餘就等於稅後週薪。'
        + '<strong>填房租那一格才是這個工具真正有用的地方</strong>——房租是這個族群唯一真正大的固定支出。</p>';
@@ -3006,8 +3048,17 @@ function checkCost(){
   if(rentW > 0){
     /* 建議工時要無條件進位：40.1333 印成 40.1 之後，40.1 小時仍然踩在線上。 */
     const needHours = Math.ceil(rentW / C.stress / (rate * 100) * 10) / 10;
+    /* 三種狀態各一句，不是兩種。踩線（顯示值剛好 30.0%）要單獨講，否則
+       「降到 $387.60 以下」這種差五分錢的建議會被當成可執行的動作寫出去，
+       而下緣那一側還會印出「房租佔稅前收入 30%……低於 30% 的判準」。 */
     d += '<p style="margin-top:12px"><strong>房租' + rentShare + '。</strong>'
-       + (overStress
+       + (hairline
+          ? 'ABS／AIHW 的 30/40 rule 判的是<strong>沒有四捨五入的數字</strong>，而你'
+            + (overStress ? '<strong>已經超過了</strong>' : '<strong>剛好還沒超過</strong>')
+            + '——顯示成 30.0% 只是進位的結果。'
+            + '<br>這個位置沒有「調一下就好」的做法：差距小到任何一邊動一點就會翻面。'
+            + '要脫離這條線，得換成<strong>整數量級的差</strong>——換房子、換工時級距，不是省五塊錢。'
+          : overStress
           ? '澳洲統計口徑（ABS／AIHW）的 30/40 rule 是<strong>超過 30% 即為 housing stress</strong>，你在線上。'
             + '<br>能動的只有兩邊：<strong>房租降到 ' + m(Math.floor(grossW * C.stress)) + ' 以下</strong>，'
             /* 站上自己在 /wage 說長工時有安全與加班費問題，就不該在這裡建議一個

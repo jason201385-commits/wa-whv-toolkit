@@ -405,7 +405,10 @@ ok("結果框一定會顯示出來", runCost({ rate: 33, hours: 38 }).hidden ===
 
 /* 負支出以前跟「沒填」走同一條路安靜歸零：填 -500 的人會看到
    「你沒有填任何支出」，然後拿到一個偏高、卻長得完全正常的結餘。
-   算錯而看起來正常，比擋下來危險。 */
+   算錯而看起來正常，比擋下來危險。
+
+   標題只指名是哪一格（欄位名要出現在標題裡，使用者才知道回頭改哪一欄），
+   「不能是負數」屬於理由，寫在下面的說明段——所以斷言也分兩層問。 */
 (function () {
   for (const [label, o] of [
     ["房租", { rate: 34, hours: 38, rent: -100 }],
@@ -414,10 +417,35 @@ ok("結果框一定會顯示出來", runCost({ rate: 33, hours: 38 }).hidden ===
   ]) {
     const r = runCost(o);
     ok(`${label}填負數 → 擋下來並指名是哪一格`,
-      r.tone === "warn" && r.verdict.includes(label) && r.verdict.includes("負數"), r.verdict);
+      r.tone === "warn" && r.verdict.includes(label)
+      && r.verdict.includes("不是有效金額"), r.verdict);
+    ok(`${label}填負數 → 說明段要講出為什麼（不能是負數）`, r.html.includes("負數"), r.html);
     ok(`${label}填負數 → 不得再說「你沒有填任何支出」`, !r.html.includes("沒有填任何支出"));
     ok(`${label}填負數 → 不產生剪貼簿`, r.clip === null);
   }
+
+  /* 這一格是 2026-08-17 第二輪 QA 的紅旗 3：守門端問「是不是負數」、
+     計算端問「是不是有限數」，同一個問題問兩次得到兩個答案。
+     `-1e999` 的 parseFloat 是 -Infinity——守門說「不算負數」放行，
+     amt() 說「不是有限數」歸零，於是房租憑空消失、結餘偏高、畫面全綠。
+     這是全檔最危險的一種錯：安靜、看起來正常、而且要貼進群組。 */
+  for (const [label, o] of [
+    ["房租", { rate: 34, hours: 38, rent: -1e999 }],
+    ["伙食", { rate: 34, hours: 38, food: 1e999 }],
+    ["油錢", { rate: 34, hours: 38, trans: "car", car: -1e999 }],
+  ]) {
+    const r = runCost(o);
+    ok(`${label}填 ±Infinity → 跟負數走同一條路擋下來`,
+      r.tone === "warn" && r.verdict.includes(label)
+      && r.verdict.includes("不是有效金額"), r.verdict);
+    ok(`${label}填 ±Infinity → 不得安靜歸零算完一整頁`,
+      r.clip === null && !r.html.includes("每週剩下"), r.html.slice(0, 120));
+  }
+
+  /* 0 是合法的（住家裡、公司包吃住），不能跟負數一起擋掉。 */
+  const zero = runCost({ rate: 34, hours: 38, rent: 0, food: 0 });
+  ok("支出填 0 照算，不當成無效輸入", zero.tone === "ok", zero.verdict);
+
   /* 沒選「開車」的時候，油錢那一格的舊值不該擋住整個計算。 */
   const stale = runCost({ rate: 34, hours: 38, trans: "walk", car: -30 });
   ok("沒選開車時，油錢欄的舊負值不擋計算", stale.tone === "ok", stale.verdict);
@@ -455,7 +483,16 @@ console.log("\n— 房租佔比：ABS／AIHW 的 30/40 rule —");
   ok("剛好 30% 不判 housing stress",
     at.tone === "ok" && !at.verdict.includes("吃掉"),
     `實得色調 ${at.tone}／判定「${at.verdict}」`);
-  ok("剛好 30% 要說「配得上這份工作」", at.html.includes("配得上"));
+  /* 這一格以前斷言的是「要說『配得上這份工作』」——那句話把它釘死在錯的行為上：
+     判定用的是嚴格大於 30%，顯示的百分比卻四捨五入，所以剛好 30.0% 的人會同時
+     看到「30%」與「低於 30%」。踩線這件事本身要講出來，不能拿一句安心話蓋過去。
+     兩側都要測：這一格是「剛好還沒超過」，下面 387.65 那一組是「已經超過了」。 */
+  ok("剛好 30% 不得說成「低於 30%」（顯示值就是 30.0）",
+    !at.html.includes("低於 30%") && !at.html.includes("配得上"), at.html);
+  ok("剛好 30% 要明說是踩在線上、而且是還沒超過的那一側",
+    at.html.includes("剛好還沒超過") && !at.html.includes("已經超過了"), at.html);
+  ok("剛好 30% 也要留著判準名稱（不能因為踩線就把出處吞掉）",
+    at.html.includes("30/40 rule"), at.html);
   const over = runCost(Object.assign({}, opts, { rent: 1000 * C.stress + 1 }));
   ok("超過 30% 判 warn", over.tone === "warn", `實得 ${over.tone}`);
   ok("超過 30% 要給兩條可動的路（降房租／加工時）",
@@ -608,8 +645,22 @@ console.log("\n— 剪貼簿與畫面的機械對帳（通則）—");
     ["居民・levy 全額", { rate: 35, hours: 38, reg: "resident", rent: 250 }],
     ["房租踩在 30% 的線上", { rate: 34, hours: 38, reg: "reg", rent: 387.65 }],
     ["房租過重", { rate: 34, hours: 38, reg: "reg", rent: 450 }],
+    /* ↓ 這兩格是 2026-08-17 第二輪 QA 指名的缺口。上面「剪貼簿標題列最多一組括號」
+       那條規則寫得是對的，但當時沒有任何一格**同時**具備 overStress 與一條附註，
+       於是它對自己被寫來保護的那個分支從來沒有執行過——規則沒錯，覆蓋錯了。
+       一條走不到的通則跟沒有那條通則，在測試輸出上長得一模一樣。 */
+    ["房租過重＋雇主未登記（兩組括號的入口）",
+      { rate: 34, hours: 38, reg: "unreg", rent: 450 }],
+    ["房租過重＋低於法定最低（同上，另一條附註）",
+      { rate: 20, hours: 38, reg: "reg", rent: 260 }],
     ["負結餘", { rate: 34, hours: 20, reg: "reg", rent: 500, food: 200 }],
     ["農場包吃住", { rate: 34, hours: 38, reg: "reg", rent: 150, bills: "farm" }],
+    ["房租不含水電網路（多一段提醒）",
+      { rate: 34, hours: 38, reg: "reg", rent: 250, bills: "exc" }],
+    ["有存錢目標（多一段倒數）",
+      { rate: 34, hours: 38, reg: "reg", rent: 250, goal: 8000 }],
+    ["房租高到補工時也救不了（needHours > 80）",
+      { rate: 34, hours: 38, reg: "reg", rent: 900 }],
     ["開車通勤", { rate: 34, hours: 38, reg: "reg", rent: 250, trans: "car", car: 90 }],
     ["六位數年收（會出現千分位）", { rate: 60, hours: 60, reg: "resident", rent: 800 }],
   ];
