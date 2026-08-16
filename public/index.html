@@ -2795,23 +2795,44 @@ function checkCost(){
      畫面上一切正常。同一個問題問兩次就會得到兩個答案，而這正是加這道門要擋的那種錯。
      現在只留一個分類器，守門與計算都從它取值。
      油錢只有選了「開車」才檢查——沒選就不該被那一格的舊值擋住。 */
-  const grade = sel => {
+  /* 上界跟 rateCap 同一個形狀：**打字錯誤的啟發式**，不是「支出不可能超過這個數」的宣稱。
+     取這一頁自己願意接受的最高週薪（rateCap × 上面那道 80 小時的門），不另外發明一個數字。
+     它同時是唯一擋得住溢位的東西。`isFinite(v)` 檢查的是**元**，而這一頁對它做的算術是
+     `c(v)` 的 ×100，再加上 pct() 裡的 ×1000：1e308 在元是有限的，×100 就成了 Infinity；
+     1.7e306 撐得過 ×100，撐不過 ×1000。兩種都會讓「$∞」與「Infinity%」同時出現在
+     畫面**和**剪貼簿上，而 type="number" 擋不住——`1e308` 是合法的 HTML 浮點字面值。
+     **在一個單位上做的有效性檢查，管不到換算成另一個單位之後的事**——這是新的失效形狀，
+     跟前面那些「兩份輸出各自組裝」不同類，值得單獨記著。
+     存錢目標另給一個上界：它本來就該比一週的支出大，用週上界會把 $50,000 這種
+     完全正常的目標擋掉。取一年（週上界 × weeksPerYear），一樣是現成常數推出來的。 */
+  const weekCap = rateCap * 80;
+  const goalCap = weekCap * C.tax.weeksPerYear;
+  const grade = (sel, cap) => {
     const v = num(sel);
-    if(v === null) return null;                  /* 留白 */
-    return (isFinite(v) && v >= 0) ? v : "bad";  /* 負數、Infinity、NaN 一律 bad */
+    if(v === null) return null;                    /* 留白 */
+    if(!isFinite(v) || v < 0) return "bad";        /* 負數、Infinity、NaN */
+    return v > (cap || weekCap) ? "huge" : v;      /* 大到後面的算術會溢位 */
   };
-  const badIn = [["#crent", "房租"], ["#cfood", "伙食"]]
-    .concat(tr === "car" ? [["#ccar", "油錢"]] : [])
-    .filter(p => grade(p[0]) === "bad")
-    .map(p => p[1]);
+  const money3 = [["#crent", "房租"], ["#cfood", "伙食"]]
+    .concat(tr === "car" ? [["#ccar", "油錢"]] : []);
+  const badIn = money3.filter(p => grade(p[0]) === "bad").map(p => p[1]);
   if(badIn.length){
     return bail(badIn.join("、") + "填的不是有效金額，先改一下",
       "<p>支出不能是負數，也不能是算不出來的數字。這一格要是被當成「沒填」跳過去，"
       + "你會拿到一個偏高、卻看起來完全正常的結餘——那比直接擋下來危險。</p>"
       + "<p>把它改成 0 以上的數字，或者留白。</p>");
   }
+  const hugeIn = money3.filter(p => grade(p[0]) === "huge").map(p => p[1]);
+  if(hugeIn.length){
+    return bail(hugeIn.join("、") + "超過每週 " + money(c(weekCap)) + "，這個數字先確認一下",
+      "<p>這幾格填的是<strong>每週</strong>的金額。超過這個上界的數字，"
+      + "後面的百分比算下去會溢位，畫面上會印出「$∞」或「Infinity%」——"
+      + "那不是答案，只是這一頁算爆了還繼續往下印。</p>"
+      + "<p>上界取的是這一頁願意接受的最高週薪（" + money(c(rateCap)) + " × 80 小時），"
+      + "不是說房租不可能貴——真的貴到這裡的話，這一頁算不出對你有用的東西。</p>");
+  }
 
-  const amt = sel => { const v = grade(sel); return (v === null || v === "bad") ? 0 : c(v); };
+  const amt = sel => { const v = grade(sel); return typeof v === "number" ? c(v) : 0; };
   const rentW = amt("#crent");
   const foodW = amt("#cfood");
 
@@ -2854,11 +2875,21 @@ function checkCost(){
      兩份輸出各自組裝就會分岔——這一輪抓到的每一個錯都是這個形狀。 */
   const notes = [], clipNotes = [];
 
+  /* 結餘是這一頁的答案本身，不是某一支標題的裝飾。以前四支 clip 各自把它串進自己的
+     字串裡，於是 overStress 那一支把它換成房租比例之後，**整份剪貼簿再也沒有任何
+     「剩下多少」**——不是換位置，是整段訊息裡沒有這個數字。剪貼簿又剛好是唯一有
+     別人在看的那一份，而那一份下面寫著「有人問『這個薪水在 Perth 活不活得下去』，
+     貼這段比講感覺清楚」——房租過重的人正是最會被這樣問的人。
+     第十次踩到「兩份輸出各自組裝」。現在結餘只有這一個來源，四支都吃它；
+     房租過重要講的話改走 clipNotes，跟其他附註走同一條路。
+     `cost.test.js` 有一條斷言掃過每一種可以走到的組合，確認每一份剪貼簿都帶著它。 */
+  const leftTxt = (leftW < 0 ? "每週短少 " : "每週結餘 ") + money(Math.abs(leftW));
+
   let tone, verdict, clip;
   if(leftW < 0){
     tone = "bad";
     verdict = "🛑 這個組合是負的——每週短少 " + m(-leftW);
-    clip = "🛑 每週短少 " + money(-leftW);
+    clip = "🛑 " + leftTxt;
   } else if(overStress){
     tone = "warn";
     verdict = "⚠️ 撐得住，但房租" + rentShareShort;
@@ -2866,18 +2897,18 @@ function checkCost(){
        下面 clipNotes 收尾時再接一組，於是「房租過重」同時掛任何一條附註
        （未登記、低於法定最低）就印出兩組括號。畫面走 notes 陣列所以只有一組。
        第三次踩到同一個形狀了：附註**一律**進陣列，沒有例外，收尾只准有一處。 */
-    clip = "⚠️ 房租" + rentShare;
-    clipNotes.push("官方判準是超過 30%");
+    clip = "⚠️ " + leftTxt;
+    clipNotes.push("房租" + rentShare + "，官方判準是超過 30%");
   } else if(reg === "unreg"){
     /* 錢是夠用，但整年被多扣稅。這種情況不該給一個乾淨的 ✅——
        ✅ 會讓人以為沒事要處理，實際上要處理的是雇主的登記狀態。 */
     tone = "warn";
     verdict = "⚠️ 每週結餘 " + m(leftW) + "，但你正在被多扣稅";
-    clip = "⚠️ 每週結餘 " + money(leftW);
+    clip = "⚠️ " + leftTxt;
   } else {
     tone = "ok";
     verdict = "✅ 每週結餘 " + m(leftW);
-    clip = "✅ 每週結餘 " + money(leftW);
+    clip = "✅ " + leftTxt;
   }
 
   /* 上面四支只會中一支，但「雇主沒登記」跟「錢夠不夠」是兩個各自獨立的問題。
@@ -3016,8 +3047,12 @@ function checkCost(){
   d += '<p><strong>稅後週薪</strong> ' + m(netW) + '　→　稅後時薪約 ' + m(Math.round(netRate)) + '／小時</p>';
 
   /* --- 支出 --- */
+  /* 這個註記畫面與剪貼簿共用。以前只長在畫面的費用列裡，剪貼簿的房租行沒有——
+     而剪貼簿正是拿去跟別人比房租的那一份，$180 包吃住跟 $180 分租雅房
+     不是同一件事，少了這幾個字兩個數字就變成可比的了。 */
+  const rentNote = bills === "farm" ? "包吃住，直接從薪水扣" : bills === "exc" ? "不含水電網路" : "含水電網路";
   const rows = [];
-  if(rentW > 0) rows.push(["房租", rentW, bills === "farm" ? "包吃住，直接從薪水扣" : bills === "exc" ? "不含水電網路" : "含水電網路"]);
+  if(rentW > 0) rows.push(["房租", rentW, rentNote]);
   if(foodW > 0) rows.push(["伙食", foodW, ""]);
   if(transW > 0) rows.push(["通勤", transW, tr === "car" ? "自己填的油錢" : "每天來回 2 趟 Go Anywhere × 5 天，" + money(c(fare)) + "／趟"]);
 
@@ -3033,7 +3068,14 @@ function checkCost(){
        那時候「工作 20 小時，其中 24.2 小時是在付這 2 項」是子集比全集大，
        讀起來像算錯。超過就換一種講法——那才是負結餘真正的意思。 */
     const items = rows.length === 1 ? rows[0][0] : '這 ' + rows.length + ' 項';
-    const spendHrs = netRate === 0 ? null : spendW / netRate;
+    /* 判定以前吃真值（spendW / netRate），句子卻印 hrs() 四捨五入後的值，於是
+       20.04 > 20 成立、兩邊都印成一樣的數字，寫出「要 20.0 小時才付得完，
+       而你一週只工作 20 小時」——同一句話自打嘴巴，而且它掛在「每週短少 $0.35」
+       底下，讀起來像站上算錯了。整數輸入掃到 117 組踩得到。
+       改成拿 hrs() 的輸出去比：**顯示什麼就用什麼判**，同一件事不留兩套數字。
+       打平時落到 else 那一句，「工作 20 小時，其中 20.0 小時是在付房租」是對的。 */
+    const spendHrsTxt = hrs(spendW);
+    const spendHrs = spendHrsTxt === "—" ? null : Number(spendHrsTxt);
     d += '<p><strong>' + (leftW < 0 ? '每週短少' : '每週剩下') + '</strong> ' + m(Math.abs(leftW))
        + (spendHrs !== null && spendHrs > hours
           ? '　（' + items + '要 <strong>' + hrs(spendW) + ' 小時</strong>才付得完，而你一週只工作 ' + hours + ' 小時）'
@@ -3046,21 +3088,43 @@ function checkCost(){
 
   /* --- 房租判準 --- */
   if(rentW > 0){
-    /* 建議工時要無條件進位：40.1333 印成 40.1 之後，40.1 小時仍然踩在線上。 */
-    const needHours = Math.ceil(rentW / C.stress / (rate * 100) * 10) / 10;
+    /* 建議值不能落在這一頁自己剛剛標成「無解」的那一格。以前房租那一半算的是
+       `Math.floor(grossW * C.stress)`——那**就是** hairline 的邊界本身：照著改完
+       顯示值還是 30.0%，站上接著說「這個位置沒有調一下就好的做法」，等於把人
+       送進自己說無解的地方。實測掃 120 組，房租建議值 120/120 全部落在踩線帶上，
+       工時那一半 107/120（原本的 Math.ceil 只跨過 30% 這個判定點，沒跨過顯示帶）。
+       同一個判準的兩半，一邊 floor 一邊 ceil，跨的還是不同的東西。
+       改成兩邊都跨過**整條顯示帶**（±0.05 個百分點）。
+       而且算完要用 pct() 自己驗一次再收——判定與顯示是兩套四捨五入，
+       算式推得對不代表顯示值會照做，這一頁在這件事上踩過太多次。 */
+    const bandLo = (stressPct - 0.05) / 100;      /* 顯示值掉到 29.9% 所需要的比例 */
+    let rentCap = Math.max(0, Math.ceil(grossW * bandLo) - 1);
+    while(rentCap > 0 && pct(rentCap, grossW) >= stressPct) rentCap--;
+    let needHours = Math.ceil(rentW / bandLo / (rate * 100) * 10) / 10;
+    while(needHours <= 80 && pct(rentW, Math.round(rate * needHours * 100)) >= stressPct){
+      needHours = Math.round((needHours + 0.1) * 10) / 10;
+    }
     /* 三種狀態各一句，不是兩種。踩線（顯示值剛好 30.0%）要單獨講，否則
        「降到 $387.60 以下」這種差五分錢的建議會被當成可執行的動作寫出去，
        而下緣那一側還會印出「房租佔稅前收入 30%……低於 30% 的判準」。 */
     d += '<p style="margin-top:12px"><strong>房租' + rentShare + '。</strong>'
        + (hairline
+          /* 這裡以前寫「顯示成 30.0% 只是進位的結果」。踩線有三種：29.996%（往上進）、
+             30.0000%（根本沒有進位）、30.004%（往下捨）。三句話裡兩句是錯的，
+             而 golden 快照剛好把那兩種都凍住了。改成講顯示值本身做不到的事，
+             這對三種都成立。 */
           ? 'ABS／AIHW 的 30/40 rule 判的是<strong>沒有四捨五入的數字</strong>，而你'
             + (overStress ? '<strong>已經超過了</strong>' : '<strong>剛好還沒超過</strong>')
-            + '——顯示成 30.0% 只是進位的結果。'
+            + '——畫面上的百分比四捨五入到小數第一位，' + stressPct + '% 這一格'
+            + '<strong>同時裝得下「還沒到」跟「已經超過」</strong>，看那個數字分不出來。'
             + '<br>這個位置沒有「調一下就好」的做法：差距小到任何一邊動一點就會翻面。'
             + '要脫離這條線，得換成<strong>整數量級的差</strong>——換房子、換工時級距，不是省五塊錢。'
           : overStress
           ? '澳洲統計口徑（ABS／AIHW）的 30/40 rule 是<strong>超過 30% 即為 housing stress</strong>，你在線上。'
-            + '<br>能動的只有兩邊：<strong>房租降到 ' + m(Math.floor(grossW * C.stress)) + ' 以下</strong>，'
+            + '<br>能動的只有兩邊：'
+            + (rentCap > 0
+               ? '<strong>房租降到 ' + m(rentCap) + ' 以下</strong>，'
+               : '這個收入水準下<strong>沒有任何房租壓得下 30%</strong>，')
             /* 站上自己在 /wage 說長工時有安全與加班費問題，就不該在這裡建議一個
                連自己的護欄都不接受的數字（>80 會被擋掉，等於叫人去做算不出來的事）。 */
             + (needHours > 80
@@ -3101,10 +3165,26 @@ function checkCost(){
   }
 
   /* --- 存錢目標 --- */
-  const goalIn = num("#cgoal");
-  if(goalIn !== null && isFinite(goalIn) && goalIn > 0){
+  /* 這一格以前直接用 num()，沒有走 grade()：填 -5000 或 abc 的時候 `goalIn > 0` 為假，
+     **整段存錢靜默消失**。使用者看得到自己在那一格填了字，畫面上卻連提都沒提，
+     他會以為站上算過了。1e308 更糟——`c()` 溢位之後印出「存到 $∞ 需要 Infinity 週」。
+     不 bail 的理由：上面每一個數字都還是對的，為一個選填欄擋掉整頁不划算。
+     壞掉的那一格就在原地講清楚。 */
+  const goalIn = grade("#cgoal", goalCap);
+  if(goalIn === "bad" || goalIn === "huge"){
+    d += '<p style="margin-top:12px">存錢目標那一格填的是'
+       + (goalIn === "huge" ? '一個大到算不動的數字（上界 ' + money(c(goalCap)) + '）'
+                            : '負數或算不出來的數字')
+       + '，所以下面沒有存錢那一段。改成 0 以上的金額，或者留白。</p>';
+  } else if(goalIn !== null && goalIn > 0){
     const goal = c(goalIn);
-    if(leftW <= 0){
+    /* `leftW <= 0` 以前把「剛好打平」也講成「每週是負的」——結餘正好 $0.00 的人
+       看到那句話會以為站上算錯了。零是自己一種狀態：存不到，但也沒有在惡化。 */
+    if(leftW === 0){
+      d += '<p style="margin-top:12px"><strong>存到 ' + m(goal) + '：以現在的結構存不到。</strong>'
+         + '每週剛好打平，一塊錢也沒有多出來——不會惡化，但也不會前進。'
+         + '要動的是房租或工時，不是省吃。</p>';
+    } else if(leftW < 0){
       d += '<p style="margin-top:12px"><strong>存到 ' + m(goal) + '：以現在的結構永遠存不到。</strong>'
          + '每週是負的，缺口只會越來越大。要動的是房租或工時，不是省吃。</p>';
     } else {
@@ -3148,8 +3228,11 @@ function checkCost(){
      $300.01／$1,000 會印出「稅前的 30%」再接「超過 30% 的判準」，同一行自打嘴巴。
      注意不能只是把 rentShare 換進原句——踩線版是一整個子句，
      接在「稅前的」後面不成話，後面那個字面 "%" 也會多一個出來。整句一起換。 */
+  /* 「含水電網路／不含／包吃住」以前只長在畫面的費用列上。這一行是拿去跟別人比房租的
+     那一行，而 $180 包吃住跟 $180 分租雅房不是同一件事——少了這幾個字，
+     兩個數字在群組裡就變成可以直接比的了。跟畫面共用 rentNote，不各寫一份。 */
   const clipRent = rentW === 0 ? ""
-    : "\n房租 " + money(rentW) + "／週，" + rentShare
+    : "\n房租 " + money(rentW) + "／週（" + rentNote + "），" + rentShare
       + (overStress ? "（ABS／AIHW 判準：超過 30% 即 housing stress）" : "");
   copyRow(box,
     "時薪 " + rateTxt + " × 每週 " + hours + " 小時 → " + clip +

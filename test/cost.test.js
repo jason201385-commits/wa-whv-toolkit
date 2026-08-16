@@ -469,6 +469,70 @@ ok("結果框一定會顯示出來", runCost({ rate: 33, hours: 38 }).hidden ===
   ok("沒選開車時，油錢欄的舊負值不擋計算", stale.tone === "ok", stale.verdict);
 })();
 
+/* ------------------------------------------ 有限但過大：換算之後才溢位的那一類 */
+/* 上面那一組擋的是 ±Infinity——`isFinite()` 自己就看得出來。這一組是不同的失效形狀：
+   **在一個單位上做的有效性檢查，管不到換算成另一個單位之後的事**。
+   1e308 在「元」是有限的，`c()` 的 ×100 之後就是 Infinity；1.7e306 撐得過 ×100，
+   撐不過 pct() 裡的 ×1000。兩者都會讓「$∞」與「Infinity%」同時出現在畫面**和剪貼簿**上，
+   而 `type="number"` 攔不住——`1e308` 是合法的 HTML 浮點字面值。
+   第三輪 QA 只指到 1e308 並說「1.7e306 是安全的」，那句話是錯的（×1000 那一段沒算進去）；
+   下面 1.7e306 那一格就是釘住這件事的，別把它當成 1e308 的重複。 */
+console.log("\n— 有限但過大：溢位發生在換算之後 —");
+(function () {
+  const weekCap = Math.round(sandbox.DATA.wage.nmw * 10) * 80;
+  const goalCap = weekCap * C.tax.weeksPerYear;
+  /* 不能對整段 html 做字串搜尋——擋下來的那個說明段**自己就引用了**「$∞」與
+     「Infinity%」當例子，搜整段會搜到解釋文字，於是這道斷言永遠紅。
+     要看的是**印出來的數字**：畫面上的金額一律包在 <span class="num"> 裡，
+     週數是裸的整數（存錢那一段的「需要 N 週」），剪貼簿則整份是純文字。 */
+  const infNum = h => (String(h || "").match(/<span class="num">[^<]*<\/span>/g) || [])
+    .some(s => /∞|Infinity|NaN/.test(s)) || /(Infinity|NaN|∞)\s*(週|個月)/.test(String(h || ""));
+  const inf = t => /∞|Infinity|NaN/.test(String(t || ""));
+
+  for (const [label, key] of [["房租", "rent"], ["伙食", "food"]]) {
+    for (const v of [1e308, 1.7e306, weekCap + 1]) {
+      const o = { rate: 34, hours: 38 }; o[key] = v;
+      const r = runCost(o);
+      ok(`${label}填 ${v} → 擋下來並指名是哪一格`,
+        r.tone === "warn" && r.verdict.includes(label) && r.verdict.includes("超過每週"),
+        r.verdict);
+      ok(`${label}填 ${v} → 畫面與剪貼簿都不得印出 $∞／Infinity`,
+        !infNum(r.html) && r.clip === null, r.html.slice(0, 160));
+    }
+  }
+  /* 油錢只有選了「開車」才進這道門——沒選就不該被那一格的舊值擋住。 */
+  const carHuge = runCost({ rate: 34, hours: 38, trans: "car", car: 1e308 });
+  ok("開車＋油錢 1e308 → 擋下來", carHuge.verdict.includes("油錢") && carHuge.verdict.includes("超過每週"),
+    carHuge.verdict);
+  ok("沒選開車時，油錢欄的 1e308 不擋計算",
+    !runCost({ rate: 34, hours: 38, trans: "walk", car: 1e308 }).verdict.includes("超過每週"));
+
+  /* 上界本身要照算——這道門是打字錯誤的啟發式，不是「房租不可能貴」的宣稱。 */
+  const at = runCost({ rate: 34, hours: 38, rent: weekCap });
+  ok("剛好等於週上界 → 照算，不擋", !at.html.includes("超過每週") && at.clip !== null, at.verdict);
+
+  /* 門檻要從 DATA 推出來，不是寫死的數字：nmw 一改，這句話要跟著改。 */
+  ok("週上界的門檻文字要跟著 DATA.wage.nmw 走",
+    runCost({ rate: 34, hours: 38, rent: 1e308 }).html.includes("$" + weekCap.toLocaleString("en-AU") + ".00"),
+    `期待 $${weekCap.toLocaleString("en-AU")}.00`);
+
+  /* 存錢目標是選填欄，走的是「原地講清楚」不是 bail——上面每一個數字都還是對的。
+     但它以前連 grade() 都沒走：填 -5000 或 1e308 的時候整段存錢**靜默消失**。 */
+  for (const [what, v] of [["1e308", 1e308], ["負數", -5000], ["超過年上界", goalCap + 1]]) {
+    const g = runCost({ rate: 34, hours: 38, rent: 200, goal: v });
+    ok(`存錢目標填${what} → 原地說清楚，不是靜默消失`,
+      g.html.includes("存錢目標那一格填的是"), g.html.slice(-200));
+    ok(`存錢目標填${what} → 不得 bail 掉整頁（其他數字還是對的）`,
+      g.tone === "ok" && g.clip !== null && g.html.includes("稅後週薪"), g.tone);
+    ok(`存錢目標填${what} → 不得印出 $∞／Infinity`, !infNum(g.html) && !inf(g.clip), g.html.slice(-200));
+  }
+  const gAt = runCost({ rate: 34, hours: 38, rent: 200, goal: goalCap });
+  ok("存錢目標剛好等於年上界 → 照算",
+    !gAt.html.includes("存錢目標那一格填的是") && gAt.html.includes("存到"), gAt.html.slice(-200));
+  ok("存錢目標的年上界要跟週上界差一個 weeksPerYear（不是另外發明的數字）",
+    goalCap === weekCap * C.tax.weeksPerYear);
+})();
+
 /* ------------------------------------------------------------ 浮點數邊界 */
 console.log("\n— 浮點數邊界（舊事故：印出「短少 $0.00」）—");
 (function () {
@@ -515,8 +579,67 @@ console.log("\n— 房租佔比：ABS／AIHW 的 30/40 rule —");
   ok("超過 30% 判 warn", over.tone === "warn", `實得 ${over.tone}`);
   ok("超過 30% 要給兩條可動的路（降房租／加工時）",
     over.html.includes("房租降到") && over.html.includes("每週工時提高到"));
-  ok("超過 30% 算出來的房租上限＝稅前的 30%",
-    over.html.includes("$300.00"), "應出現 $300.00 作為房租上限");
+  /* 這一格以前釘的是「房租上限＝稅前的 30%」（$300.00）。那個值**就是**踩線帶本身：
+     照著改完顯示值還是 30.0%，而站上在踩線那一句接著說「這個位置沒有調一下就好的做法」
+     ——等於把人送進自己剛剛宣告無解的地方。斷言把缺陷凍住了，修好反而會紅。
+     改成驗性質，而且用同一支 checkCost 把建議值餵回去驗，不是拿算式自己推
+     ——判定與顯示是兩套四捨五入，算式推得對不代表顯示值會照做。 */
+  const capTxt = (over.html.match(/房租降到 <span class="num">\$([\d,]+\.\d\d)<\/span> 以下/) || [])[1];
+  ok("抓得到建議的房租上限（抓不到的話下面兩格是空過的）", !!capTxt, over.html);
+  if (capTxt) {
+    const back = runCost(Object.assign({}, opts, { rent: Number(capTxt.replace(/,/g, "")) }));
+    ok("照建議的房租上限改 → 不得落在踩線帶（顯示值 30.0%）",
+      !back.html.includes("剛好壓在"), `建議 $${capTxt}／改完判定「${back.verdict}」`);
+    ok("照建議的房租上限改 → 不得再判 housing stress",
+      !back.html.includes("你在線上") && !back.html.includes("房租降到"),
+      `建議 $${capTxt}／實得色調 ${back.tone}`);
+  }
+  const hrTxt = (over.html.match(/每週工時提高到 ([\d.]+) 小時以上/) || [])[1];
+  ok("抓得到建議的工時", !!hrTxt, over.html);
+  if (hrTxt) {
+    const back = runCost(Object.assign({}, opts, { hours: Number(hrTxt), rent: 1000 * C.stress + 1 }));
+    ok("照建議的工時改 → 不得落在踩線帶",
+      !back.html.includes("剛好壓在"), `建議 ${hrTxt} 小時／改完判定「${back.verdict}」`);
+    ok("照建議的工時改 → 不得再判 housing stress",
+      !back.html.includes("你在線上") && !back.html.includes("每週工時提高到"),
+      `建議 ${hrTxt} 小時／實得色調 ${back.tone}`);
+  }
+})();
+
+/* 上面那一組只證明「這一組輸入的建議值是對的」。這個缺陷是整片的——
+   舊寫法在 120 組掃描裡房租那一半 120/120 全中、工時那一半 107/120。
+   一組過關擋不住它長回來，所以掃一片。 */
+console.log("\n— 房租建議值：整片掃過，一組都不准落在踩線帶 —");
+(function () {
+  const badRent = [], badHours = [], noAdvice = [];
+  let n = 0;
+  for (let rate = 26; rate <= 45; rate++) {
+    for (let hours = 20; hours <= 40; hours += 4) {
+      const rent = Math.ceil(rate * hours * 0.45);      /* 45% → 一定超過 30% */
+      const base = runCost({ rate, hours, rent });
+      const cap = (base.html.match(/房租降到 <span class="num">\$([\d,]+\.\d\d)<\/span> 以下/) || [])[1];
+      const hrs = (base.html.match(/每週工時提高到 ([\d.]+) 小時以上/) || [])[1];
+      if (!cap) { noAdvice.push(`rate=${rate} hours=${hours}`); continue; }
+      n++;
+      const a = runCost({ rate, hours, rent: Number(cap.replace(/,/g, "")) });
+      if (a.html.includes("剛好壓在") || a.html.includes("你在線上")) {
+        badRent.push(`rate=${rate} hours=${hours} → 建議 $${cap}`);
+      }
+      /* 工時建議超過 80 小時的時候站上不給數字（自己的護欄擋掉），那不是漏網。 */
+      if (hrs) {
+        const b = runCost({ rate, hours: Number(hrs), rent });
+        if (b.html.includes("剛好壓在") || b.html.includes("你在線上")) {
+          badHours.push(`rate=${rate} hours=${hours} → 建議 ${hrs} 小時`);
+        }
+      }
+    }
+  }
+  ok(`前提：掃到的 ${n} 組都真的給了房租建議`, n >= 100 && noAdvice.length === 0,
+    `沒給建議的：${noAdvice.slice(0, 5).join("、")}`);
+  ok(`房租建議值一組都不落在踩線帶（掃 ${n} 組）`, badRent.length === 0,
+    `${badRent.length} 組漏網：\n    ` + badRent.slice(0, 5).join("\n    "));
+  ok(`工時建議值一組都不落在踩線帶（掃 ${n} 組）`, badHours.length === 0,
+    `${badHours.length} 組漏網：\n    ` + badHours.slice(0, 5).join("\n    "));
 })();
 t("沒填房租不得憑空講 housing stress",
   { rate: 30, hours: 38 }, { htmlLacks: "housing stress", htmlHas: "沒有填任何支出" });
@@ -575,6 +698,40 @@ console.log("\n— 每一項換算成「要工作幾小時」—");
     (one.html.match(/是在付[^<）]*/) || [""])[0]);
   const three = runCost({ rate: 30, hours: 40, rent: 200, food: 100, trans: "cash" });
   ok("三項都填才會出現「這 3 項」", three.html.includes("是在付這 3 項"));
+
+  /* 判定吃真值（spendW / netRate）、句子卻印 hrs() 四捨五入後的值，於是
+     20.04 > 20 成立、兩邊印成同一個數字，寫出「要 20.0 小時才付得完，
+     而你一週只工作 20 小時」——同一句話自打嘴巴，而且它掛在「每週短少 $0.35」
+     底下，讀起來像站上算錯了。這是「顯示與判定各用一套數字」，不是「兩份輸出各自組裝」。
+     先釘住第三輪 QA 指名的那一組，再掃一片——一組過關擋不住它長回來。 */
+  const self = runCost({ rate: 26.45, hours: 20, rent: 450 });
+  const sent = (self.html.replace(/<[^>]+>/g, "").match(/（[^）]*才付得完[^）]*）/) || [""])[0];
+  ok("QA 指名的那一組不得自打嘴巴（要 X 小時／只工作 X 小時）",
+    !/要 (\d+(?:\.\d)?) 小時才付得完，而你一週只工作 \1(?:\.0)? 小時/.test(sent), sent || "(沒出現這一句)");
+  ok("前提：那一組真的走到這一段（不是因為沒印才過關）",
+    self.html.includes("才付得完") || self.html.includes("是在付"), self.html.slice(-300));
+})();
+
+console.log("\n— 「要 X 小時才付得完，而你一週只工作 X 小時」：整片掃過 —");
+(function () {
+  const bad = [];
+  let seen = 0;
+  for (let r5 = 2000; r5 <= 4500; r5 += 5) {           /* 時薪 $20.00–$45.00，每 5 分一格 */
+    const rate = r5 / 100;
+    for (const hours of [10, 20, 30, 40]) {
+      for (const rent of [300, 450, 600]) {
+        const x = runCost({ rate, hours, rent });
+        const m = x.html.replace(/<[^>]+>/g, "")
+          .match(/要 (\d+\.\d) 小時才付得完，而你一週只工作 (\d+) 小時/);
+        if (!m) continue;
+        seen++;
+        if (Number(m[1]) === Number(m[2])) bad.push(`rate=${rate} hours=${hours} rent=${rent}`);
+      }
+    }
+  }
+  ok(`前提：掃到的組合真的走到那一句（${seen} 組）`, seen > 1000, `只走到 ${seen} 組`);
+  ok(`一組都不准自打嘴巴（掃 ${seen} 組）`, bad.length === 0,
+    `${bad.length} 組漏網：\n    ` + bad.slice(0, 5).join("\n    "));
 })();
 
 /* ---------------------------------------------------------------- 退休金 */
@@ -605,6 +762,24 @@ t("結餘為負時不得給「N 週可存到」",
   ok("換算示範要用除的，不是乘一個猜來的倍數", r.html.includes("除以你這一行實際有工作的週數比例"));
   const n = runCost({ rate: 30, hours: 40, rent: 200 });
   ok("沒填目標就不要講存錢", !n.html.includes("存到"));
+
+  /* 剛好打平是自己一種狀態，不是「負的」。舊寫法用 `leftW <= 0` 把零併進負數那一句，
+     結餘正好 $0.00 的人會看到「每週是負的，缺口只會越來越大」——畫面上同一刻寫著
+     「每週剩下 $0.00」，兩句話直接打架，他會以為站上算錯了。
+     湊法跟上面浮點數邊界那一段一樣：先算出稅後週薪，再整個填成房租。 */
+  const probe = runCost({ rate: 34, hours: 38 });
+  const netTxt = (probe.html.match(/稅後週薪<\/strong> <span class="num">\$([\d,.]+)</) || [])[1];
+  ok("前提：抓得到稅後週薪（抓不到的話下面三格是空過的）", !!netTxt, probe.html.slice(0, 200));
+  if (netTxt) {
+    const z = runCost({ rate: 34, hours: 38, rent: parseFloat(netTxt.replace(/,/g, "")), goal: 5000 });
+    const zt = z.html.replace(/<[^>]+>/g, "");
+    ok("前提：這一組真的剛好打平", zt.includes("每週剩下 $0.00"), zt.slice(-300));
+    ok("剛好打平不得說成「每週是負的」", !zt.includes("每週是負的"), zt.slice(-300));
+    ok("剛好打平要說「存不到」但也要說沒有在惡化",
+      zt.includes("以現在的結構存不到") && zt.includes("不會惡化"), zt.slice(-300));
+    ok("剛好打平不得給出週數（除以零會印 Infinity）",
+      !/需要 \d+ 週/.test(zt) && !/Infinity/.test(zt), zt.slice(-300));
+  }
 })();
 
 /* --------------------------------------------------- 包吃住／水電另計 */
@@ -615,6 +790,24 @@ t("不含水電 → 要說那筆錢還沒算進去",
 t("包吃住從薪水扣 → 要說必須在 payslip 分列",
   { rate: 30, hours: 38, rent: 200, bills: "farm" },
   { htmlHas: ["分開列", "書面同意"] });
+/* 剪貼簿的房租行以前只有金額與佔比，沒有這一格選了什麼。貼進群組之後
+   「房租 $200／週，佔稅前收入 17.5%」，包吃住的人跟另外自付水電的人貼出來一模一樣
+   ——而那正是別人拿來比價的那一行。畫面上有（費用表的灰字），剪貼簿沒有。 */
+(function () {
+  for (const [bills, note] of [
+    ["inc", "含水電網路"], ["exc", "不含水電網路"], ["farm", "包吃住，直接從薪水扣"],
+  ]) {
+    const r = runCost({ rate: 30, hours: 38, rent: 200, bills });
+    const screen = r.html.replace(/<[^>]+>/g, "");
+    const line = r.clip.split("\n").filter(l => l.startsWith("房租"))[0] || "";
+    ok(`bills=${bills} → 畫面的費用表要標「${note}」`, screen.includes(note), screen.slice(0, 400));
+    ok(`bills=${bills} → 剪貼簿的房租行也要標「${note}」`, line.includes(note), line);
+    /* 三種選項的字串不得互相包含，否則上面兩格會互相冒領。 */
+    const others = ["含水電網路", "不含水電網路", "包吃住，直接從薪水扣"].filter(x => x !== note);
+    ok(`bills=${bills} → 剪貼簿不得同時掛上別種說法`,
+      !others.some(x => x !== "含水電網路" && line.includes(x)), line);
+  }
+})();
 
 /* -------------------------------------------------- 貼文與畫面必須一致 */
 console.log("\n— 剪貼簿文字必須跟畫面判定一致 —");
@@ -710,6 +903,19 @@ console.log("\n— 剪貼簿與畫面的機械對帳（通則）—");
     ok("〔" + label + "〕四位數以上的金額兩邊都有千分位",
       !noSep.test(r.clip) && !noSep.test(screen),
       (r.clip.match(noSep) || screen.match(noSep) || [""])[0]);
+
+    /* (5) 標題列一定要帶著結餘／短少的金額。overStress 那一支曾經整份剪貼簿
+       **完全沒有這個數字**——不是換位置，是整段訊息裡沒有。而剪貼簿下面就寫著
+       「有人問『這個薪水在 Perth 活不活得下去』，貼這段比講感覺清楚」，
+       房租過重的人正是最會被這樣問的那一群。第十次踩到「兩份輸出各自組裝」。 */
+    ok("〔" + label + "〕剪貼簿標題列要帶結餘／短少金額",
+      /(每週結餘|每週短少) \$[\d,]+\.\d{2}/.test(head), head);
+
+    /* (6) 正負號兩邊要同一個方向。只查「有金額」擋不住把 -$50 印成「結餘 $50」。 */
+    ok("〔" + label + "〕結餘的正負兩邊一致",
+      head.includes("每週短少") === screen.includes("每週短少 "),
+      "畫面「" + (screen.includes("每週短少 ") ? "短少" : "結餘") + "」／剪貼簿「"
+      + (head.includes("每週短少") ? "短少" : "結餘") + "」");
   }
 })();
 

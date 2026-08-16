@@ -48,27 +48,55 @@ const daysAgo = n => { const d = new Date(TODAY); d.setDate(d.getDate() - n); re
     slice("function whmTaxCents("), slice("function residentTaxCents("),
     slice("function medicareLevyCents("), slice("function checkCost(")].join(";\n");
   const fields = {}, box = { hidden: true, className: "", innerHTML: "" };
+  /* 剪貼簿以前是 `copyRow: () => {}`——整支人眼關卡看不到它。
+     它是**唯一會被別人看到的那一份輸出**，而這一整個專案抓到的缺陷有一半
+     是「畫面改了、剪貼簿沒跟上」。看不見的那一份才是要印出來讀的那一份。 */
+  let clip = null;
   const sb = { isFinite, parseFloat, Math, Number, String, console,
-    $: s => s === "#costans" ? box : (fields[s] || { value: "" }), copyRow: () => {} };
+    $: s => s === "#costans" ? box : (fields[s] || { value: "" }),
+    copyRow: (_b, text) => { clip = text; } };
   vm.createContext(sb);
   vm.runInContext(SRC + ";globalThis.checkCost = checkCost;", sb);
 
-  function show(label, rate, hours, mode) {
+  /* 以前這支只收 (rate, hours, mode)，支出欄一律留白——於是每週支出、房租判準、
+     存錢目標、剪貼簿四整段從來沒有被人眼看過。房租那一格正好是這一頁「真正有用」
+     的地方（畫面自己這樣寫），而它是盲區。改成收整包欄位。 */
+  function show(label, o) {
     Object.assign(fields, {
-      "#crate": { value: String(rate) }, "#chours": { value: String(hours) }, "#ctax": { value: mode },
-      "#crent": { value: "" }, "#cbills": { value: "inc" }, "#ctrans": { value: "walk" },
-      "#ccar": { value: "" }, "#cfood": { value: "" }, "#cgoal": { value: "" } });
-    box.innerHTML = ""; sb.checkCost();
-    console.log("\n═══ /cost　" + label + "　(年收 $" + (rate * hours * 52).toLocaleString() + ") ═══");
+      "#crate": { value: String(o.rate) }, "#chours": { value: String(o.hours) },
+      "#ctax": { value: o.mode || "unknown" },
+      "#crent": { value: o.rent == null ? "" : String(o.rent) },
+      "#cbills": { value: o.bills || "inc" },
+      "#ctrans": { value: o.trans || "walk" },
+      "#ccar": { value: o.car == null ? "" : String(o.car) },
+      "#cfood": { value: o.food == null ? "" : String(o.food) },
+      "#cgoal": { value: o.goal == null ? "" : String(o.goal) } });
+    box.innerHTML = ""; clip = null; sb.checkCost();
+    console.log("\n═══ /cost　" + label + "　(年收 $" + (o.rate * o.hours * 52).toLocaleString() + ") ═══");
     console.log(plain(box.innerHTML));
+    /* 剪貼簿另外印，而且標明它是貼進群組的那一份——讀的時候要用「別人只看得到這幾行」
+       的眼光看，畫面上有的東西這裡沒有，才看得出來少了什麼。 */
+    console.log("─── 剪貼簿（貼進群組的就只有這幾行） ───");
+    console.log(clip === null ? "（沒有呼叫 copyRow——這一支提早 bail 了）" : clip);
   }
-  /* 四種稅況各看一次：Medicare levy 的三段（免課／10% 過渡／全額 2%）都要走到。 */
-  show("居民・下門檻以下", 20, 20, "resident");
-  show("居民・過渡段（只課超過部分的 10%）", 25, 25, "resident");
-  show("居民・全額 2%", 35, 38, "resident");
-  show("居民・高收入", 40, 75, "resident");
-  show("對照組：WHM 有登記", 35, 38, "reg");
-  show("對照組：雇主沒登記（走外國居民表）", 35, 38, "unreg");
+  /* 四種稅況各看一次：Medicare levy 的三段（免課／10% 過渡／全額 2%）都要走到。
+     支出欄一律填——留白的話下面整個房租判準與剪貼簿的房租行都不會出現。 */
+  show("居民・下門檻以下", { rate: 20, hours: 20, mode: "resident", rent: 150, food: 80 });
+  show("居民・過渡段（只課超過部分的 10%）", { rate: 25, hours: 25, mode: "resident", rent: 180, food: 90, trans: "sr20" });
+  show("居民・全額 2%", { rate: 35, hours: 38, mode: "resident", rent: 300, food: 120, trans: "cash", goal: 15000 });
+  show("居民・高收入", { rate: 40, hours: 75, mode: "resident", rent: 400, food: 150, trans: "car", car: 60 });
+  show("對照組：WHM 有登記", { rate: 35, hours: 38, mode: "reg", rent: 250, food: 120, goal: 8000 });
+  show("對照組：雇主沒登記（走外國居民表）", { rate: 35, hours: 38, mode: "unreg", rent: 250, food: 120 });
+
+  /* 下面五個是判準本身的分支，不是稅況的分支。四支剪貼簿標題（負／房租過重／未登記／✅）
+     要各出現一次，房租三種狀態（超過／踩線／低於）也要各出現一次——
+     踩線那兩側是同一個顯示值配相反的判定，兩邊都要用眼睛讀過。 */
+  show("房租過重（overStress）＋存錢目標", { rate: 34, hours: 38, mode: "reg", rent: 450, food: 130, goal: 12000 });
+  show("房租踩線・還沒超過（顯示 30.0%）", { rate: 34, hours: 38, mode: "reg", rent: 387.60, food: 130 });
+  show("房租踩線・已經超過（顯示還是 30.0%）", { rate: 34, hours: 38, mode: "reg", rent: 387.61, food: 130 });
+  show("負結餘＋支出時數逼近工時", { rate: 26.45, hours: 20, mode: "reg", rent: 450 });
+  show("農場包吃住（從薪水扣）", { rate: 30, hours: 45, mode: "reg", rent: 180, bills: "farm", food: 40, goal: 20000 });
+  show("不含水電網路＋SmartRider 無 Autoload", { rate: 28, hours: 30, mode: "unknown", rent: 220, bills: "exc", food: 110, trans: "sr" });
 })();
 
 /* ================= /settle ================= */
