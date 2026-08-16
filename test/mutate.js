@@ -13,13 +13,18 @@ const ROOT = path.join(__dirname, "..");
 const F = path.join(ROOT, "public", "index.html");
 const ORIG = fs.readFileSync(F, "utf8");
 
+/* `--count` 只印突變條數就退出，給 counts.js 對帳用。
+   放在髒工作區檢查之前：只是數數、不寫檔，沒有需要備份的東西。 */
+const COUNT_ONLY = process.argv.includes("--count");
+
 /* 這支程式會真的覆寫 index.html，靠 finally 把 ORIG 寫回去還原。
    ORIG 是「開跑當下磁碟上的內容」——如果那份已經含有還沒 commit 的修改，
    還原是還原得回來的；但只要 finally 沒跑到（斷電、kill -9、磁碟滿），
    那些沒 commit 的修改就跟著突變一起沒了，而且沒有任何地方留著它們。
    乾淨的工作區有 git 當備份，髒的沒有。所以髒的就不跑。 */
-const dirty = cp.spawnSync("git", ["-C", ROOT, "status", "--porcelain", "--", "public/index.html"],
-  { encoding: "utf8" });
+const dirty = COUNT_ONLY ? { status: 0, stdout: "" }
+  : cp.spawnSync("git", ["-C", ROOT, "status", "--porcelain", "--", "public/index.html"],
+    { encoding: "utf8" });
 if (dirty.status === 0 && dirty.stdout.trim()) {
   console.log("✗ public/index.html 有還沒 commit 的修改，不跑突變測試。");
   console.log("  這支會覆寫該檔再還原，萬一還原沒跑到，那些修改沒有任何地方救得回來。");
@@ -78,6 +83,8 @@ const M = [
     "const belowMin = rate < DATA.wage.casualMin;", "const belowMin = rate < DATA.wage.nmw;"],
   ["年度那一行退回「只有換簽差額不為零才印」", 'd += \'<p><small style="color:var(--muted)">這次算用到的稅表年度：\'', 'if(false) d += \'<p><small style="color:var(--muted)">這次算用到的稅表年度：\''],
 ];
+
+if (COUNT_ONLY) { console.log(String(M.length)); process.exit(0); }
 
 const SUITES = ["settle", "cost", "pr", "flags", "wage", "golden"];
 let missed = 0;
