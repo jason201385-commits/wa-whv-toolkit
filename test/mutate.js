@@ -111,8 +111,7 @@ const M = [
      擋它的是「標題列最多一組括號」，那條規則上一輪就寫了，
      只是當時沒有一格同時具備 overStress 與附註，所以它從來沒有被執行過。 */
   ["房租過重的括號退回自己組（與另一條附註同時成立就印兩組）",
-    'clip = "⚠️ 房租" + rentShare;\n      clipNotes.push("官方判準是超過 30%");',
-    'clip = "⚠️ 房租" + rentShare + "（官方判準是超過 30%）";'],
+    'clipNotes.push("官方判準是超過 30%");', 'clip += "（官方判準是超過 30%）";'],
 
   /* R3。守門端與計算端對同一個值給出不同答案：`-1e999` 的 parseFloat 是 -Infinity，
      舊守門問「是不是負數」說不是（放行），舊 amt() 問「是不是有限數」說不是（歸零）。
@@ -127,10 +126,18 @@ const M = [
   ["踩線只認超過的那一側（下緣退回「低於 30%」）",
     "const hairline = rentW > 0 && rentPct === stressPct;",
     "const hairline = rentW > 0 && rentPct === stressPct && rentW > grossW * C.stress;"],
-  /* 門檻不先過一次 round 就拿去跟 pct() 的輸出比：`0.3 * 100` 是浮點乘積，
-     `=== ` 會失敗，於是踩線永遠判不到——一條永遠為假的分支不會報錯，只會安靜消失。 */
-  ["踩線門檻退回浮點直比（分支永遠走不到）",
-    "const stressPct = Math.round(C.stress * 1000) / 10;", "const stressPct = C.stress * 100;"],
+  /* 踩線要跟**顯示值**比，不能跟未捨入的比值比。拿 rentW/grossW === C.stress 判，
+     只有整除得剛剛好的那一組（$300／$1,000）會中，$387.65／$1,292 就漏掉——
+     而後者才是這條分支存在的理由：它顯示 30.0% 卻判超過。 */
+  ["踩線改用未捨入的比值判（只剩整除得漂亮的那一組會中）",
+    "const hairline = rentW > 0 && rentPct === stressPct;",
+    "const hairline = rentW > 0 && rentW / grossW === C.stress;"],
+  /* ⚠️ 這裡**沒有**一條突變在證明 `stressPct` 那個 Math.round()。
+     試過 `const stressPct = C.stress * 100;`，殺不掉：C.stress 是 0.3，
+     而 `0.3 * 100 === 30` 在 IEEE 754 下剛好為真（誤差小於半個 ulp）。
+     那是一個**等價突變**，不是漏網——留著只會製造一條永遠殺不掉的紅字。
+     所以那個 round() 目前是純防禦性的：它的正確性靠的是「這個常數剛好不出事」，
+     不是靠測試證明。C.stress 一旦改成別的值，這裡要回來補一條。 */
 
   /* 時薪與工時各自都過了護欄，乘積仍可以進位到 0，而 grossW 是後面每一個
      百分比的分母。它是 0 的時候 pct() 一律回 0，「房租佔稅前收入 0%」會配上「你在線上」。 */

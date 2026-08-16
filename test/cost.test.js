@@ -403,6 +403,24 @@ ok("結果框一定會顯示出來", runCost({ rate: 33, hours: 38 }).hidden ===
   ok("剛好等於上界 → 照算", runCost({ rate: cap, hours: 38 }).tone === "ok");
 })();
 
+/* 時薪與工時各自都過得了護欄，乘起來仍然可以進位到 0——而 grossW 是後面
+   每一個百分比的分母。分母是 0 的時候 pct() 一律回 0，於是
+   「房租佔稅前收入 0%」會配上「你在線上」，整頁的判定建立在一個等於零的分母上。 */
+(function () {
+  const r = runCost({ rate: 0.001, hours: 1 });
+  ok("週薪進位到 0 → 擋下來，不讓後面的比例除以零",
+    r.tone === "warn" && r.verdict.includes("$0.00"), r.verdict);
+  ok("週薪進位到 0 → 不產生剪貼簿", r.clip === null);
+  ok("週薪進位到 0 → 不得印出任何百分比判定",
+    !r.html.includes("housing stress") && !r.html.includes("稅後週薪"), r.html.slice(0, 120));
+  /* 上界那條是「打字錯誤的啟發式」，這一條也是；但兩者擋的是相反方向，
+     所以下緣要留一格證明它沒有連正常的低薪一起擋掉。 */
+  ok("一分錢就算得下去（這道門只擋到 0，不是擋小額）",
+    runCost({ rate: 0.01, hours: 1 }).tone !== "warn"
+    || !runCost({ rate: 0.01, hours: 1 }).verdict.includes("$0.00"),
+    runCost({ rate: 0.01, hours: 1 }).verdict);
+})();
+
 /* 負支出以前跟「沒填」走同一條路安靜歸零：填 -500 的人會看到
    「你沒有填任何支出」，然後拿到一個偏高、卻長得完全正常的結餘。
    算錯而看起來正常，比擋下來危險。
