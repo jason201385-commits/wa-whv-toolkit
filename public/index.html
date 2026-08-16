@@ -2751,6 +2751,11 @@ function checkCost(){
                           / C.tax.weeksPerYear) + levyW;
   const netW = grossW - taxW;
   const superW = Math.round(grossW * DATA.wage.superRate);
+  /* DASP 離境時回得到手上的錢。畫面與剪貼簿共用這一個來源——
+     這兩份輸出上一次各自寫死自己的比例，結果畫面顯示 35% 而剪貼簿說 65%。
+     同一個數字出現在兩個地方，它遲早會分岔；分岔的時候錯的通常是沒人在看的那一份。
+     臨時簽（居民稅表）taxed element 課 35% → 回 65%；打工度假課 65% → 回 35%。 */
+  const daspBackW = Math.round(superW * (isRes ? 0.65 : 0.35));
 
   /* 支出。每一筆都是使用者自己填的，沒填就當 0 並在下面說明。 */
   const bills = $("#cbills").value;
@@ -2814,15 +2819,49 @@ function checkCost(){
     verdict += "，而且被多扣稅";
     clip += "（雇主未登記為 WHM 雇主，被扣 30%）";
   }
-  /* 「不知道」是以有登記估的。給乾淨的 ✅ 會讓人以為稅那一欄已經查證過。 */
-  if(reg === "unknown" && tone === "ok"){
-    verdict += '<small style="font-weight:400">（稅以「雇主有登記」估）</small>';
+  /* 標題後面的附註可能同時成立好幾條，各自包一組括號會變成「（…）（…）」。收進同一組。 */
+  const notes = [], clipNotes = [];
+
+  /* 「不知道」是以有登記估的。給乾淨的 ✅ 會讓人以為稅那一欄已經查證過。
+     （剪貼簿不重複這一條——它的稅那一行本來就寫著「以有登記估的 WHM 稅率」。） */
+  if(reg === "unknown" && tone === "ok") notes.push('稅以「雇主有登記」估');
+
+  /* 低於法定最低的時薪不能配一個乾淨的 ✅。
+     這一頁只拿得到「一個時薪數字」，判不出合不合法——junior rate、award 分類、
+     州別、casual loading 全在 /wage 那邊，這裡重做一次只會做出一個比較爛的第二版。
+     但直接蓋 ✅ 等於用「錢夠不夠用」回答了「這個薪水合不合法」，
+     而那正好是這個站存在的理由。所以只做一件事：把標題降級，然後把人送去 /wage。 */
+  const belowMin = rate < DATA.wage.casualMin;
+  if(belowMin){
+    const floorTxt = rate < DATA.wage.nmw
+      ? '時薪低於全國最低 $' + DATA.wage.nmw.toFixed(2)
+      : '時薪低於 casual 最低 $' + DATA.wage.casualMin.toFixed(2);
+    /* ✅ 要兩份一起換。只換 verdict 的話，畫面是 ⚠️ 而貼進群組的那份是 ✅——
+       這一整輪抓到的三個錯全是同一個形狀：兩份輸出各自組裝，改了看得見的那份。 */
+    if(tone === "ok"){
+      tone = "warn";
+      verdict = verdict.replace("✅", "⚠️");
+      clip = clip.replace("✅", "⚠️");
+    }
+    notes.push(floorTxt);
+    clipNotes.push(floorTxt);
   }
+
+  if(notes.length) verdict += '<small style="font-weight:400">（' + notes.join('；') + '）</small>';
+  if(clipNotes.length) clip += "（" + clipNotes.join("；") + "）";
 
   let d = "";
 
   /* --- 收入 --- */
   d += '<p><strong>稅前週薪</strong> ' + m(grossW) + '（$' + rate.toFixed(2) + ' × ' + hours + ' 小時）</p>';
+
+  if(belowMin){
+    d += '<p>你填的 $' + rate.toFixed(2) + ' 低於全國 casual 最低 $' + DATA.wage.casualMin.toFixed(2)
+       + (rate < DATA.wage.nmw ? '，也低於不含 casual loading 的 $' + DATA.wage.nmw.toFixed(2) : '')
+       + '。<strong>下面照你填的數字算下去，但它算的是「這樣過不過得下去」，不是「這樣合不合法」。</strong>'
+       + '<br>合不合法要看你的年齡（未滿 21 歲有 junior rate）、僱用形態、以及適用哪一本 award'
+       + '——那幾件事這一頁不知道，<a href="#wage">/wage</a> 才問得完。<strong>先去問完再回來算錢。</strong></p>';
+  }
 
   const taxPct = pct(taxW, grossW);
   if(reg === "unreg"){
@@ -2870,9 +2909,7 @@ function checkCost(){
     if(diffY !== 0){
       d += '<p>同樣的薪水，還在打工度假稅表下是 ' + m(whmW) + '／週，'
          + '所以換簽之後你每週' + (diffY > 0 ? '少繳 ' : '多繳 ') + m(Math.abs(whmW - taxW))
-         + '，一年' + (diffY > 0 ? '少繳 ' : '多繳 ') + m(Math.abs(diffY)) + '。'
-         + '<br><small style="color:var(--muted)">兩張表的公布年度不同：WHM 表 ATO 最新公布的是 '
-         + C.tax.whmYear + '，居民表是 ' + C.tax.res.year + '。</small></p>';
+         + '，一年' + (diffY > 0 ? '少繳 ' : '多繳 ') + m(Math.abs(diffY)) + '。</p>';
     }
 
     /* 選了這一項的人已經離開打工度假身分，下面那句「前 45,000 一律 15%」對他是錯的，
@@ -2886,6 +2923,19 @@ function checkCost(){
           : '')
        + '</p>';
   }
+
+  /* 年度這一行以前藏在「換簽差額」那個分支裡，只有 diffY !== 0 才印。
+     那個條件跟「使用者需不需要知道自己用的是哪一年的表」完全無關——
+     而且 ATO 一旦把三張表對齊到同一年、差額剛好抵銷，畫面上就一個年度都不剩，
+     偏偏那正是最該有人回來查的時候。改成無條件印，而且只印真的用到的那幾張。 */
+  const yearsUsed = isRes
+    ? '居民表 ' + C.tax.res.year + '、Medicare levy 門檻 ' + C.tax.levy.year
+      + '（拿來比較的打工度假表 ' + C.tax.whmYear + '）'
+    : (reg === "unreg" ? '外國居民表 ' : '打工度假表 ') + C.tax.whmYear;
+  d += '<p><small style="color:var(--muted)">這次算用到的稅表年度：' + yearsUsed
+     + '。ATO 三張表最新公布的年度本來就不一致，這裡各標各的、不對齊成同一年——'
+     + '看到年度比現在的財政年度舊，那是 ATO 還沒公布，不是這頁沒更新。</small></p>';
+
   d += '<p><strong>稅後週薪</strong> ' + m(netW) + '　→　稅後時薪約 ' + m(Math.round(netRate)) + '／小時</p>';
 
   /* --- 支出 --- */
@@ -2948,12 +2998,12 @@ function checkCost(){
     d += '這筆錢離境時能不能領回，<strong>看你手上是哪一種簽證，不是看你適用哪張稅表</strong>——'
        + '還在臨時簽（482 之類）的話，離境後仍可申請 DASP，taxed element 課 <b>35%</b>、'
        + 'untaxed element 45%，<strong>不是打工度假的那個 65%</strong>；以 taxed element 計，'
-       + '這 ' + m(superW) + ' 裡大約 ' + m(Math.round(superW * 0.65)) + ' 回得到你手上。'
+       + '這 ' + m(superW) + ' 裡大約 ' + m(daspBackW) + ' 回得到你手上。'
        + '但<strong>拿到 PR 的那一刻，DASP 資格就永久消失</strong>，這筆錢要留到退休年齡才領得到'
        + '——它不會不見，只是不再是「離境時的一筆現金」。細節在 <a href="#settle">/settle</a>。</p>';
   } else {
     d += '離境時可以申請領回，但打工度假者的 DASP 稅率是 65%——'
-       + '也就是這 ' + m(superW) + ' 裡，最後真正回到你手上的大約 ' + m(Math.round(superW * 0.35)) + '。'
+       + '也就是這 ' + m(superW) + ' 裡，最後真正回到你手上的大約 ' + m(daspBackW) + '。'
        + '算「這份工作值不值得」的時候，用後面這個數字比較誠實。</p>';
   }
 
@@ -2987,19 +3037,34 @@ function checkCost(){
   box.className = "ans " + tone;
   box.innerHTML = '<div class="verdict">' + verdict + '</div><div class="detail">' + d + '</div>';
 
+  /* 剪貼簿是第二份輸出，而且是**唯一會被別人看到的那一份**。
+     加居民模式時整段沒跟著改，結果同一次計算對外講了三句錯話：稅表標籤說「WHM 稅率」
+     （他已經換簽了）、DASP 說 65%（畫面上同一格寫的是 35%）、
+     而扣稅裡那筆 Medicare levy 連提都沒提——那偏偏是唯一「有機會整筆免掉」的一筆。
+     下面那條註解記的是同一個失效模式在 WHM 那一支發生過一次；它在新分支又長回來了。
+     所以標籤、levy、DASP 現在三個都跟著模式走，而 DASP 直接吃畫面用的同一個 daspBackW。 */
+  const clipTable = reg === "unreg" ? "雇主未登記，用外國居民稅率"
+                  : reg === "unknown" ? "以「雇主有登記」估的 WHM 稅率"
+                  : isRes ? "已換簽，用居民稅表，前 $" + C.tax.res.free.toLocaleString() + " 免稅"
+                  : "WHM 稅率";
+  const clipLevy = levyW > 0
+    ? "\n　其中 Medicare levy $" + (levyW / 100).toFixed(2) + "／週（一年 $"
+      + (medicareLevyCents(annual) / 100).toFixed(2) + "），拿到 MES 有機會整筆免掉"
+    : "";
   copyRow(box,
     "時薪 $" + rate.toFixed(2) + " × 每週 " + hours + " 小時 → " + clip +
     /* 這裡曾經寫死「WHM 15%」。年收跨過 $45,000 之後畫面顯示的是 21.9%、39.2%，
        貼進群組的那份卻說 15%——同一次計算兩個數字，而群組看到的是錯的那個。
        改成印實際算出來的比例，標籤只講稅表是哪一張。 */
     "\n稅前 $" + (grossW / 100).toFixed(2) + "／週，扣稅 $" + (taxW / 100).toFixed(2) +
-    "（約 " + taxPct + "%，" + (reg === "unreg" ? "雇主未登記，用外國居民稅率"
-                             : reg === "unknown" ? "以「雇主有登記」估的 WHM 稅率"
-                             : "WHM 稅率") + "）" +
-    "，稅後 $" + (netW / 100).toFixed(2) +
+    "（約 " + taxPct + "%，" + clipTable + "）" +
+    "，稅後 $" + (netW / 100).toFixed(2) + clipLevy +
     (rentW > 0 ? "\n房租 $" + (rentW / 100).toFixed(2) + "／週 ＝ 稅前的 " + rentPct + "%"
        + (overStress ? "（超過 30% 的 housing stress 判準）" : "") : "") +
-    "\n退休金另計 $" + (superW / 100).toFixed(2) + "／週，離境領回課 65%",
+    "\n退休金另計 $" + (superW / 100).toFixed(2) + "／週，離境時"
+      + (isRes ? "（還在臨時簽的話）DASP 課 35%，實拿約 $" + (daspBackW / 100).toFixed(2)
+                 + "；PR 一下來這一格歸零"
+               : "領回課 65%，實拿約 $" + (daspBackW / 100).toFixed(2)),
     "有人問「這個薪水在 Perth 活不活得下去」，貼這段比講感覺清楚。");
 }
 

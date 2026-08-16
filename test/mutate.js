@@ -13,6 +13,25 @@ const ROOT = path.join(__dirname, "..");
 const F = path.join(ROOT, "public", "index.html");
 const ORIG = fs.readFileSync(F, "utf8");
 
+/* 這支程式會真的覆寫 index.html，靠 finally 把 ORIG 寫回去還原。
+   ORIG 是「開跑當下磁碟上的內容」——如果那份已經含有還沒 commit 的修改，
+   還原是還原得回來的；但只要 finally 沒跑到（斷電、kill -9、磁碟滿），
+   那些沒 commit 的修改就跟著突變一起沒了，而且沒有任何地方留著它們。
+   乾淨的工作區有 git 當備份，髒的沒有。所以髒的就不跑。 */
+const dirty = cp.spawnSync("git", ["-C", ROOT, "status", "--porcelain", "--", "public/index.html"],
+  { encoding: "utf8" });
+if (dirty.status === 0 && dirty.stdout.trim()) {
+  console.log("✗ public/index.html 有還沒 commit 的修改，不跑突變測試。");
+  console.log("  這支會覆寫該檔再還原，萬一還原沒跑到，那些修改沒有任何地方救得回來。");
+  console.log("  先 git commit（或 git stash）再跑。");
+  process.exit(1);
+}
+if (dirty.status !== 0) {
+  /* 不在 git 底下就沒有備份可言，更不該跑。「查不到」不等於「乾淨」。 */
+  console.log("✗ 查不到 git 狀態（不是 git 工作區？），不跑突變測試——沒有備份就不覆寫檔案。");
+  process.exit(1);
+}
+
 /* 每一條都對應一個「曾經漏掉」或「很容易漏掉」的類別，不是隨機改字。
    加新斷言時順手加一條突變進來——沒有突變證明過的斷言，等於沒有被驗收過。 */
 const M = [
@@ -33,14 +52,45 @@ const M = [
   ["DASP 倒數拿掉「人已離境」警語", "一天都領不了", "隨時可以領"],
   /* 這一條擋的是「DASP 那列被算回期限」——它一旦算進色調，每個有 PR 的人都會看到紅色。 */
   ["DASP 那列從狀態退回期限", "days:dayGap(now, norm(pr)), state:true", "days:dayGap(now, norm(pr))"],
+
+  /* ↓↓ 以下這一批改的是**組裝**，不是 DATA 裡的常數。
+     上面 16 條全部在改資料，所以它們證明的是「資料改了會被抓到」；
+     真正在算錢的那幾行（levy 有沒有加進去、DASP 乘哪個比例、百分比除以誰）
+     一條都沒被證明過——而 2026-08-17 這一輪抓到的三個錯全都在那裡。
+     這批的標的是表達式，文案改動不會讓它們失效，只有邏輯被改才會。 */
+  ["taxW 漏加 Medicare levy", "/ C.tax.weeksPerYear) + levyW;", "/ C.tax.weeksPerYear);"],
+  ["levy 三段被壓成單一 2%", "if(annualCents <= hi) return Math.round((annualCents - lo) * L.phase);", ""],
+  ["levy 下門檻從「以下不課」變成「以下全課」", "if(annualCents <= lo) return 0;", "if(annualCents <= lo) return Math.round(annualCents * L.rate);"],
+  ["DASP 比例兩支對調（居民 65↔35）", "(isRes ? 0.65 : 0.35)", "(isRes ? 0.35 : 0.65)"],
+  ["稅率百分比的分母改成年收", "const taxPct = pct(taxW, grossW);", "const taxPct = pct(taxW, annual);"],
+  ["換簽年差額改用「週差額 × 52」（四捨五入會對不起來）",
+    "const diffY = annualWhm - (residentTaxCents(annual) + medicareLevyCents(annual));",
+    "const diffY = (whmW - taxW) * C.tax.weeksPerYear;"],
+  ["剪貼簿的稅表標籤不跟著模式走（居民也印 WHM）",
+    '                  : isRes ? "已換簽，用居民稅表，前 $" + C.tax.res.free.toLocaleString() + " 免稅"\n', ""],
+  ["剪貼簿漏掉 Medicare levy 那一行", "const clipLevy = levyW > 0", "const clipLevy = false"],
+  ["低於法定最低時不降級標題（畫面留 ✅）", 'if(tone === "ok"){\n      tone = "warn";', 'if(false){\n      tone = "warn";'],
+  ["低於法定最低的門檻改用 nmw（漏掉 casual loading 那一段）",
+    "const belowMin = rate < DATA.wage.casualMin;", "const belowMin = rate < DATA.wage.nmw;"],
+  ["年度那一行退回「只有換簽差額不為零才印」", 'd += \'<p><small style="color:var(--muted)">這次算用到的稅表年度：\'', 'if(false) d += \'<p><small style="color:var(--muted)">這次算用到的稅表年度：\''],
 ];
 
-const SUITES = ["settle", "cost", "pr", "flags", "wage"];
+const SUITES = ["settle", "cost", "pr", "flags", "wage", "golden"];
 let missed = 0;
 try {
   for (const [name, from, to] of M) {
     /* 找不到標的通常代表文案改過了——那條突變本身要跟著改，不是把它刪掉。 */
-    if (!ORIG.includes(from)) { console.log("？ 找不到標的：" + name + "  ←— 突變本身寫錯了"); missed++; continue; }
+    const hits = ORIG.split(from).length - 1;
+    if (hits === 0) { console.log("？ 找不到標的：" + name + "  ←— 突變本身寫錯了"); missed++; continue; }
+    /* 標的出現不只一次時，split().join() 會把每一處都改掉——那就不是「改壞一個字」，
+       而是同時改壞好幾個地方，於是「有測試紅了」證明不了是哪一處被抓到。
+       實例：`* 0.65` 曾經同時出現在畫面與剪貼簿兩支，改一次會動到兩份輸出，
+       任何一支紅了都會被記成「抓到了」，而另一份其實沒有任何斷言在看。
+       這種突變比漏網更糟，因為它會回報綠燈。 */
+    if (hits > 1) {
+      console.log("？ 標的出現 " + hits + " 次：" + name + "  ←— 會一次改到多處，改寫成唯一的字串");
+      missed++; continue;
+    }
     fs.writeFileSync(F, ORIG.split(from).join(to), "utf8");
     const red = SUITES.filter(s => cp.spawnSync("node", [path.join(__dirname, s + ".test.js")], { encoding: "utf8" }).status !== 0);
     if (red.length) console.log("✓ 抓到 [" + red.join(",") + "]  " + name);

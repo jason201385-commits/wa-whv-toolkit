@@ -329,6 +329,56 @@ ok("畫面要擋住還在打工度假簽的台灣人去選居民表（台灣不�
   ok("$40×70h 的預扣比例不得再被印成 15%", !r.clip.includes("WHM 15%"), r.clip.split("\n")[1]);
 })();
 
+/* -------------------------------------------------- 低於法定最低的時薪 */
+/* /cost 的問題是「這樣過不過得下去」，/wage 的問題是「這樣合不合法」。
+   兩者混起來會出事的方向只有一個：算得出結餘就蓋 ✅，
+   於是一個被開 $18 的人拿到綠燈，還把綠燈貼進 LINE 群。
+   所以這一段釘的不是判定，是**不准給乾淨的 ✅、而且要把人送去 /wage**。 */
+console.log("\n— 低於法定最低的時薪不得配 ✅ —");
+(function () {
+  const nmw = sandbox.DATA.wage.nmw, cas = sandbox.DATA.wage.casualMin;
+  ok("前提：casual 最低高於全國最低（下面兩段的分界靠這個）", cas > nmw, `nmw ${nmw} / casual ${cas}`);
+
+  const low = runCost({ rate: 18, hours: 38, reg: "reg" });
+  ok("低於全國最低 → 色調降成 warn", low.tone === "warn", `實得 ${low.tone}`);
+  ok("低於全國最低 → 標題不得留 ✅", !low.verdict.includes("✅"), low.verdict);
+  ok("低於全國最低 → 標題要指名是哪一條線", low.verdict.includes("全國最低"), low.verdict);
+  ok("低於全國最低 → 要送去 /wage，而不是自己判合不合法",
+    low.html.includes('href="#wage"') && !low.html.includes("違法"),
+    (low.html.match(/合不合法[^<]*/) || [""])[0]);
+  ok("低於全國最低 → 要講明「算的是過不過得下去，不是合不合法」",
+    low.html.includes("不是「這樣合不合法」"));
+  ok("低於全國最低 → 要提 junior rate（未滿 21 歲那條例外）",
+    low.html.includes("junior rate"));
+
+  /* 剪貼簿是唯一會被別人看到的那一份。它跟畫面各走各的組裝路徑，
+     2026-08-17 就是在這裡各自寫死而分岔的，所以兩份都要釘。 */
+  ok("低於全國最低 → 剪貼簿也不得留 ✅", !low.clip.includes("✅"), low.clip.split("\n")[0]);
+  ok("低於全國最低 → 剪貼簿要帶上同一條線", low.clip.includes("全國最低"), low.clip.split("\n")[0]);
+
+  /* nmw 與 casualMin 之間：casual 就是短給，part/full-time 未必。
+     這一段的文案不可以講成違法，否則就是這個站自己在造謠。 */
+  const mid = runCost({ rate: 27, hours: 38, reg: "reg" });
+  ok("介於全國最低與 casual 最低之間 → 仍降成 warn", mid.tone === "warn", `實得 ${mid.tone}`);
+  ok("介於兩條線之間 → 要指名 casual 最低，不得誤報成全國最低",
+    mid.verdict.includes("casual 最低") && !mid.verdict.includes("全國最低"), mid.verdict);
+  ok("介於兩條線之間 → 不得斷言違法", !mid.html.includes("違法") && !mid.html.includes("非法"));
+
+  /* 合法時薪不可以被這條新規則波及——過度警告會讓警告失去意義。 */
+  const okRate = runCost({ rate: 34, hours: 38, reg: "reg" });
+  ok("時薪高於 casual 最低 → 不掛任何低薪附註",
+    okRate.tone === "ok" && !okRate.verdict.includes("時薪低於")
+      && !okRate.clip.includes("時薪低於"), okRate.verdict);
+
+  /* 兩條附註可能同時成立。各自包一組括號會印成「（…）（…）」，
+     所以數的是括號組數而不是有沒有出現括號——後者兩種寫法都會過。 */
+  const both = runCost({ rate: 30, hours: 38, reg: "unknown" });
+  ok("附註同時成立時併在同一組括號裡（只准有一組）",
+    (both.verdict.match(/（/g) || []).length === 1, both.verdict);
+  ok("附註同時成立時兩條都要在",
+    both.verdict.includes("雇主有登記") && both.verdict.includes("casual 最低"), both.verdict);
+})();
+
 /* ---------------------------------------------------------------- 輸入護欄 */
 console.log("\n— 護欄：算不出來就不要硬算 —");
 t("沒填時薪不判定", { hours: 38 }, { tone: "warn", verdictHas: "請先填時薪" });
@@ -336,7 +386,7 @@ t("沒填工時不判定", { rate: 33 }, { tone: "warn", verdictHas: "請先填�
 t("時薪 0 不判定", { rate: 0, hours: 38 }, { tone: "warn", verdictHas: "請先填時薪" });
 t("每週 100 小時 → 先要求確認，不直接算",
   { rate: 30, hours: 100 }, { tone: "warn", verdictHas: "先確認" });
-t("每週 80 小時（邊界內）照算", { rate: 30, hours: 80 }, { tone: "ok" });
+t("每週 80 小時（邊界內）照算", { rate: 34, hours: 80 }, { tone: "ok" });
 ok("結果框一定會顯示出來", runCost({ rate: 33, hours: 38 }).hidden === false);
 
 /* ------------------------------------------------------------ 浮點數邊界 */
@@ -359,8 +409,10 @@ console.log("\n— 浮點數邊界（舊事故：印出「短少 $0.00」）—"
 /* -------------------------------------------------------- 房租 30/40 rule */
 console.log("\n— 房租佔比：ABS／AIHW 的 30/40 rule —");
 (function () {
-  /* 稅前 $1,000／週：$300 剛好踩線，$301 越線。 */
-  const opts = { rate: 25, hours: 40 };   /* 25 × 40 = 1000 */
+  /* 稅前 $1,000／週：$300 剛好踩線，$301 越線。
+     時薪要在 casual 最低（$33.05）之上——低於法定最低會另外掛一條附註並把色調降成 warn，
+     那一條跟房租沒有關係，混進來會讓下面「剛好 30% 不判 stress」分不出是誰造成的。 */
+  const opts = { rate: 40, hours: 25 };   /* 40 × 25 = 1000 */
   const at = runCost(Object.assign({}, opts, { rent: 1000 * C.stress }));
   ok("剛好 30% 不判 housing stress",
     at.tone === "ok" && !at.verdict.includes("吃掉"),
@@ -476,7 +528,7 @@ console.log("\n— 剪貼簿文字必須跟畫面判定一致 —");
 for (const { o, mark } of [
   { o: { rate: 20, hours: 10, rent: 300 }, mark: "🛑" },
   { o: { rate: 25, hours: 40, rent: 400 }, mark: "⚠️" },
-  { o: { rate: 30, hours: 38, rent: 200 }, mark: "✅" },
+  { o: { rate: 34, hours: 38, rent: 200 }, mark: "✅" },
 ]) {
   const r = runCost(o);
   ok(`貼文與畫面同為 ${mark}`,
