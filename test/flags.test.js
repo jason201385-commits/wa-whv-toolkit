@@ -175,6 +175,16 @@ is(bare, 0, "沒有網址的來源");
 is(undated, 0, "日期格式不對的來源");
 is(srcArrays.length, 11, "有來源清單的區塊數");
 
+/* ⚠️ public/README.md 裡有一張「哪個區塊幾筆來源、幾筆待核」的表，原本是手打的。
+   於是 `/english` 上線之後，`eng` 那一整列**從來沒有被加進去**，合計也就一直短報 8 筆
+   ——而少的是最新那一區，看起來反而最像「這區還沒有來源」。
+   上面那三條 `is()` 守的是每一筆來源的欄位品質，守不到「表上少一列」。
+   這裡把每區的數字印成機器讀得到的形狀，交給 counts.js 去跟 README 對帳。 */
+for (const k of srcArrays) {
+  const s = DATA[k].src;
+  console.log("  來源明細 " + k + " " + s.length + " " + s.filter(x => x.v === false).length);
+}
+
 /* ============ 6. 分享圖上的符號要跟著卡片走 ============ */
 
 /* draw() 原本寫死 `g.fillText("✕", …)`，於是三張卡的每一條前面都是叉。

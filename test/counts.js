@@ -70,15 +70,81 @@ const SUITES = [
   { file: "english", re: /english\.test\.js\s+英文門檻與兩個時鐘的回歸測試（(\d+) 個案例）/ },
 ];
 let total = 0;
+let flagsOut = null;
 for (const s of SUITES) {
   const out = runSuite(s.file);
   if (out === null) continue;
+  if (s.file === "flags") flagsOut = out;
   const m = out.match(/(\d+) 過 \/ (\d+) 失敗/);
   if (!m) { fail++; console.log("✗ " + s.file + " 的結尾行讀不出案例數"); continue; }
   total += Number(m[1]);
   ok(s.file + ".test.js", m[1], claim(s.re, s.file + " 的案例數"));
 }
 ok("合計", total, claim(/合計 (\d+) 個案例/, "合計 N 個案例"));
+
+/* -------------------------------------------------- 來源對帳表的每一列 */
+/* ⚠️ 這張表是本 session 找到的**第二張**手打表格，而它腐壞的方式跟第一張不一樣：
+   render.js 那三個數字是「寫小了」，這張是**整整少一列**——`/english` 上線之後
+   `eng` 那 8 筆從來沒被加進去。少列比少數字更難發現：合計短報 8 看起來只是算錯，
+   而缺的那一區是最新的，看起來反而最像「這區還沒有來源」。
+   所以這裡不是只對合計（只對合計會被兩個方向相反的錯誤互相抵銷），
+   而是**逐列對，並且兩邊的鍵集合要一模一樣**。 */
+console.log("\n— 來源對帳表 —");
+if (flagsOut === null) {
+  fail++;
+  console.log("✗ 拿不到 flags.test.js 的輸出，來源對帳表這一節整個沒跑");
+} else {
+  const live = new Map();
+  for (const m of flagsOut.matchAll(/^\s*來源明細 (\w+) (\d+) (\d+)$/gm)) {
+    live.set(m[1], [Number(m[2]), Number(m[3])]);
+  }
+  /* README 的表：從表頭那一行之後一路吃到 `**合計**` 為止。
+     `\w+` 認得出 `**合計**` 之外的每一列，粗體那一列另外抓。 */
+  const table = README.match(/\| 區塊 \| 來源 \| 待核 \|[\s\S]*?\n\n/);
+  const claimed = new Map();
+  if (!table) {
+    fail++;
+    console.log("✗ public/README.md 找不到「| 區塊 | 來源 | 待核 |」那張表 ←— 表頭被改過");
+  } else {
+    for (const m of table[0].matchAll(/^\| (\w+) \| (\d+) \| (\d+) \|$/gm)) {
+      claimed.set(m[1], [Number(m[2]), Number(m[3])]);
+    }
+  }
+  if (live.size === 0) {
+    fail++;
+    console.log("✗ flags.test.js 沒印出任何「來源明細」←— 那段被拿掉了，這一節等於空轉");
+  }
+  const only = (a, b) => [...a.keys()].filter(k => !b.has(k));
+  const missing = only(live, claimed), extra = only(claimed, live);
+  if (missing.length || extra.length) {
+    fail++;
+    console.log("✗ 表上的區塊跟實際對不上"
+      + (missing.length ? "\n    表上少了：" + missing.join("、") : "")
+      + (extra.length ? "\n    表上多了：" + extra.join("、") : ""));
+  } else pass++, console.log("✓ 表上的區塊剛好是這 " + live.size + " 區，不多不少");
+
+  let sumS = 0, sumP = 0, bad = 0;
+  for (const [k, [s, p]] of live) {
+    sumS += s; sumP += p;
+    const c = claimed.get(k);
+    if (!c) continue;                       /* 上面那條已經報過了，不重複計分 */
+    if (c[0] !== s || c[1] !== p) {
+      bad++;
+      console.log("    ✗ " + k + "：實際 " + s + "/" + p + "，表上寫 " + c[0] + "/" + c[1]);
+    }
+  }
+  if (bad) { fail++; console.log("✗ 有 " + bad + " 列的數字對不上（實際 來源/待核）"); }
+  else if (missing.length === 0 && extra.length === 0) {
+    pass++; console.log("✓ 每一列的來源數與待核數都對得上");
+  }
+  const totRe = /\| \*\*合計\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|/;
+  const tm = README.match(totRe);
+  if (!tm) { fail++; console.log("✗ 找不到那張表的 **合計** 那一列 ←— 句型被改過"); }
+  else {
+    ok("來源合計", sumS, tm[1]);
+    ok("待核合計", sumP, tm[2]);
+  }
+}
 
 /* -------------------------------------------------- golden 快照 */
 console.log("\n— golden 快照 —");
@@ -89,6 +155,19 @@ if (g !== null) {
   else {
     ok("場景數", m[1], claim(/(\d+) 個場景（\/cost/, "golden 的場景數"));
     ok("行數", m[2], claim(/(\d+) 行的純文字快照/, "golden 的行數"));
+    /* ⚠️ 上面那個總數對得上，**不代表底下的拆分對得上**。
+       README 那一行寫的是「72 個場景（/cost 27、/settle 9、/english 35）」——
+       27+9+35=71，跟前面那個 72 差 1，而總數那條斷言完全看不到這件事。
+       這是本 session 第三張腐壞的手打數字，而且它腐壞的方式最陰：
+       總數被對帳程式盯著、所以會被改對，沒被盯的拆分就在同一行裡繼續錯下去，
+       看起來還特別可信（旁邊那個數字明明是對的）。
+       分母直接數 golden.txt 的場景標題行（`/區塊　標題`）。 */
+    const G = fs.readFileSync(path.join(__dirname, "golden.txt"), "utf8");
+    const seen = (k) => (G.match(new RegExp("^/" + k + "　", "gm")) || []).length;
+    ok("golden 的 /cost 格數", seen("cost"), claim(/個場景（\/cost (\d+) 種/, "golden 的 /cost 格數"));
+    ok("golden 的 /settle 格數", seen("settle"), claim(/\/settle (\d+) 種時鐘組合/, "golden 的 /settle 格數"));
+    ok("golden 的 /english 格數", seen("english"),
+      claim(/\/english (\d+) 種成績與兩個時鐘的組合/, "golden 的 /english 格數"));
   }
 }
 
@@ -100,6 +179,42 @@ else {
   ok("突變條數", mc.stdout.trim(), claim(/目前 (\d+) 條突變全部被抓到/, "N 條突變全部被抓到"));
   ok("突變條數（根目錄 README）", mc.stdout.trim(),
     rootClaim(/看測試會不會紅（目前 (\d+) 條全被抓到）/, "N 條全被抓到"));
+}
+
+/* -------------------------------------------------- render.js 的格數 */
+/* ⚠️ render.js 的三個格數是這份 README 裡**唯一沒被對帳**的手打數字，
+   於是它照著這支程式檔頭寫的那條路腐壞了：寫「六種稅況」時實際 12 格、
+   寫「十八種」時實際 30 格——都漂了將近一倍，而且是往少的方向。
+   往少的方向最傷：接手的人會以為「用眼睛讀一遍」是十幾格的事，
+   讀到一半覺得夠了就停，而這支測試的唯一失效方式就是只跑不讀。
+   分母直接數原始碼裡的 `show(`，不跑 render.js——它會印幾百行到 stdout。 */
+console.log("\n— render.js 的格數 —");
+{
+  const R = fs.readFileSync(path.join(__dirname, "render.js"), "utf8").split("\n");
+  /* 三個區段各自數。段界用 render.js 自己的分隔註解，不是行號。 */
+  const marks = { cost: -1, settle: -1, english: -1 };
+  R.forEach((l, i) => {
+    Object.keys(marks).forEach(k => {
+      if (marks[k] < 0 && l.includes("= /" + k + " =")) marks[k] = i;
+    });
+  });
+  const missing = Object.keys(marks).filter(k => marks[k] < 0);
+  if (missing.length) {
+    fail++;
+    console.log("✗ render.js 裡找不到 " + missing.join("、") + " 的分段註解 ←— 段界被改過");
+  } else {
+    const order = Object.keys(marks).sort((a, b) => marks[a] - marks[b]);
+    const count = k => {
+      const i = order.indexOf(k);
+      const end = i + 1 < order.length ? marks[order[i + 1]] : R.length;
+      return R.slice(marks[k], end).filter(l => /^ {2}show\(/.test(l)).length;
+    };
+    ok("render.js 的 /cost 格數", count("cost"), claim(/\/cost (\d+) 格、/, "render.js 的 /cost 格數"));
+    ok("render.js 的 /settle 格數", count("settle"),
+      claim(/\/settle 費用表＋(\d+) 格時鐘組合/, "render.js 的 /settle 格數"));
+    ok("render.js 的 /english 格數", count("english"),
+      claim(/\/english 門檻總表＋(\d+) 格成績/, "render.js 的 /english 格數"));
+  }
 }
 
 /* -------------------------------------------------- 根目錄 README 的同一組數字 */

@@ -4330,6 +4330,29 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     const saIfShort = saFuture
       ? '（這個比較是拿一個還沒發出來的核發日推的，全文見上面那一行。）' : '';
 
+    /* ⚠️ 考試日的「還沒到」本來就有守，但守的方式正是上面那段註解在罵的：
+       它印在面板**最底下**，排在粗體結論句後面。結論已經先講完
+       「先關的是：英文，你能收到邀請的最晚日期是 X」，讀者讀到那裡就停了；
+       就算讀到最後一行，那也只是替一句已經印出去的話道歉。
+       兩個日期同一個形狀，就用同一個做法：全文跟著數字走，結論句只留指路。 */
+    const tFuture = dayGap(now, td) > 0;
+    const tIf = tFuture
+      ? '（提醒：這個考試日期還沒到，成績單還沒出來——底下整段是「如果那天考出這個成績」'
+        + '的推算，官方認的是成績單上的那一天。）'
+      : '';
+    const tIfShort = tFuture
+      ? '（這是拿一個還沒考的考試日推的，全文見最上面那一行。）' : '';
+
+    /* ⚠️ `addYears` 回的是 { d, clamped }，而這一邊當初只取了 `d`——
+       又是同一個形狀漏一半：2/29 考的成績會印一段「那個月沒有這一天，夾到月底」
+       （下面 4457），2/29 核發的評估則是安靜地被夾掉。
+       夾的方向是往前，所以讀者看到的日期比他自己算的早一天、而且沒有理由；
+       兩邊同一條規則，就不能只有一邊講得出來。 */
+    const saClamp = saLatest && saLatest.clamped
+      ? '（核發日是 ' + fmtD(saD) + '，加 ' + E.validYears + ' 年之後那個月沒有這一天，'
+        + '這裡夾到當月最後一天——跟上面那張成績同一條規則，寧可早一天。）'
+      : '';
+
     let tone = "ok";
     if(!g.level || left < 0 || blocked.length) tone = "bad";
     else if(g.level.k === "competent" || left <= 90) tone = "warn";
@@ -4343,13 +4366,19 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     else if(!g.level)    verdict = "四項還沒到 Competent";
     else if(left < 0)    verdict = g.level.n + "，但已經過期";
     else verdict = g.level.n + "　" + E.points[g.level.k] + " 分"
-      /* 這一級他真的有，所以照印；但後面接一句擋著，不然它會被讀成「可以遞了」。 */
-      + (saGone ? "・技術評估已過期" : "");
+      /* 這一級他真的有，所以照印；但後面接一句擋著，不然它會被讀成「可以遞了」。
+         ⚠️ 這個後綴原本只認 saGone，顏色那邊卻在 saGap <= 90 就轉黃（上面 4339）。
+            於是評估剩 30 天的人看到的是「黃燈 + Proficient　10 分」——
+            顏色在示警、標題在報喜，而讀者第一眼只讀得到這兩個東西。
+            黃燈是誰造成的，標題就得指名誰，不然那個顏色沒有解釋。 */
+      + (saGone ? "・技術評估已過期"
+         : saGap !== null && saGap <= 90 ? "・技術評估剩 " + saGap + " 天"
+         : "");
 
     let h = '<div class="detail">';
     h += '<p>考試日 <b class="num">' + fmtD(td) + '</b> → 適用 <b>'
        + (isT1 ? "Table 1（" + E.t1.from + " 起）" : "Table 2（" + E.t2.until + " 以前）")
-       + '</b>，對的是 <b>' + esc(g.test.name) + '</b>。</p>';
+       + '</b>，對的是 <b>' + esc(g.test.name) + '</b>。' + tIf + '</p>';
 
     /* 整張不能用的話，理由要排在最前面。
        ⚠️ 這件事第一版寫錯過：判定寫「不能用」，下面卻照印「這張成績能用到 2027-01-15」
@@ -4444,7 +4473,14 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
         h += '<p class="note"><b>舊制成績另有一條絕對大限：' + E.oldExpiry + '。</b>'
            + '官方腳註寫的是 <i>&ldquo;until 6 August 2028, inclusive&rdquo;</i>。'
            + '很多人把它讀成「所有舊成績都能用到 2028」——不是。'
+           /* 三支，不是兩支。舊制的最後一天（E.t2.until）考的成績，
+              自己的 3 年剛好就是那條大限本身——寫「比那條大限早」是假的，
+              而且是**在講兩個日期哪個早**的那一句話裡說錯，讀者沒有別的線索可以校正。
+              這一格不是理論值：cutover 前一天考的人真實存在，golden 就有那一格。 */
            + (capped ? '你自己的 ' + E.validYears + ' 年比那條大限晚，所以以 ' + E.oldExpiry + ' 為準。'
+              : dayGap(cap, base.d) === 0
+                     ? '你自己的 ' + E.validYears + ' 年也剛好在 ' + fmtD(base.d)
+                       + '——你是舊制的最後一天考的，兩條線在同一天到期，沒有先後可言。'
                      : '你自己的 ' + E.validYears + ' 年在 ' + fmtD(base.d)
                        + ' 就到了，比那條大限早，所以以你自己的日期為準。')
            + '</p>';
@@ -4631,7 +4667,7 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
           + '它的 ' + E.validYears + ' 年在 <b class="num">' + fmtD(saLatest.d)
           + '</b> 就走完了——<b>那一天已經過了</b>（今天 ' + fmtD(now) + '）。'
           + '這張評估現在收到邀請也不算數，得先重做一份；'
-          + '拿到新的核發日之後，這一區的日期要整個重算一次。';
+          + '拿到新的核發日之後，這一區的日期要整個重算一次。' + saClamp;
       } else {
         saLine = '技術評估這一邊：核發日 <b class="num">' + fmtD(sa) + '</b>，邀請日最晚是 <b class="num">'
           + fmtD(saLatest.d) + '</b>。官方原文：<i>&ldquo;Your skills assessment must have been '
@@ -4641,14 +4677,19 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
           /* 句號要在這裡收掉。少了它，後面接 saIf 的時候會變成
              「…must not have passed."而且只剩 3 天」——兩句黏成一句。 */
           + '<i>&ldquo;If the assessment was for a shorter period, that period must not have passed.&rdquo;</i>。'
-          + saIf;
+          + saClamp + saIf;
         if(saGap <= 90) saLine += '<b>而且只剩 <span class="num">' + saGap + '</span> 天。</b>'
           + '技術評估重做要跑機構的流程，不是幾天的事——現在就該去問，不是等它過期。';
       }
       h += '<ul><li>' + engLine + '</li><li>' + saLine + '</li></ul>';
 
-      if(saLatest){
-        const diff = dayGap(engCmp, saLatest.d);   /* > 0 代表技術評估比較晚到期 */
+      /* ⚠️ 這一整段原本關在 `if(saLatest)` 裡面，於是**沒填核發日**的人碰到 `gone`
+         的時候，面板就停在 engLine 那句「往回推得到的日期已經過去了」——
+         整個面板的最後一句話是壞消息，而那句壞消息講的只是「排不出日期」，
+         不是「來不及」。底下那段專門用來澄清這件事的話，他一個字都看不到。
+         少填一個非必填欄位不該換來一個更嚇人的結論；方向跟第十八次那條一模一樣。 */
+      if(saLatest || gone){
+        const diff = saLatest ? dayGap(engCmp, saLatest.d) : null;   /* > 0 代表技術評估比較晚到期 */
         if(saGone){
           /* 已經關上的門不叫「先關」。這裡要講的是現況不是時程。
              底下那句 dd===null 的補述在這一支會把同一個日期講第二次，所以就地收掉，
@@ -4661,7 +4702,8 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
                 : '英文那一邊還開著，到 <b class="num">' + fmtD(engCmp) + '</b>'
                   + (!isT1 && dd === null ? '（保守值，因為你沒填遞件要隔幾天）' : '') + '——但')
              + '兩扇門要同時開著才遞得出去，'
-             + '所以現在沒有「最晚哪一天」可以排。先把評估重做出來，這一區的日期才有意義。</p>';
+             + '所以現在沒有「最晚哪一天」可以排。先把評估重做出來，這一區的日期才有意義。'
+             + tIfShort + '</p>';
         } else if(gone){
           /* ⚠️ 第十八次，而且這次躲在整個面板的**結論句**裡。
              `gone` 原本只守到 engLine，沒守到這裡。成績剩不到 60 天的時候，
@@ -4675,12 +4717,36 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
              + '但這不等於來不及。</strong>'
              + '往回推得到的是 <b class="num">' + fmtD(engCmp) + '</b>，已經過去了；'
              + '它的意思只是你<b>用不滿'
-             + (dd === null ? ' ' + E.inviteDays + ' 天的邀請期' : '你填的那 ' + dd + ' 天')
-             + '</b>，不是這張成績不能用。'
+             /* ⚠️ 跟 4595 同一個理由：`dd` 已經被夾到 60，這裡卻用「你填的那 N 天」
+                去複述使用者自己打的字。填 90 的人會看到「你填的那 60 天」——
+                他沒有填過 60，而這一整句正是在跟他解釋他的輸入造成了什麼。
+                複述輸入一律用 ddFloor，夾完的值只給計算用。
+                ⚠️ 但**只換成 ddFloor 是不夠的**（這一版是補上去的）：填 90 的人會讀到
+                「用不滿你填的那 90 天」，而上面那一段才剛說「邀請期就是 60 天，
+                填再大的數字都沒有意義」——同一個面板自己打自己，正是 4638 在罵的形狀。
+                往回推真正扣掉的就是 60，所以超過 60 的時候要講 60；
+                但**不准把 60 說成是他填的**，他填的那個數字只出現在指路的括號裡。 */
+             + (ddFloor === null || ddFloor > E.inviteDays
+                ? ' ' + E.inviteDays + ' 天的邀請期'
+                : '你填的那 ' + ddFloor + ' 天')
+             + '</b>'
+             + (ddFloor !== null && ddFloor > E.inviteDays
+                ? '（你填的那 ' + ddFloor + ' 天在上面已經被壓回 ' + E.inviteDays + ' 了）'
+                : '')
+             + '，不是這張成績不能用。'
              + '成績還有 <b class="num">' + left + '</b> 天——'
              + '今天收到邀請、' + left + ' 天內遞得出去就算數。'
-             + '技術評估那一邊還開著（到 <b class="num">' + fmtD(saLatest.d) + '</b>），'
-             + '所以現在卡的是英文的這 <b class="num">' + left + '</b> 天。' + saIfShort + '</p>';
+             /* 沒填核發日的時候不准說「技術評估那一邊還開著」——那一邊不是沒事，
+                是**沒有資料**。憑空給一個「開著」會讓他以為只剩英文要處理。 */
+             + (saLatest
+                ? '技術評估那一邊還開著（到 <b class="num">' + fmtD(saLatest.d) + '</b>），'
+                  + '所以現在卡的是英文的這 <b class="num">' + left + '</b> 天。'
+                /* 「把核發日填進來才看得出哪一扇門先關」正上方那一行（saLine）
+                   已經講過一次了，這裡不再講第二遍——逐字重複會把兩次都稀釋掉。
+                   這一句只負責一件事：不要讓讀者以為另一邊沒事。 */
+                : '技術評估那一邊你還沒填核發日，沒有第二個日期可以跟它比——'
+                  + '現在卡的就是英文的這 <b class="num">' + left + '</b> 天。')
+             + saIfShort + tIfShort + '</p>';
         } else if(diff === 0){
           /* 「先關的是：兩邊同一天」讀起來像在回答一個它沒回答的問題。
              同一天就直接講同一天，不要套進「誰先關」那個句型。 */
@@ -4700,7 +4766,7 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
              在那裡補一句「用的是保守值」會憑空製造一個並不存在的不確定。 */
           if(!isT1 && dd === null) h += '（英文那一邊用的是保守值 ' + fmtD(engMax) + '，'
             + '因為你沒填遞件要隔幾天。）';
-          h += saIfShort + '</p>';
+          h += saIfShort + tIfShort + '</p>';
         }
       }
     }
@@ -4713,10 +4779,6 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
       let ws = "";
       softWin.forEach(w => { ws += '<li>' + w.text + '</li>'; });
       h += '<p><strong>你這個考試日期落在官方特別註記的區間裡：</strong></p><ul>' + ws + '</ul>';
-    }
-    if(dayGap(now, td) > 0){
-      h += '<p class="note">你填的考試日期還沒到（<b>' + fmtD(td) + '</b>）。'
-         + '上面照算，當成「如果那天考出這個成績」——但官方認的是成績單上的那一天。</p>';
     }
 
     h += '<p class="note"><strong>這裡算的是「哪一級、還剩多久」，不是「你會不會過」。</strong>'
