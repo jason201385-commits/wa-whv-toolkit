@@ -111,6 +111,13 @@ function runUnit(o) {
   };
 }
 
+/* 從畫面／剪貼簿讀回來的金額一律先換成「分」再比，不要用浮點容差。
+   站上所有算術都跑在整數分上，畫面印的是 `分 / 100` 再 toFixed(2)，
+   所以讀回來換成分之後本來就該完全相等——需要容差就代表哪裡漏了一次捨入。
+   ⚠️ 容差還會反過來咬人：0.011 這種寫法**比一分錢大**，
+   而「差一分」正是捨入寫錯時的典型長相，等於斷言對它要抓的錯誤是瞎的。 */
+const cents = n => Math.round(n * 100);
+
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
   if (cond) { pass++; console.log("✓ " + name); }
@@ -964,6 +971,13 @@ console.log("\n— 房租踩在 30% 線上時，三處輸出要講同一件事 �
    一個數字只出現在對外那一份、畫面上查不到，就沒有人核對得了它。 */
 console.log("\n— 居民模式：所得稅 ＋ levy ＝ 剪貼簿印的合計 —");
 (function () {
+  /* 用「分」比，不用容差。原本這幾條寫 `Math.abs(a + b - c) < 0.011`，
+     而 0.011 **比半分錢還大**——一分錢的落差它照樣放行。可是「差一分錢」正好是
+     這幾條斷言存在的理由：把四捨五入過的週數字乘 52，跟直接用年度數字算，
+     典型的差距就是一分。**容差蓋掉的正是它要測的那個問題。**
+     站上所有算術都跑在整數分上，畫面印的是 `分 / 100` 再 toFixed(2)，
+     所以讀回來換成分之後本來就該**完全相等**，一毫的浮點鬆動都不需要。
+     （2026-08-17 實測：把容差收到 0.0001 這四條照樣全過，證實那個 0.011 是純鬆弛。） */
   const money = s => parseFloat(String(s).replace(/,/g, ""));
   for (const o of [
     { rate: 25, hours: 25, reg: "resident" },              /* 過渡段 */
@@ -978,8 +992,9 @@ console.log("\n— 居民模式：所得稅 ＋ levy ＝ 剪貼簿印的合計 �
     const clipTax = money((r.clip.match(/扣稅 \$([\d,]+\.\d\d)/) || [, "0"])[1]);
     const lab = `$${o.rate}×${o.hours}h`;
     ok(`${lab} 三個數字都印出來了`, inc > 0 && lv > 0 && sum > 0, `${inc} / ${lv} / ${sum}`);
-    ok(`${lab} 所得稅 ＋ levy ＝ 合計`, Math.abs(inc + lv - sum) < 0.011, `${inc} + ${lv} ≠ ${sum}`);
-    ok(`${lab} 剪貼簿的「扣稅」＝畫面的合計`, Math.abs(clipTax - sum) < 0.011,
+    ok(`${lab} 所得稅 ＋ levy ＝ 合計（分毫不差，不給容差）`,
+      cents(inc) + cents(lv) === cents(sum), `${inc} + ${lv} ≠ ${sum}`);
+    ok(`${lab} 剪貼簿的「扣稅」＝畫面的合計（分毫不差）`, cents(clipTax) === cents(sum),
       `剪貼簿 ${clipTax} ／ 畫面 ${sum}`);
     ok(`${lab} 剪貼簿要單獨列出 levy，不能只給合計`,
       r.clip.includes("Medicare levy") && r.clip.includes("MES"),
@@ -1051,28 +1066,67 @@ console.log("\n— 剪貼簿的稅表標籤 —");
 /* --------------------------------------------- 換簽差額：年差額不是週差額 × 52 */
 console.log("\n— 換簽差額 —");
 (function () {
-  const r = runCost({ rate: 35, hours: 38, reg: "resident" });
-  const s = r.html.replace(/<[^>]+>/g, "");
-  const wk = parseFloat((s.match(/每週(?:少繳|多繳) \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
-  const yr = parseFloat((s.match(/一年(?:少繳|多繳) \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
-  ok("換簽差額要同時給週與年", wk > 0 && yr > 0, `週 ${wk} ／ 年 ${yr}`);
+  const C2 = sandbox.DATA.cost, W = C2.tax.weeksPerYear;
 
-  /* 年差額必須直接用年度數字算，不能把四捨五入過的週差額乘 52。
-     不要用「兩者不相等」來測——某些時薪下它們剛好相等（$35×38 就是），
-     那條斷言會變成在測輸入而不是測邏輯。改成直接對上真正的算式。 */
-  const C2 = sandbox.DATA.cost;
-  const grossW = Math.round(35 * 38 * 100);
-  const annual = grossW * C2.tax.weeksPerYear;
-  const wantY = Math.abs(sandbox.whmTaxCents(annual, true)
-    - (sandbox.residentTaxCents(annual) + sandbox.medicareLevyCents(annual))) / 100;
-  ok("年差額＝年度 WHM 稅 −（年度居民稅 ＋ 年度 levy）",
-    Math.abs(yr - wantY) < 0.011, `畫面 ${yr} ／ 算式 ${wantY.toFixed(2)}`);
+  /* 兩組輸入，各自守一件事。
+     $35×38 是原本那組，留著；但 2026-08-17 掃過 133,311 組（時薪 $20–$80 每 5 分、
+     工時 5–60 每半小時）之後發現：**它剛好落在「兩種算法答案相同」的那 93% 裡**。
+     也就是說在它身上，週差額寫成「年差額 ÷ 52」是**測不出來的**——
+     不是斷言太鬆，是這組輸入根本走不到那個分歧點。
+     $34.25×39 是掃出來會分歧的（正確 $25.78／寫錯 $25.79），
+     時薪也在 casual 最低 $33.05 之上，不會另外掛「低於法定最低」那條附註。
+     ⚠️ 這就是「突變沒紅」的第二種原因（沒有案例走到那條分支），
+     跟「斷言真的抓到了」長得一模一樣——差別只有實際去掃過才看得見。 */
+  for (const [rate, hours, why] of [
+    [35, 38, "原本那組（兩種算法在這裡剛好同分）"],
+    [34.25, 39, "掃出來會分歧的那一組（差一分）"],
+  ]) {
+    const lab = `$${rate}×${hours}h`;
+    const r = runCost({ rate, hours, reg: "resident" });
+    const s = r.html.replace(/<[^>]+>/g, "");
+    const wk = parseFloat((s.match(/每週(?:少繳|多繳) \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
+    const yr = parseFloat((s.match(/一年(?:少繳|多繳) \$([\d,]+\.\d\d)/) || [, "0"])[1].replace(/,/g, ""));
+    ok(`${lab} 換簽差額要同時給週與年`, wk > 0 && yr > 0, `週 ${wk} ／ 年 ${yr}　${why}`);
 
-  const wantW = Math.abs(Math.round(sandbox.whmTaxCents(annual, true) / C2.tax.weeksPerYear)
-    - (Math.round((sandbox.residentTaxCents(annual) + sandbox.medicareLevyCents(annual))
-        / C2.tax.weeksPerYear))) / 100;
-  ok("週差額＝兩張表各自的週稅相減", Math.abs(wk - wantW) < 0.011,
-    `畫面 ${wk} ／ 算式 ${wantW.toFixed(2)}`);
+    /* 年差額必須直接用年度數字算，不能把四捨五入過的週差額乘 52。
+       不要用「兩者不相等」來測——某些時薪下它們剛好相等，
+       那條斷言會變成在測輸入而不是測邏輯。改成直接對上真正的算式。 */
+    const annual = Math.round(rate * hours * 100) * W;
+    const whmA = sandbox.whmTaxCents(annual, true);
+    const resA = sandbox.residentTaxCents(annual) + sandbox.medicareLevyCents(annual);
+    const wantY = Math.abs(whmA - resA) / 100;
+    /* ⚠️ 週的居民稅是**兩次分開捨入再相加**（index.html:2776-2778）：
+       所得稅 /52 捨入、levy /52 捨入，然後相加。不是「先加總再除」。
+       那是刻意的——畫面把兩筆分開印，分開印的兩個數字必須加得出畫面上的合計
+       （就是上面「所得稅 ＋ levy ＝ 合計」那一組在守的事）。
+       這裡第一版寫成先加總再捨入，跟實作差一分而**測試紅了**：
+       收緊容差之後第一個抓到的不是網站的錯，是**這支測試自己抄錯了實作的形狀**。
+       原本的 0.011 對這件事一樣是瞎的——它會讓錯的期望值也過。 */
+    const wantTaxW = Math.round(sandbox.residentTaxCents(annual) / W)
+      + Math.round(sandbox.medicareLevyCents(annual) / W);
+    /* 用「分」對，不給容差。**這裡的容差比上面那組更危險**：
+       週差額寫錯的典型長相是「先把年差額算出來再除以 52」，
+       它跟「兩張表各自先算週稅再相減」的落差**恰好是一分錢**——
+       而原本的 0.011 比一分錢大，等於這條斷言對它要抓的那個錯誤是瞎的。 */
+    ok(`${lab} 年差額＝年度 WHM 稅 −（年度居民稅 ＋ 年度 levy）`,
+      cents(yr) === cents(wantY), `畫面 ${yr} ／ 算式 ${wantY.toFixed(2)}`);
+
+    const wantW = Math.abs(Math.round(whmA / W) - wantTaxW) / 100;
+    ok(`${lab} 週差額＝兩張表各自的週稅相減（差一分就算錯）`, cents(wk) === cents(wantW),
+      `畫面 ${wk} ／ 算式 ${wantW.toFixed(2)}`);
+  }
+
+  /* 把「這一組真的會分歧」本身也釘住。哪天稅表或 weeksPerYear 一改，
+     $34.25×39 可能又變回同分——那時上面那兩條會繼續是綠的，
+     但它們**守的東西已經沒了**。這一條會在那天紅給你看。 */
+  const annual = Math.round(34.25 * 39 * 100) * W;
+  const whmA = sandbox.whmTaxCents(annual, true);
+  const resA = sandbox.residentTaxCents(annual) + sandbox.medicareLevyCents(annual);
+  const taxW = Math.round(sandbox.residentTaxCents(annual) / W)
+    + Math.round(sandbox.medicareLevyCents(annual) / W);
+  ok("前提：$34.25×39 這組確實能分辨兩種捨入寫法（否則上面等於沒測）",
+    Math.abs(Math.round(whmA / W) - taxW) !== Math.abs(Math.round((whmA - resA) / W)),
+    `兩種算法都得出 ${Math.abs(Math.round(whmA / W) - taxW)} 分`);
 })();
 
 /* -------------------------------------------------------------- 單位價格 */

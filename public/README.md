@@ -55,12 +55,12 @@ public/               ← 部署目錄。只有這裡面的東西會上線。
   handoff.md          說明樁，不是真的交接文件（原因寫在裡面）。
 test/
   wage.test.js        時薪判定的回歸測試（28 個案例）。`node test/wage.test.js`
-  cost.test.js        生活成本試算的回歸測試（384 個案例）。`node test/cost.test.js`
+  cost.test.js        生活成本試算的回歸測試（388 個案例）。`node test/cost.test.js`
   pr.test.js          年齡時鐘與點數試算的回歸測試（71 個案例）。`node test/pr.test.js`
   settle.test.js      定居兩個時鐘與換照費用的回歸測試（106 個案例）。`node test/settle.test.js`
   flags.test.js       旗標對帳（15 個案例）。`node test/flags.test.js`
                       五支都零相依套件，都直接從 index.html 挖出 DATA 與要測的函式來跑，
-                      所以測到的一定是正式版程式碼，不是抄一份出來的副本。合計 604 個案例。
+                      所以測到的一定是正式版程式碼，不是抄一份出來的副本。合計 608 個案例。
                       cost.test.js 裡有一整段是**通則型的**，不是逐句斷言：
                       「剪貼簿印出的每個金額畫面上都要找得到」「判定符號兩邊相同」
                       「標題列只准一組括號」「四位數以上兩邊都要有千分位」，
@@ -92,7 +92,7 @@ test/
                       flags.test.js 是橫向的：它不管算得對不對，只管**標了待核的東西
                       畫面上真的看得到待核**——旗標黑洞（資料標了、渲染器沒吃）
                       會讓未查證的內容看起來像已查證，比不標更糟。這個站發生過一次。
-  golden.test.js      **整段面板的純文字快照比對**（不算進上面的 604）。
+  golden.test.js      **整段面板的純文字快照比對**（不算進上面的 608）。
                       `node test/golden.test.js`；改動是預期內的就 `--update`。
                       36 個場景（/cost 27 種稅況與時薪組合、/settle 9 種時鐘組合），
                       日期與輸入全部釘死，跟 golden.txt 逐字比對。
@@ -119,9 +119,9 @@ test/
   golden.txt          上面那 36 個場景的預期輸出，697 行的純文字快照。**要用眼睛讀的檔**：
                       code review 時看它的 diff，比看 index.html 的 diff 更容易發現
                       「這句話組起來不通順」。
-  mutate.js           **驗收測試本身的工具**（不算進上面的 604）。`node test/mutate.js`
+  mutate.js           **驗收測試本身的工具**（不算進上面的 608）。`node test/mutate.js`
                       它故意改壞 index.html 的一個字，看六支測試會不會紅——全綠代表
-                      那條斷言是裝飾品。目前 52 條突變全部被抓到（0 漏網）。
+                      那條斷言是裝飾品。目前 53 條突變全部被抓到（0 漏網）。
                       清單分成三種，不是三段連號——加新的一律往後接，所以不要用
                       「前 N 條」去指認（這份 README 曾經把兩條**注入 markup**的突變
                       記成「改 DATA 常數」，那兩條改的是「建議你申請 PR」「核准率 78%」
