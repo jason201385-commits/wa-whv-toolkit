@@ -59,9 +59,9 @@ test/
   pr.test.js          年齡時鐘與點數試算的回歸測試（71 個案例）。`node test/pr.test.js`
   settle.test.js      定居兩個時鐘與換照費用的回歸測試（106 個案例）。`node test/settle.test.js`
   flags.test.js       旗標對帳（15 個案例）。`node test/flags.test.js`
-  english.test.js     英文門檻與兩個時鐘的回歸測試（147 個案例）。`node test/english.test.js`
+  english.test.js     英文門檻與兩個時鐘的回歸測試（148 個案例）。`node test/english.test.js`
                       六支都零相依套件，都直接從 index.html 挖出 DATA 與要測的函式來跑，
-                      所以測到的一定是正式版程式碼，不是抄一份出來的副本。合計 755 個案例。
+                      所以測到的一定是正式版程式碼，不是抄一份出來的副本。合計 756 個案例。
                       cost.test.js 裡有一整段是**通則型的**，不是逐句斷言：
                       「剪貼簿印出的每個金額畫面上都要找得到」「判定符號兩邊相同」
                       「標題列只准一組括號」「四位數以上兩邊都要有千分位」，
@@ -108,7 +108,7 @@ test/
                       當時 130 條斷言全綠，因為**每一條都是照著錯的模型寫的**：
                       斷言只能守住「程式跟我寫斷言時的理解一致」，
                       守不住「我的理解跟法規一致」。後者只能回去讀原文。
-  golden.test.js      **整段面板的純文字快照比對**（不算進上面的 755）。
+  golden.test.js      **整段面板的純文字快照比對**（不算進上面的 756）。
                       `node test/golden.test.js`；改動是預期內的就 `--update`。
                       66 個場景（/cost 27 種稅況與時薪組合、/settle 9 種時鐘組合、
                       /english 30 種成績與兩個時鐘的組合），
@@ -143,7 +143,7 @@ test/
                       ⚠️ 攤平規則本身也會失真：`.kv .n` 的 CSS 是 display:block，
                       不補那個斷行的話門檻總表會黏成「IELTS AcademicProficient 7 / 7」，
                       快照就讀不出來了——而它的全部價值就是讀得出來。
-  mutate.js           **驗收測試本身的工具**（不算進上面的 755）。`node test/mutate.js`
+  mutate.js           **驗收測試本身的工具**（不算進上面的 756）。`node test/mutate.js`
                       它故意改壞 index.html 的一個字，看七支測試會不會紅——全綠代表
                       那條斷言是裝飾品。目前 76 條突變全部被抓到（0 漏網）。
                       清單分成三種，不是三段連號——加新的一律往後接，所以不要用
