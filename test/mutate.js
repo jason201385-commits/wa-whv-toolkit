@@ -5,9 +5,17 @@
    長字串」做 grep，看起來很嚴格，實際上把 nhi[0] 的民國年改掉、把 supr[2] 的
    65% 改成 15%，測試照樣全綠（別的 bullet 剛好也含那些字）。是這支程式把它抓出來的。
 
-   跑法：node test/mutate.js      （會依序改壞→跑測試→還原，約需數分鐘）
+   跑法：node test/mutate.js      （會依序改壞→跑測試→還原，**十分鐘以上**）
    注意：它會**真的寫** public/index.html。跑之前先確認工作區是乾淨的，
-   中途 Ctrl+C 也會還原（finally），但還是先 commit 比較安全。 */
+   中途 Ctrl+C 也會還原（finally），但還是先 commit 比較安全。
+
+   ⚠️ **不要在會逾時的殼裡跑它**（agent harness 的預設逾時、CI 的 step timeout）。
+   2026-08-17 實測：外層殼逾時之後回報「completed exit 0」，`node` 子行程卻**還活著**，
+   繼續一條一條把突變寫進 index.html。於是工作區會在你以為跑完之後莫名其妙變髒，
+   而且**每次看到的殘留不一樣**（那是它正跑到第幾條）。當時查了三輪才找到孤兒行程。
+   兩件事要記住：①殼的結束碼描述的是殼，不是它啟動的那個行程；
+   ②工作區突然變髒時，先 `Get-CimInstance Win32_Process` 找還在跑的 mutate，
+   不要先懷疑還原邏輯——底下那個 git 覆核就是為了讓這件事下次一眼看得出來。 */
 const fs = require("fs"), cp = require("child_process"), path = require("path");
 const ROOT = path.join(__dirname, "..");
 const F = path.join(ROOT, "public", "index.html");
@@ -435,10 +443,17 @@ const M = [
     "              : dayGap(cap, base.d) === 0", "              : false"],
 
   /* 複述使用者輸入不准用夾完的值。填 90 的人會看到「你填的那 60 天」，
-     而這一整句正是在跟他解釋他自己的輸入造成了什麼。 */
-  ["排不出邀請日那段改回用夾完的 dd（填 90 的人被告知他填了 60）",
+     而這一整句正是在跟他解釋他自己的輸入造成了什麼。
+     ⚠️ 這裡原本擺的是「把 ddFloor 換回 dd」那一條，實測**漏網**——
+     不是測試不夠，是那條突變在改完結構之後變成**等價突變**：
+     這個三元只有在 `ddFloor <= 60` 的時候才走得到，而那時 `dd === ddFloor`，
+     換不換都印一樣的字。上面 367 那條（新制那一支）沒有這道守，所以仍然是活的。
+     等價突變留在清單裡比刪掉更糟：它會永遠掛在漏網欄，讓真的漏網淹在裡面。
+     換成一條真的殺得死的——把「你填的那 N 天」整個換成通用句，
+     沒超過 60 的人就再也看不到自己填的數字了。 */
+  ["沒超過 60 也不複述他填的天數（那一格從此跟畫面無關）",
     `                : '你填的那 ' + ddFloor + ' 天')`,
-    `                : '你填的那 ' + dd + ' 天')`],
+    `                : ' ' + E.inviteDays + ' 天的邀請期')`],
   ["超過 60 的時候還是說「用不滿你填的那 90 天」（跟上一段自己打自己）",
     "             + (ddFloor === null || ddFloor > E.inviteDays\n",
     "             + (ddFloor === null\n"],
@@ -502,7 +517,21 @@ try {
 } finally {
   /* 還原後讀回比對——寫檔成功不等於檔案是對的（行為者不得自證）。 */
   fs.writeFileSync(F, ORIG, "utf8");
-  console.log("\n還原" + (fs.readFileSync(F, "utf8") === ORIG ? "成功" : "失敗 ←— 立刻處理"));
+  const selfOK = fs.readFileSync(F, "utf8") === ORIG;
+  /* ⚠️ 但「讀回來等於 ORIG」還是**自己跟自己對**：ORIG 是這個行程一開始讀進來的
+     那份，寫回去再讀出來當然相等。2026-08-17 實測過一次「印了還原成功、工作區裡
+     卻留著第 48 條突變」——那次的成因沒查出來，而查不出成因正是要換通道的理由：
+     這一層唯一能證明檔案真的乾淨的外部通道是 git，不是這支程式自己的記憶體。
+     開跑前已經擋掉髒工作區，所以這裡的「乾淨」＝跟 HEAD 一模一樣，判準明確。
+     git 查不到就明說查不到，不要把「問不到」讀成「沒事」。 */
+  const vs = cp.spawnSync("git", ["-C", ROOT, "status", "--porcelain", "--", "public/index.html"],
+    { encoding: "utf8" });
+  const gitOK = vs.status === 0 ? vs.stdout.trim() === "" : null;
+  console.log("\n還原" + (selfOK ? "成功" : "失敗 ←— 立刻處理")
+    + "；git 覆核："
+    + (gitOK === null ? "查不到（不是 git 工作區？）——這一次沒有外部證據"
+       : gitOK ? "工作區跟 HEAD 一致"
+       : "✗ 工作區仍有殘留 ←— 立刻 git checkout -- public/index.html\n" + vs.stdout.trim()));
 }
 console.log("漏網 " + missed + " / " + M.length);
 process.exit(missed === 0 ? 0 : 1);
