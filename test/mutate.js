@@ -415,6 +415,13 @@ const M = [
   ["「拆成兩種」用紅色（讀起來像成績不能用了）",
     `box.className = "ans " + (splitNow || !was ? "warn" : "bad");`,
     `box.className = "ans " + (!was ? "warn" : "bad");`],
+
+  /* ---- 分享圖上的符號 ----
+     分享圖是這個站唯一會被存下來、轉進別的群組的東西，錯的符號會跟著跑。 */
+  ["分享圖的符號退回寫死的 ✕（叫人照抄去傳的那句話被打叉）",
+    "g.fillText(card.mark, PAD, y);", `g.fillText("✕", PAD, y);`],
+  ["「出門前」那張的 mark 改回 ✕（照著做的事被標成不該做）",
+    `accent:"#96601A", mark:"✓"`, `accent:"#96601A", mark:"✕"`],
 ];
 
 if (COUNT_ONLY) { console.log(String(M.length)); process.exit(0); }

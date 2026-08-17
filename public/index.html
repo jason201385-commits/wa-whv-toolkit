@@ -2117,7 +2117,12 @@ const DATA = {
      不能只是「詳見網站」。文字一律純文字——canvas 不吃標籤。 */
   cards: [
     {
-      id:"fx", tab:"換匯", accent:"#B4331E",
+      /* `mark` ＝ 分享圖上每一條前面的符號。原本 draw() 寫死 ✕，
+         而 ✕ 的意思是「看到這個就停手」——對前兩張卡是對的（那兩張列的
+         就是不該發生的事），對「出門前」那張是**反過來的**：那張的第一條
+         正是這個站叫你照抄去傳的句子，卻被打了一個叉。
+         所以符號跟著卡片走，不是跟著版面走。 */
+      id:"fx", tab:"換匯", accent:"#B4331E", mark:"✕",
       title:["轉出去之前","先看這 6 條"],
       eyebrow:"只有詐騙才會要求的事",
       items:[
@@ -2131,7 +2136,7 @@ const DATA = {
       foot:{ h:"已經轉出去了？第一件事是打給銀行", s:"不是報警，也不是回群組罵人。越快聯絡，錢還在的機會越大。" }
     },
     {
-      id:"bond", tab:"押金", accent:"#B4331E",
+      id:"bond", tab:"押金", accent:"#B4331E", mark:"✕",
       title:["付押金之前","先看這 6 條"],
       eyebrow:"西澳法規明文禁止的事",
       items:[
@@ -2145,7 +2150,9 @@ const DATA = {
       foot:{ h:"押金拿不拿得回來，看你的法律身分", s:"不是看你有沒有簽約。看的是他住不住在這裡、有沒有供餐、你的房間能不能上鎖。" }
     },
     {
-      id:"ask", tab:"出門前", accent:"#96601A",
+      /* 這張是唯一「照著做」的卡（前兩張是「看到就停手」），所以用 ✓ 不用 ✕。
+         accent 也是琥珀色不是紅色，兩個訊號要指同一個方向。 */
+      id:"ask", tab:"出門前", accent:"#96601A", mark:"✓",
       title:["出門前","先問這一句"],
       eyebrow:"白跑一趟的原因幾乎都不是被騙",
       items:[
@@ -3597,7 +3604,7 @@ function comparePrice(){
     card.items.forEach(t=>{
       g.fillStyle = card.accent;
       g.font = "800 " + size + "px " + face();
-      g.fillText("✕", PAD, y);
+      g.fillText(card.mark, PAD, y);
       g.fillStyle = "#3B3128";
       g.font = "500 " + size + "px " + face();
       y = wrap(t, PAD + 56, y, W - PAD*2 - 56, lh, false) + gap;

@@ -175,5 +175,37 @@ is(bare, 0, "沒有網址的來源");
 is(undated, 0, "日期格式不對的來源");
 is(srcArrays.length, 11, "有來源清單的區塊數");
 
+/* ============ 6. 分享圖上的符號要跟著卡片走 ============ */
+
+/* draw() 原本寫死 `g.fillText("✕", …)`，於是三張卡的每一條前面都是叉。
+   對前兩張是對的（那兩張列的就是不該發生的事），對「出門前」那張是反過來的
+   ——那張的第一條正是這個站叫你照抄去傳的句子，卻被打了一個叉。
+   分享圖是這個站唯一會被存下來、轉進別的群組的東西，錯的符號會跟著跑。
+   canvas 畫出來的東西這裡驗不到（沒有瀏覽器），所以退一步守兩件**看得到**的事：
+   每張卡都自己宣告 mark，而且 draw() 不准再有寫死的符號。 */
+console.log("\n— 分享圖符號 —");
+{
+  const noMark = DATA.cards.filter(c => !c.mark).map(c => c.id);
+  noMark.length === 0
+    ? ok("三張卡都自己宣告了 mark：" + DATA.cards.map(c => c.tab + " " + c.mark).join("、"))
+    : bad("這些卡沒有 mark，會畫不出符號：" + noMark.join("、"));
+  /* 「照著做」的卡不能跟「看到就停手」的卡用同一個符號，否則這一整條等於沒改。 */
+  const ask = DATA.cards.find(c => c.id === "ask");
+  ask && ask.mark !== "✕"
+    ? ok("「出門前」那張不是叉（它列的是要照著做的事）")
+    : bad("「出門前」那張又變回叉了——它的第一條是叫人照抄去傳的句子");
+  /* 寫死的符號會讓上面兩條變成裝飾品：資料改了、畫面不動。
+     只看逐條那個迴圈裡面——底下那行「西澳打工度假查核工具 · 」是版面固定的
+     頁尾署名，本來就該寫死，連它一起擋等於逼人把常數搬進資料裡。 */
+  const loop = (HTML.match(/card\.items\.forEach\(t=>\{[\s\S]*?\n {4}\}\);/) || [""])[0];
+  if (!loop) bad("找不到 draw() 逐條那個迴圈——這一條沒在對任何東西");
+  else {
+    const hard = [...loop.matchAll(/fillText\(\s*"([^"]+)"/g)].map(m => m[1]);
+    hard.length === 0
+      ? ok("逐條迴圈裡沒有寫死的符號（走 card.mark）")
+      : bad("逐條迴圈裡還有寫死的 fillText 字串：" + hard.join("、"));
+  }
+}
+
 console.log("\n" + (fail === 0 ? "全數通過" : "有失敗") + "：" + pass + " 過 / " + fail + " 失敗");
 process.exit(fail === 0 ? 0 : 1);
