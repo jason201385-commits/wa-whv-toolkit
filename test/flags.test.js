@@ -7,9 +7,9 @@
  * index.html 的換匯合法路徑那一段就留著這個教訓的註解（「少了這一行，
  * 這一區就是旗標黑洞——比不標更糟」）。那是修過的，這支測試是不讓它再發生。
  *
- * 順便釘死一個一直被數錯的數字。用 grep 數 `v:false` 會得到 25，
- * 但其中 4 次出現在**註解裡**（第 857、1189、1344、2088 行在解釋這個機制），
- * 真正的資料筆數是 21。稽核 DOM 時該對的是這支測試算出來的數，不是 grep。
+ * 順便釘死一個一直被數錯的數字。用 grep 數 `v:false` 會得到 24，
+ * 但其中 4 次出現在**註解裡**（第 964、1334、1493、2447 行在解釋這個機制），
+ * 真正的資料筆數是 20。稽核 DOM 時該對的是這支測試算出來的數，不是 grep。
  *
  * 跑法：node test/flags.test.js
  */
@@ -73,7 +73,7 @@ const flagged = [];
 
 const rawText = (HTML.match(/v:false/g) || []).length;
 console.log("— 資料面 —");
-is(flagged.filter(f => f.kind === "v:false").length, 21, "DATA 裡的 v:false 筆數");
+is(flagged.filter(f => f.kind === "v:false").length, 20, "DATA 裡的 v:false 筆數");
 is(flagged.filter(f => f.kind === "pending:true").length, 1, "DATA 裡的 pending:true 筆數");
 rawText > flagged.length
   ? ok("grep 數字（" + rawText + "）本來就比資料筆數多，因為註解也在解釋這個機制——稽核不要用 grep")
@@ -145,7 +145,7 @@ for (const a of aware) {
 /* 這裡數的是 DATA 的筆數，這支測試從頭到尾沒有渲染過 DOM，
    所以講「畫面上會出現幾個」是過度宣稱——上面的黑洞對帳只證明了
    「每一筆都落在吃得到旗標的陣列裡」，證不到渲染真的跑過。 */
-is(flagged.length, 22, "DATA 裡帶旗標的總筆數（＝畫面該有的徽章數上限）");
+is(flagged.length, 21, "DATA 裡帶旗標的總筆數（＝畫面該有的徽章數上限）");
 
 /* ============ 4. 掛載點：註冊到的 id 要真的在 HTML 裡 ============ */
 
@@ -215,6 +215,78 @@ console.log("\n— 分享圖符號 —");
       ? ok("逐條迴圈裡沒有寫死的符號（走 card.mark）")
       : bad("逐條迴圈裡還有寫死的 fillText 字串：" + hard.join("、"));
   }
+}
+
+/* ============ 7. 散文裡的數字要跟資料對得上 ============ */
+
+/* 這個站有一整類內容是**只有散文、沒有計算機**的：集簽怎麼算、兩套勞資系統、
+   被解僱之後的時效。它們一直沒有任何斷言守著——因為沒有 checkRate() 那種
+   函式可以餵輸入，golden 也只印會動的面板。於是「散文自己抄了一份數字」
+   這件事完全沒人管：`days.second` 改成 90，howdays 第一條照樣印 88。
+
+   這一節不假裝在驗事實（那要去看官方頁），只驗**同一個數字在這份檔案裡
+   只准有一個真相**，以及**修過的坑不准長回來**。 */
+console.log("\n— 散文與資料對帳 —");
+{
+  const R = DATA.regional, W = DATA.wage;
+
+  /* (a) 集簽天數：資料一份、散文一份，兩份要一致 */
+  const h0 = R.howdays[0];
+  h0.includes(String(R.days.second)) && h0.includes(String(R.days.third))
+    ? ok("howdays 第一條印的天數就是 days 裡的（" + R.days.second + "／" + R.days.third + "）")
+    : bad("howdays 第一條跟 days 對不上：資料是 " + R.days.second + "／" + R.days.third);
+
+  /* (b) 88 天有**兩個**條件，這一區只講過其中一個，而且標題主動否認了另一個
+        （原文是「算的是日曆日，不是你上了幾天班」）。照那句話做的人會以為
+        待滿三個月就好——官方頁面自己舉的例子正是「期間跨滿、薪水合法、仍然不通過」。
+        所以這裡守的不是字面，是那個條件有沒有還在畫面上。 */
+  const regBlock = HTML.slice(HTML.indexOf('<div class="flags rule">'), HTML.indexOf('id="regdays"'));
+  /不是你上了幾天班/.test(regBlock)
+    ? bad("集簽標題又寫回「不是你上了幾天班」——那句話否認了官方兩個條件裡的第二個")
+    : ok("集簽標題沒有否認「等同全職天數」那個條件");
+  R.howdays.some(x => x.includes("等同全職"))
+    ? ok("howdays 裡還留著「等同全職員工天數」這個條件")
+    : bad("howdays 裡找不到「等同全職」——只講日曆日會讓人以為待滿三個月就算集滿");
+
+  /* (c) 州系統 award-free 年齡表：21 個數字是人工抄的，抄錯一格看不出來。
+        週薪 ÷ 38 要等於時薪、時薪 ×1.25 要等於 casual，各留 1 分錢的容差
+        （官方是逐格四捨五入，不是連乘）。單一數字打錯一位，一定超過容差。 */
+  const ageCell = W.sys.items.map(x => x.v).find(v => v.includes("award free"));
+  if (!ageCell) bad("找不到州系統 award-free 那張年齡表");
+  else {
+    const rows = [...ageCell.matchAll(/\$([\d.]+)／\$([\d.]+)／\$([\d.]+)/g)]
+      .map(m => m.slice(1).map(Number));
+    is(rows.length, 7, "年齡表的列數");
+    const off = rows.filter(([w, hr, cas]) =>
+      Math.abs(w / 38 - hr) > 0.01 || Math.abs(hr * 1.25 - cas) > 0.01);
+    off.length === 0
+      ? ok("年齡表每一列都自洽（週薪÷38＝時薪、時薪×1.25＝casual）")
+      : bad("年齡表有 " + off.length + " 列對不上：" + off.map(r => "$" + r.join("／$")).join("、"));
+    /* 成人那一列同時住在 items[1] 與這張表裡，兩邊不准漂移 */
+    const adult = W.sys.items.map(x => x.v).find(v => v.includes("獨資（sole trader）"));
+    adult && rows[0].every(n => adult.includes(String(n.toFixed(2))))
+      ? ok("成人那一列在兩張卡上是同一組數字")
+      : bad("成人費率在「獨資→州系統」那張卡跟年齡表上不一致");
+  }
+
+  /* (d) 「打 Wageline 就知道」不能無條件成立：官方明講非營利／立案協會這一格
+        沒有決定性規則，連 Wageline 都不提供意見。少了這個例外，這個面板會
+        叫人去打一支不會給答案的電話。 */
+  const how = W.sys.items.map(x => x.v).find(v => v.includes("Wageline on 1300 655 266"));
+  how && /Wageline\s*明言不提供意見|Wageline\s*都無法/.test(how)
+    ? ok("「怎麼判斷」有帶上非營利那個例外")
+    : bad("「怎麼判斷」把 Wageline 講成萬用解——官方說非營利這一格它不給意見");
+
+  /* (e) 被解僱的時效。這是這個區塊唯一**過了就沒了**的東西，
+        而它旁邊那句「先打去問問看不叫檢舉」對還沒被解僱的人是對的、
+        對已經被解僱的人是把時鐘吃掉。兩者的先後順序要守住。 */
+  const clock = W.report.items.map(x => x.v).find(v => v.includes("s.394(2)"));
+  clock && clock.includes("21 天") && clock.includes("28 天")
+    ? ok("時效那張卡同時給了全國 21 天與州系統 28 天")
+    : bad("時效那張卡缺了 21 天或 28 天——只給一個等於叫人押錯機關");
+  /^<b>已經被解僱/.test(W.report.note)
+    ? ok("檢舉區的結語先講時鐘，才講「可以先問問看」")
+    : bad("檢舉區的結語又把「先問問看」放到最前面——被解僱的人讀到的第一句話不該是慢慢來");
 }
 
 console.log("\n" + (fail === 0 ? "全數通過" : "有失敗") + "：" + pass + " 過 / " + fail + " 失敗");

@@ -383,7 +383,7 @@ footer a{color:var(--accent)}
     <div class="ans" id="pcans" hidden></div>
 
     <div class="flags rule">
-      <b>88 天怎麼算 —— 算的是日曆日，不是你上了幾天班</b>
+      <b>88 天怎麼算 —— 兩個條件都要過，日曆日只是其中一個</b>
       <ul id="regdays"></ul>
     </div>
 
@@ -1029,9 +1029,13 @@ const DATA = {
       "6743":"Kununurra"
     },
     days: { second: 88, third: 179, v:true },
-    /* 天數怎麼算 —— 官方算的是「全職員工在 88 個日曆日內會做的天數」，不是你上了幾天班 */
+    /* 天數怎麼算 —— 官方是**兩個條件的交集**：期間要跨滿 88 個日曆日，而且那段期間裡
+       實際上工的天數要等同全職員工。只講其中一個都會給出錯的答案；這一區的標題原本寫
+       「不是你上了幾天班」，等於主動否認了第二個條件——照那句話做的人會以為只要在指定
+       區域待滿三個月就好。官方頁面自己就舉了一個「期間跨滿、薪水合法、仍然不通過」的例子。 */
     howdays: [
       "第二簽 3 個月＝<b>最少 88 個日曆日</b>；第三簽 6 個月＝<b>最少 179 個日曆日</b>，且須在持第二簽期間完成。",
+      "<b>跨滿日曆日只是第一關——同一段期間裡，你實際上工的天數還要等同全職員工在那段期間會上的天數。</b>兼職按比例折算：官方自己的例子裡，有人做滿 4 個曆月但時數只有全職的一半，最後只被認 2 個月（61 天）；也有人在完整的 3 個月期間內每週只做 2 天、薪水完全合法，<b>一樣不通過</b>。所以「我在指定區域待滿三個月」不等於「我集滿了」。",
       "一天最多算一天。<b>做 10 小時、或同一天跨兩個雇主，還是一天。</b>",
       "有給薪的國定假日與病假可算；因天氣停工<b>而且沒給薪</b>的日子不能算。",
       "所有給薪的指定工作都必須依澳洲法令與 award 支薪，<b>低於法定時薪的工作日不算數</b>。",
@@ -1101,9 +1105,11 @@ const DATA = {
     sys: {
       lead: "上面那條紅線是<b>全國系統</b>的地板。西澳是全澳洲少數<b>同時跑兩套勞資系統</b>的地方——你適用哪一套，取決於<b>雇主的登記型態</b>，跟你做什麼工作無關。",
       items: [
-        {k:"雇主是 Pty Ltd → 全國系統", v:"Pty Ltd 公司、合夥人裡有 Pty Ltd 的合夥、受託人裡有 Pty Ltd 的信託，以及有實質營業活動的非營利法人，全部走全國系統：<b>時薪 $26.44、casual $33.05</b>（2026-07-01 起），award 走 MA000028、MA000090 那一套。"},
+        {k:"雇主是 Pty Ltd → 全國系統", v:"Pty Ltd 公司、合夥人裡有 Pty Ltd 的合夥、受託人裡有 Pty Ltd 的信託，走全國系統：<b>時薪 $26.44、casual $33.05</b>（2026-07-01 起），award 走 MA000028、MA000090 那一套。"},
         {k:"雇主是獨資或非法人 → 西澳州系統", v:"<b>獨資（sole trader）、合夥人裡沒有 Pty Ltd 的非法人合夥、非法人信託、家庭雇主</b>走的是西澳州系統。州系統裡沒有 award 涵蓋的成年（21 歲以上）員工，最低是<b>每週 $998.30、時薪 $26.27、casual $32.84</b>（含 25% loading，2026-07-01 起）——比全國那一條低。<b>小農場、家庭式咖啡店、民宿很多正好是這一類。</b>"},
-        {k:"怎麼判斷", v:"看薪資單或合約上的雇主名稱<b>有沒有 Pty Ltd</b>。沒有就很可能是州系統。州系統另有自己的 WA award，不是聯邦那幾本。判不出來就打 <b>Wageline</b> 問，這支就是專門回答「我到底屬於哪一套」的。"},
+        {k:"州系統又沒有 award：加班、週末、國定假日都沒有加成", v:"這是兩套系統差最多、也最容易讓人白吵一架的地方。西澳州系統裡<b>沒有 award 涵蓋</b>（官方叫 award free）的員工，法定上<b>沒有</b>任何「超過每週 38 小時」「週末」「國定假日」要付更高費率的最低保障——官方頁面就是這樣寫的。<b>但那是「沒有加成」，不是「不用給錢」</b>：全職超過 38 小時的每一小時，仍然至少要付到最低時薪。年齡表（每週／時薪／casual 含 25% loading）：<b>21 歲以上 $998.30／$26.27／$32.84</b>；20 歲 $898.50／$23.64／$29.55；19 歲 $798.60／$21.02／$26.28；18 歲 $698.80／$18.39／$22.99；17 歲 $599.00／$15.76／$19.70；16 歲 $499.20／$13.14／$16.43；未滿 16 歲 $399.30／$10.51／$13.14。生效點官方寫的是<b>「2026-07-01 當天或之後開始的第一個完整薪資週期」</b>，不是 7 月 1 日當天——薪資週期跨過月初的人，那一期還是舊費率。<b>所以「他週末沒給我加成」在州系統可能完全合法</b>，先確認你在哪一套、有沒有 award，再決定要不要開口。"},
+        {k:"立案協會、非營利、體育俱樂部：這一格官方自己說沒有定論", v:"這是唯一一個「看名字看不出來」的類別，而且它在打工度假圈不罕見——教會、社福機構、體育俱樂部、學校家長會都算。<b>立案協會與其他非營利組織原則上在州系統</b>，但只要它的<b>商業或財務活動夠實質</b>（有買賣並產生收入、有借貸或提供融資），它就可能構成 constitutional corporation 而落到<b>全國系統</b>——<b>就算它的宗旨不是營利、就算它拿政府補助，也一樣可能</b>。官方頁面接著寫了一句很少見的話：這類組織<b>「沒有一條決定性的規則」，每個組織都得自己去尋求法律意見，因為連 Wageline 都無法就這一點提供建議</b>。所以薪水有疑問時<b>不要拿「我們是非營利」當結論</b>——那正好是官方承認判不了的那一格。"},
+        {k:"怎麼判斷", v:"看薪資單或合約上的雇主名稱<b>有沒有 Pty Ltd</b>。沒有就很可能是州系統。州系統另有自己的 WA award，不是聯邦那幾本。<b>判不出來不用自己猜——打 Wageline，把那家店的名字唸給他們聽，他們會在電話上直接幫你查</b>（官方原文：「call Wageline on 1300 655 266 with the name of the business and we can do a search over the phone」）。<b>唯一的例外就是上面那一格</b>：非營利／立案協會屬於哪一套，Wageline 明言不提供意見。"},
         {k:"這也決定你要找誰", v:"全國系統的欠薪找 <b>Fair Work Ombudsman</b>；西澳州系統的欠薪 <b>Fair Work 管不到</b>，要走西澳自己的管道。<b>打錯機關會被退件，而且沒有人會主動幫你轉。</b>"}
       ],
       calls: [
@@ -1119,7 +1125,8 @@ const DATA = {
         "沒有 award 的：按 <b>National Minimum Wage order</b> 的年齡百分比表打折。",
         "<b>如果那本 award 根本沒寫 junior 條款，你就領成人費率</b>——不是自動打折。",
         "零售與速食類 award 另有一條：<b>18 至 20 歲在同一雇主做滿 6 個月後，領成人費率。</b>",
-        "所以 18 到 20 歲的人被開低於 $33.05 的 casual 時薪，<b>有可能完全合法</b>。要判斷得用官方的 Pay and Conditions Tool 輸入你的年齡與分類。"
+        "所以 18 到 20 歲的人被開低於 $33.05 的 casual 時薪，<b>有可能完全合法</b>。要判斷得用官方的 Pay and Conditions Tool 輸入你的年齡與分類。",
+        "<b>以上講的全部是全國系統的機制。</b>雇主如果是獨資或非法人（上一段的第二、三條），你要對的是<b>西澳州系統自己的年齡表</b>——那張表就印在上面，每一格都比這裡低。<b>拿錯一張表去對，會把一個守法的雇主當成欠薪。</b>"
       ]
     },
 
@@ -1169,13 +1176,15 @@ const DATA = {
         {k:"雇主不能取消你的簽證", v:"官方明文：只有 Home Affairs 能核發、拒絕或取消簽證。<b>雇主拿簽證威脅你，本身就是一種施壓手法，不是他做得到的事。</b>"},
         {k:"你的權利跟簽證身分無關", v:"官方明文：在澳洲工作的所有人享有相同的最低工作權益與保障，<b>與國籍、簽證身分無關</b>，而且這些權利不會因為你簽了什麼合約就消失。"},
         {k:"因為被剝削而違反工作條件時的保護", v:"原本的 <b>Assurance Protocol</b>（向 Fair Work 求助且配合調查者，Home Affairs 不會因你違反工作相關簽證條件而取消簽證）<b>目前已因兩項試辦計畫而暫停</b>。現行機制是 Home Affairs 主辦的 <b>Strengthening Reporting Protections Pilot</b>：由參與的政府機關或<b>認可第三方（Accredited Third Party, ATP）</b>認證你確實遭到剝削並協助處理，就適用強化後的通報保護。"},
-        {k:"簽證快到期但案子還沒結", v:"<b>Workplace Justice Visa</b>（Temporary Activity 408 之下）讓你為了處理職場剝削案件<b>留在澳洲最長 12 個月</b>。前提是你的案件經<b>認可第三方（ATP）認證</b>。這條路的存在，意味著「我簽證快到期了只好算了」不再是唯一選項。"}
+        {k:"簽證快到期但案子還沒結", v:"<b>Workplace Justice Visa</b>（Temporary Activity 408 之下）讓你為了處理職場剝削案件留在澳洲，<b>一般是 6 個月，視情況最長 12 個月</b>。前提是你的案件經<b>認可第三方（ATP）認證</b>。簽證<b>申請規費是 Nil</b>——但零規費不等於零成本，認證與處理案件本身要花的時間、交通與可能的法律協助都還在，不要把它想成一鍵續命。這條路的存在，意味著「我簽證快到期了只好算了」不再是唯一選項。"},
+        {k:"已經被解僱的話：時鐘從那天就開始跑", v:"這一條跟上面幾條性質不同——上面講的是「你可以慢慢問」，這一條<b>有期限，過了就沒了</b>。全國系統的不當解僱向 <b>Fair Work Commission</b> 申請，期限是<b>解僱生效後 21 天</b>（FWC 頁面直接引 Fair Work Act s.394(2)）：<b>解僱當天不算，第一天從隔天起算</b>；中間夾到的週末與國定假日<b>不會</b>讓你多幾天，只有<b>最後一天</b>剛好落在週末或委員會休假日才順延到下一個上班日。逾期只有在<b>「exceptional circumstances」</b>下才可能被受理，而 FWC 明白寫著：<b>申請延期不是、也不該被當成既成事實</b>（a fait accompli）——那是例外，不是備用通道。西澳州系統則向 <b>WAIRC</b> 申請，期限<b>28 天</b>，逾期要委員會認為「不受理會有失公平」才收；<b>要繳申請費，官方頁面寫的是 $50.00</b>，但<b>不必請代理人，可以自己來</b>。你屬於哪一套看上面那一段；<b>判不出來就兩邊都打電話，不要先讓 21 天過去。</b>"}
       ],
       calls: [
         {t:"Fair Work Ombudsman", n:"13 13 94", d:"問薪資、扣款、payslip、award 分類都打這支。免費。", v:true},
-        {t:"Fair Work 口譯服務", n:"13 14 50", d:"先打這支說你要中文，再請他們接 Fair Work。<b>不會英文不是不能檢舉的理由。</b>", v:false}
+        {t:"TIS National 翻譯專線", n:"13 14 50", d:"不會英文就先打這支說你要中文，再請他們接 <b>Fair Work 13 13 94</b> 或 <b>Wageline 1300 655 266</b>。<b>不會英文不是不能檢舉的理由。</b>", v:true},
+        {t:"Circle Green Community Legal（西澳社區法律中心・職場法律）", n:"(08) 6148 3636", d:"職場相關案件的在地法律服務。Ground Floor, 445 Hay St, Perth WA 6000。<b>被解僱、時鐘在跑的時候，這是離你最近的一扇門。</b>", v:true}
       ],
-      note: "<b>可以匿名檢舉</b>，也可以先只是「問問看」而不具名投訴。很多人卡在「檢舉」兩個字太重——先打去問「我這樣的情況合不合法」，那不叫檢舉。"
+      note: "<b>已經被解僱的人先看上面那條「時鐘」——21 天／28 天是硬的，先把件送出去，再慢慢弄清楚細節。</b>其他情況不必緊張：<b>可以匿名檢舉</b>，也可以先只是「問問看」而不具名投訴。很多人卡在「檢舉」兩個字太重——先打去問「我這樣的情況合不合法」，那不叫檢舉。"
     },
 
     /* 工傷走的是第三套系統。農場與工廠最容易踩，而中文資訊裡幾乎不存在 */
@@ -1216,18 +1225,21 @@ const DATA = {
       {t:"Fair Work Horticulture Showcase — Wine Award 的計件規則（無最低工資保障、件價須高 20%）", u:"https://horticulture.fairwork.gov.au/pay-piecework-rates/how-to-use-piecework-agreements-wine-award", as:"2026-08-15", v:true},
       {t:"Fair Work — Wine Industry Award MA000090 涵蓋範圍（含葡萄園與勞務派遣）", u:"https://www.fairwork.gov.au/employment-conditions/awards/awards-summary/ma000090-summary", as:"2026-08-15", v:true},
       {t:"Fair Work — Visa protections：pilot programs（Assurance Protocol 已暫停，改行兩項試辦計畫）", u:"https://www.fairwork.gov.au/find-help-for/visa-holders-migrants/visa-protections-pilot-programs", as:"2026-08-15", v:true},
-      {t:"Home Affairs — Workplace Justice Visa（408，最長 12 個月，須 ATP 認證）", u:"https://immi.homeaffairs.gov.au/Visa-subsite/Pages/work/408-australian-government-endorsed-workplace-justice-pilot.aspx", as:"2026-08-15", v:true},
+      {t:"Home Affairs — Workplace Justice Visa（408，一般 6 個月、視情況最長 12 個月，規費 Nil，須 ATP 認證）", u:"https://immi.homeaffairs.gov.au/Visa-subsite/Pages/work/408-australian-government-endorsed-workplace-justice-pilot.aspx", as:"2026-08-17", v:true},
       {t:"Home Affairs — Strengthening Reporting Protections Pilot", u:"https://immi.homeaffairs.gov.au/visas/working-in-australia/work-rights-and-exploitation/strengthening-reporting-protections-pilot", as:"2026-08-15", v:true},
       {t:"Fair Work — Record My Hours（官方免費記工時 App）", u:"https://www.fairwork.gov.au/tools-and-resources/record-my-hours-app", as:"2026-08-15", v:false},
       {t:"Fair Work — 不合法的扣款與 cashback", u:"https://www.fairwork.gov.au/pay-and-wages/deducting-pay-and-overpayments/deducting-pay", as:"2026-08-15", v:false},
       {t:"UnionsWA — 西澳唯一的在地認可第三方（ATP）", u:"https://www.unionswa.com.au/", as:"2026-08-15", v:false},
       {t:"Fair Work — 匿名檢舉", u:"https://www.fairwork.gov.au/about-us/contact-us/report-an-issue-anonymously", as:"2026-08-15", v:false},
-      {t:"西澳政府 — 州系統 award-free 最低工資（每週 $998.30／時薪 $26.27／casual $32.84，2026-07-01 起）", u:"https://www.wa.gov.au/service/employment/employment-and-industrial-relations-matters/minimum-pay-rates-award-free-employees", as:"2026-07-01", v:true},
-      {t:"西澳政府 — 你適用哪一套勞資系統（獨資／非法人 vs Pty Ltd）", u:"https://www.wa.gov.au/organisation/private-sector-labour-relations/which-system-of-employment-law-applies", as:"2026-06-10", v:true},
+      {t:"西澳政府 — 州系統 award-free 最低工資（成人每週 $998.30／時薪 $26.27／casual $32.84，另有 16 歲以下至 20 歲的年齡表；加班、週末、國定假日無加成；生效點是 2026-07-01 當天或之後開始的第一個完整薪資週期）", u:"https://www.wa.gov.au/service/employment/employment-and-industrial-relations-matters/minimum-pay-rates-award-free-employees", as:"2026-08-17", v:true},
+      {t:"西澳政府 — 你適用哪一套勞資系統（獨資／非法人 vs Pty Ltd；非營利與立案協會「沒有決定性規則」，Wageline 不就此提供意見）", u:"https://www.wa.gov.au/organisation/private-sector-labour-relations/which-system-of-employment-law-applies", as:"2026-06-10", v:true},
       {t:"西澳政府 — 通報欠薪：兩套系統的分辨與 Wageline 1300 655 266", u:"https://www.wa.gov.au/government/multi-step-guides/reporting-wage-theft-western-australia/information-the-state-and-national-industrial-relations-systems", as:"2024-10-31", v:true},
       {t:"Fair Work — Junior pay rates（未滿 21 歲按年齡打折）", u:"https://www.fairwork.gov.au/pay-and-wages/minimum-wages/junior-pay-rates", as:"2026-08-15", v:false},
       {t:"西澳政府 — 申請工傷補償（任何因工受傷的工作者都有權申請；1300 794 744）", u:"https://www.wa.gov.au/service/health-care/health-insurance-schemes/claim-workers-compensation", as:"2025-06-25", v:true},
-      {t:"WorkCover WA — Making a claim（7 天／14 天的程序時限）", u:"https://www.workcover.wa.gov.au/workers/understanding-your-rights-obligations-entitlements/making-a-claim/", as:"2026-08-15", v:false}
+      {t:"WorkCover WA — Making a claim（7 天／14 天的程序時限）", u:"https://www.workcover.wa.gov.au/workers/understanding-your-rights-obligations-entitlements/making-a-claim/", as:"2026-08-15", v:false},
+      {t:"Fair Work Commission — 申請時限（不當解僱 21 天，引 s.394(2)；隔天起算、遇假日順延、逾期須 exceptional circumstances）", u:"https://www.fwc.gov.au/timeframe-lodgment-0", as:"2026-08-17", v:true},
+      {t:"WAIRC — 州系統不當解僱（28 天，逾期須委員會認為不受理有失公平；申請費 $50.00，可自行出庭）", u:"https://www.wairc.wa.gov.au/unfair-dismissal", as:"2026-08-17", v:true},
+      {t:"Circle Green Community Legal — 西澳職場法律服務（(08) 6148 3636，445 Hay St, Perth）", u:"https://circlegreen.org.au/", as:"2026-08-17", v:true}
     ]
   },
 
@@ -1538,7 +1550,7 @@ const DATA = {
       "只收現金、只匯私人帳戶，或要求用加密貨幣、禮品卡付款。",
       "閃避「主租約給我看一下」「屋主或中介是誰」這兩個問題。",
       "要你把護照正本或簽證文件正本交給對方「保管」。",
-      "「以工換宿」——用勞務抵住宿在澳洲通常不合法，而且那些時數多半不算集簽的 88 天。那是 Fair Work 的問題，不是租屋問題，找錯機關會白跑。"
+      "「以工換宿」——用勞務抵住宿在澳洲通常不合法，而且<b>那些時數對集簽是零</b>：指定工作必須依澳洲法令與 award 支薪才算數，沒有薪資就沒有一天算得進 88 天，做半年也一樣。那是 Fair Work 的問題，不是租屋問題，找錯機關會白跑。"
     ],
     src: [
       {t:"WA Consumer Protection — Rental bonds（押金上限、bond replacement 違法）", u:"https://www.consumerprotection.wa.gov.au/rental-bonds", as:"2026-03-28", v:true},
