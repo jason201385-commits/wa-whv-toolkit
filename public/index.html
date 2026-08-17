@@ -6,71 +6,69 @@
 <title>西澳打工度假 · 查核工具</title>
 <!-- favicon 內嵌成 data URI，不是外部檔案：全站零外部請求是 CSP 能寫成 default-src 'none' 的前提，
      為了一個圖示破例不值得。順便消掉瀏覽器每次都去要 /favicon.ico 的那個 404。 -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111'/%3E%3Cpath d='M8 16.5l5.5 5.5L24 11' stroke='%23f5d90a' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230B6A73'/%3E%3Cpath d='M8 16.5l5.5 5.5L24 11' stroke='%23FCF7F0' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <meta name="description" content="集簽區域、法定時薪、買車查核、押金自保、換匯防詐、落地清單。每個數字都連到澳洲政府官方頁面，標明生效日。">
 <meta name="color-scheme" content="light dark">
 <style>
 /* ============ tokens ============ */
 :root{
-  --paper:#F5F2EC;
+  --paper:#FCF7F0;
   --card:#FFFFFF;
-  --sunk:#EDE9E1;
-  --ink:#1A1713;
-  --ink-2:#4A443C;
-  --muted:#7C746A;
-  --line:#DFD9CE;
-  --line-soft:#EBE6DC;
+  --sunk:#F6EDE1;
+  --ink:#2A2119;
+  --ink-2:#584A3C;
+  --muted:#756450;
+  --line:#E8DCCB;
+  --line-soft:#F1E8DB;
 
-  --accent:#1F3A5F;
+  --accent:#0B6A73;
   --accent-ink:#FFFFFF;
-  --accent-soft:#E4EAF2;
 
-  --ok:#166B45;
-  --ok-soft:#E2F0E8;
-  --ok-line:#8CC4A9;
-  --warn:#8A5300;
-  --warn-soft:#FAEED6;
-  --warn-line:#DFB463;
-  --bad:#A81F13;
-  --bad-soft:#FBE7E4;
-  --bad-line:#E0938A;
+  --ok:#2C7A46;
+  --ok-soft:#E4F3E7;
+  --ok-line:#8FC8A3;
+  --warn:#8A5A12;
+  --warn-soft:#FBEFD9;
+  --warn-line:#E2BB78;
+  --bad:#B02A18;
+  --bad-soft:#FCE9E4;
+  --bad-line:#E4A093;
 
-  --shadow:0 1px 2px rgba(26,23,19,.06),0 10px 28px -20px rgba(26,23,19,.4);
+  --shadow:0 1px 2px rgba(96,74,48,.06),0 14px 32px -24px rgba(96,74,48,.5);
   --cjk:"PingFang TC","Microsoft JhengHei","Noto Sans TC","Hiragino Sans TC",sans-serif;
   --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Roboto Mono",monospace;
-  --r:6px;
+  --r:10px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --paper:#141310;
-    --card:#1E1C18;
-    --sunk:#262320;
-    --ink:#F0ECE4;
-    --ink-2:#C6BFB4;
-    --muted:#928A7E;
-    --line:#332F29;
-    --line-soft:#2A2723;
-    --accent:#9CBBE0;
-    --accent-ink:#101820;
-    --accent-soft:#1C2735;
-    --ok:#79CFA5;
-    --ok-soft:#152A20;
-    --ok-line:#2F6B4D;
-    --warn:#E5B767;
-    --warn-soft:#2C2213;
-    --warn-line:#6E5526;
-    --bad:#F4998C;
-    --bad-soft:#2E1815;
-    --bad-line:#7A3830;
-    --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px -20px rgba(0,0,0,.9);
+    --paper:#221D18;
+    --card:#2C2621;
+    --sunk:#352E28;
+    --ink:#F7F0E6;
+    --ink-2:#D8CCBC;
+    --muted:#A89A88;
+    --line:#43392F;
+    --line-soft:#38312A;
+    --accent:#6FD3DC;
+    --accent-ink:#08282B;
+    --ok:#7FD69F;
+    --ok-soft:#1C3426;
+    --ok-line:#3F7C57;
+    --warn:#EDBE74;
+    --warn-soft:#342816;
+    --warn-line:#7C612E;
+    --bad:#F7A395;
+    --bad-soft:#38211D;
+    --bad-line:#8C4439;
+    --shadow:0 1px 2px rgba(0,0,0,.38),0 14px 32px -24px rgba(0,0,0,.8);
   }
 }
 :root[data-theme="dark"]{
-  --paper:#141310;--card:#1E1C18;--sunk:#262320;--ink:#F0ECE4;--ink-2:#C6BFB4;--muted:#928A7E;
-  --line:#332F29;--line-soft:#2A2723;--accent:#9CBBE0;--accent-ink:#101820;--accent-soft:#1C2735;
-  --ok:#79CFA5;--ok-soft:#152A20;--ok-line:#2F6B4D;--warn:#E5B767;--warn-soft:#2C2213;--warn-line:#6E5526;
-  --bad:#F4998C;--bad-soft:#2E1815;--bad-line:#7A3830;
-  --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px -20px rgba(0,0,0,.9);
+  --paper:#221D18;--card:#2C2621;--sunk:#352E28;--ink:#F7F0E6;--ink-2:#D8CCBC;--muted:#A89A88;
+  --line:#43392F;--line-soft:#38312A;--accent:#6FD3DC;--accent-ink:#08282B;
+  --ok:#7FD69F;--ok-soft:#1C3426;--ok-line:#3F7C57;--warn:#EDBE74;--warn-soft:#342816;--warn-line:#7C612E;
+  --bad:#F7A395;--bad-soft:#38211D;--bad-line:#8C4439;
+  --shadow:0 1px 2px rgba(0,0,0,.38),0 14px 32px -24px rgba(0,0,0,.8);
 }
 
 *{box-sizing:border-box}
@@ -171,8 +169,8 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,su
   padding:9px 15px;border-radius:var(--r);border:1.5px solid var(--accent);
   background:transparent;color:var(--accent);white-space:nowrap;
 }
-.copybtn.done{background:var(--ok);border-color:var(--ok);color:#fff}
-.copybtn.failed{background:var(--bad);border-color:var(--bad);color:#fff}
+.copybtn.done{background:var(--ok);border-color:var(--ok);color:var(--paper)}
+.copybtn.failed{background:var(--bad);border-color:var(--bad);color:var(--paper)}
 
 /* ============ 可以照抄的一句話 ============ */
 .script{margin-top:12px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--sunk);padding:15px 17px}
@@ -220,7 +218,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,su
 /* ============ 集簽：類別 × 地點的逐項判定 ============ */
 .catlist{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}
 .catlist li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline;
-  padding:9px 11px;border-radius:7px;background:var(--sunk);font-size:14.5px;line-height:1.5}
+  padding:9px 11px;border-radius:9px;background:var(--sunk);font-size:14.5px;line-height:1.5}
 .catlist .mk{font-family:var(--mono);font-weight:700;font-size:13px}
 .catlist li.yes .mk{color:var(--ok)}
 .catlist li.no{opacity:.62}
@@ -254,7 +252,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,su
 
 .calls{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}
 .calls li{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;
-  padding:10px 13px;border-radius:7px;background:var(--sunk)}
+  padding:10px 13px;border-radius:9px;background:var(--sunk)}
 .calls .t{font-size:14.5px;font-weight:600;line-height:1.45}
 .calls .d{display:block;margin-top:2px;font-size:12.5px;font-weight:400;color:var(--muted)}
 .calls a.tel{font-family:var(--mono);font-weight:700;font-size:16px;letter-spacing:.01em;
@@ -272,7 +270,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,su
 .cardtabs button{font:inherit;font-size:14px;font-weight:700;cursor:pointer;
   padding:8px 16px;border-radius:999px;border:1.5px solid var(--line);
   background:var(--sunk);color:var(--muted);transition:none}
-.cardtabs button[aria-selected="true"]{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.cardtabs button[aria-selected="true"]{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
 
 /* ============ steps ============ */
 ol.steps{list-style:none;counter-reset:s;margin:16px 0 0;padding:0}
@@ -304,7 +302,7 @@ details.src[open] summary::before{content:"▾ "}
 .pending{
   display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
   background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);
-  border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:1px;
+  border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:1px;
 }
 
 /* ============ card ============ */
@@ -2097,7 +2095,7 @@ const DATA = {
      不能只是「詳見網站」。文字一律純文字——canvas 不吃標籤。 */
   cards: [
     {
-      id:"fx", tab:"換匯", accent:"#F4998C",
+      id:"fx", tab:"換匯", accent:"#B4331E",
       title:["轉出去之前","先看這 6 條"],
       eyebrow:"只有詐騙才會要求的事",
       items:[
@@ -2111,7 +2109,7 @@ const DATA = {
       foot:{ h:"已經轉出去了？第一件事是打給銀行", s:"不是報警，也不是回群組罵人。越快聯絡，錢還在的機會越大。" }
     },
     {
-      id:"bond", tab:"押金", accent:"#F4998C",
+      id:"bond", tab:"押金", accent:"#B4331E",
       title:["付押金之前","先看這 6 條"],
       eyebrow:"西澳法規明文禁止的事",
       items:[
@@ -2125,7 +2123,7 @@ const DATA = {
       foot:{ h:"押金拿不拿得回來，看你的法律身分", s:"不是看你有沒有簽約。看的是他住不住在這裡、有沒有供餐、你的房間能不能上鎖。" }
     },
     {
-      id:"ask", tab:"出門前", accent:"#E5B767",
+      id:"ask", tab:"出門前", accent:"#96601A",
       title:["出門前","先問這一句"],
       eyebrow:"白跑一趟的原因幾乎都不是被騙",
       items:[
@@ -3555,18 +3553,18 @@ function comparePrice(){
   function draw(){
     const card = DATA.cards[cur];
 
-    g.fillStyle = "#14110D"; g.fillRect(0,0,W,H);
+    g.fillStyle = "#FCF7F0"; g.fillRect(0,0,W,H);
     g.fillStyle = card.accent; g.fillRect(0,0,W,18);
 
-    g.fillStyle = "#FFFFFF";
+    g.fillStyle = "#2A2119";
     g.font = "800 74px " + face();
     card.title.forEach((t,i) => g.fillText(t, PAD, 150 + i*90));
 
-    g.fillStyle = "#E5B767";
+    g.fillStyle = "#96601A";
     g.font = "600 30px " + face();
     g.fillText(card.eyebrow, PAD, 150 + card.title.length*90 + 22);
 
-    g.strokeStyle = "#3A342C"; g.lineWidth = 2;
+    g.strokeStyle = "#E0D2BF"; g.lineWidth = 2;
     g.beginPath(); g.moveTo(PAD, 348); g.lineTo(W-PAD, 348); g.stroke();
 
     /* 條列多的時候自動降一級字，不要讓它壓過下面的結語 */
@@ -3578,21 +3576,21 @@ function comparePrice(){
       g.fillStyle = card.accent;
       g.font = "800 " + size + "px " + face();
       g.fillText("✕", PAD, y);
-      g.fillStyle = "#F0ECE4";
+      g.fillStyle = "#3B3128";
       g.font = "500 " + size + "px " + face();
       y = wrap(t, PAD + 56, y, W - PAD*2 - 56, lh, false) + gap;
     });
 
-    g.strokeStyle = "#3A342C";
+    g.strokeStyle = "#E0D2BF";
     g.beginPath(); g.moveTo(PAD, BOT); g.lineTo(W-PAD, BOT); g.stroke();
 
-    g.fillStyle = "#79CFA5";
+    g.fillStyle = "#2C7A46";
     g.font = "800 38px " + face();
     g.fillText(card.foot.h, PAD, H-166);
-    g.fillStyle = "#928A7E";
+    g.fillStyle = "#6E5E4B";
     g.font = "400 28px " + face();
     wrap(card.foot.s, PAD, H-116, W - PAD*2, 38, false);
-    g.fillStyle = "#7C746A";
+    g.fillStyle = "#77664F";
     g.font = "400 24px " + face();
     g.fillText("西澳打工度假查核工具 · " + DATA.asOf + (SITE ? " · " + SITE.replace(/^https?:\/\//,"") : ""), PAD, H-40);
 
