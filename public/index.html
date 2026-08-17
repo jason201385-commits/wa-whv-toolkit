@@ -837,7 +837,7 @@ footer a{color:var(--accent)}
 <section class="tool" id="english">
   <header>
     <h2>英文：哪一級、還剩多久<span class="slug">/english</span></h2>
-    <p class="q">上面那張點數表問你「英文是哪一級」，卻沒有一頁告訴你<strong>怎麼知道自己是哪一級</strong>。這一區把成績單對回官方那兩張表，順便算出那張成績能用到哪一天——然後跟技術評估放在一起比。兩邊都是 3 年，<b>但一個量到「收到邀請」那天、一個量到「遞件」那天</b>，所以它們不會同時到期，先關的那一扇才是你的死線。</p>
+    <p class="q">上面那張點數表問你「英文是哪一級」，卻沒有一頁告訴你<strong>怎麼知道自己是哪一級</strong>。這一區把成績單對回官方那兩張表，順便算出那張成績能用到哪一天——然後跟技術評估放在一起比。兩邊都是 3 年，<b>但英文那邊量到哪一天要看你的考試日</b>：2025-08-07 以後考的，跟技術評估一樣量到「收到邀請」那天；那天以前考的舊成績還多一條「遞件日往前 36 個月」要過，等於被壓到「遞件」那天。先關的那一扇才是你的死線。</p>
   </header>
   <div class="body">
     <div class="ask">
@@ -852,11 +852,15 @@ footer a{color:var(--accent)}
       <input type="number" id="es" inputmode="decimal" step="0.5" min="0" placeholder="說" aria-label="口說分數">
       <label for="esa">技術評估的核發日（還沒做就留空）</label>
       <input type="date" id="esa" autocomplete="off">
-      <label for="edelay">收到邀請後打算隔幾天遞件（不知道就留空，下面會給你區間）</label>
+      <label for="edelay">收到邀請後打算隔幾天遞件（不知道就留空。2025-08-07 以後考的成績用不到這格，下面會說明為什麼）</label>
       <input type="number" id="edelay" inputmode="numeric" step="1" min="0" max="60" placeholder="0–60 天" aria-label="邀請到遞件的天數">
       <button class="btn" id="ego">對表</button>
     </div>
     <p class="hint">分數只留在你自己的瀏覽器裡，這個站沒有伺服器可以送。<b>四項是各自比對的，不看平均、也不能互相補</b>——一項差一分，整張成績就掉一級，這是這一區最常被誤會的地方。</p>
+    <!-- 這幾個詞在上面已經用過了，但整區從頭到尾沒有一個地方解釋它們是什麼。
+         看得懂的人不需要這段，看不懂的人會以為 Competent 是「還可以」的意思——
+         它其實是最低門檻，而且 0 分。專有名詞第一次出現就要能查得到。 -->
+    <p class="hint"><b>先講幾個名詞</b>：<b>Competent／Proficient／Superior</b> 是官方給英文程度分的三級，不是評語——Competent 是<b>最低門檻</b>（點數 0 分，但沒到它就進不了點數表），往上兩級才開始加分。<b>技術評估</b>是由你職業對應的評估機構出的一份文件，證明你的學歷與經歷符合那個職業，遞件前必須先有它。<b>EOI</b>（Expression of Interest）是你在官方系統上登記的意向書，登記之後才有機會<b>收到邀請</b>；沒有邀請就不能遞件，所以下面所有日期都是往回推到「最晚哪一天要收到邀請」。</p>
     <div class="ans" id="eans" hidden></div>
 
     <h3 style="margin:26px 0 0;font-size:17px">現行門檻總表：每一張考試要幾分才算 Competent</h3>
@@ -1929,10 +1933,29 @@ const DATA = {
     cutover:    "2025-08-07",  /* 這一天（含）以後考的看 t1，以前看 t2 */
     oldExpiry:  "2028-08-06",  /* 舊制成績的絕對大限，官方腳註寫 inclusive */
     validYears: 3,
-    /* 189 的邀請期。官方原文：「You have 60 days from the date of your invitation
-       to apply for the visa.」——這句話是 189 那一頁寫的。190／491 走州提名，
-       流程不一樣，同一句話在那兩頁上查不到，所以這裡只敢用在 189 的換算。 */
+    /* 邀請期。官方原文：「You have 60 days from the date of your invitation to
+       apply for the visa.」
+       ⚠️ 這裡原本寫「只在 189 那一頁查到，190／491 那兩頁沒有」，那是**查得不夠**，不是事實。
+          189 points-tested、190、491/application 三頁逐字都有這一句（491 的內容在
+          /application 子頁，主頁沒有——當初就是停在主頁才誤判）。
+          少報適用範圍跟報錯數字一樣傷：讀者會以為自己那條路不能用這個天數。 */
     inviteDays: 60,
+    /* ---- 英文成績的 3 年，量到哪一天？分兩支，而分界剛好就是上面那個 cutover ----
+       ⚠️ 這是這一區最貴的一個錯：原本整區寫死「量到遞件那天」，對新制成績是錯的，
+          而且方向是**誤以為來不及**——少算最多 60 天，代價是白花錢重考一張還能用的成績。
+       新制（考試日 ≥ cutover）：只受 Migration Regulations 1994 reg 1.15C(1)(ba) 管
+         ——「the test was conducted in the 3 years immediately before the date of the
+         invitation」（Proficient 是 1.15D(b)、Superior 是 1.15EA(b)）。Schedule 2 的
+         189.223／190.213／491.215 同樣寫 at the time of invitation。
+         ⇒ 最晚邀請日就是效期那天本身，不必再往前扣邀請期。
+       舊制（考試日 ≤ t2.until）：上面那條照樣要過，但還要多過 LIN 25/016 第 10 條
+         ——舊考試要被承認成證據，得是「in the period of 36 months immediately before
+         the day on which the visa application is made」。遞件一定晚於邀請，
+         所以這一條比較嚴，**它才是綁住的那條**。⇒ 最晚邀請日 = 效期 − 邀請到遞件的天數。
+       移民部四頁英文說明只寫 “in the 3 years before your visa application, depending on
+       the visa subclass”——那句話自己留了 depending on 的活口，而 189／190／491 的
+       subclass 規則就寫在上面那兩處。兩份官方文件不牴觸，但頁面那句比較鬆，
+       所以新制那一支把「法規日」與「照頁面抓的保守日」兩個都印出來，不替讀者選一個。 */
     parts:  ["聽","讀","寫","說"],
     points: { competent:0, proficient:10, superior:20 },
     /* 由高到低。判定時第一個四項全達標的就是答案——順序反過來會讓所有人變成 Competent。 */
@@ -1993,7 +2016,13 @@ const DATA = {
       { t:"移民部 — Competent English（Table 1／Table 2 門檻、免試護照五國、線上版排除清單、TOEFL 報名路徑）", u:"https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/english-language/competent-english", as:"2026-08-17", v:true },
       { t:"移民部 — Proficient English（Table 1／Table 2 門檻）", u:"https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/english-language/proficient-english", as:"2026-08-17", v:true },
       { t:"移民部 — Superior English（Table 1／Table 2 門檻；此頁無 MET）", u:"https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/english-language/superior-english", as:"2026-08-17", v:true },
-      { t:"移民部 — 189 積分測驗說明（技術評估 3 年量到「邀請日」、邀請後 60 天內遞件）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189/points-tested", as:"2026-08-17", v:true }
+      { t:"移民部 — 189 積分測驗說明（技術評估 3 年量到「邀請日」、邀請後 60 天內遞件）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189/points-tested", as:"2026-08-17", v:true },
+      /* 190 與 491 這兩筆是補上來的：原本只查 189，就在頁面上寫「190／491 查不到同一句」。
+         491 的內容在 /application 子頁——主頁沒有這一段，當初停在主頁才誤判。 */
+      { t:"移民部 — 190 州提名（同一句 60 天邀請期、技術評估 3 年量到「邀請日」）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-nominated-190", as:"2026-08-17", v:true },
+      { t:"移民部 — 491 遞件說明（同一句 60 天邀請期、技術評估 3 年量到「邀請日」）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-work-regional-provisional-491/application", as:"2026-08-17", v:true },
+      { t:"Migration Regulations 1994（Compilation No. 288，2026-07-01）— reg 1.15C(1)(ba)／1.15D(b)／1.15EA(b)：英文成績量到「邀請日」；Schedule 2 的 189.223／190.213／491.215 同口徑", u:"https://www.legislation.gov.au/F1996B03551/latest", as:"2026-08-17", v:true },
+      { t:"LIN 25/016 語言測驗指定令（2025-08-07 生效）— 第 10 條：cutover 以前考的舊成績，要在「遞件日往前 36 個月」內考的才算數", u:"https://www.legislation.gov.au/F2025L00905/asmade", as:"2026-08-17", v:true }
     ]
   },
 
@@ -4217,6 +4246,21 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     const saLatest = saD ? addYears(saD, E.validYears) : null;
     const saGap  = saLatest ? dayGap(now, saLatest.d) : null;
     const saGone = saGap !== null && saGap < 0;
+    /* 考試日有「還沒到」的守（面板最底下那一段），核發日當初沒有——同一個形狀又漏一半。
+       `saIn.max = today` 只是 HTML 屬性：貼上去、用鍵盤打、或瀏覽器不吃 max 都繞得過去，
+       而未來的核發日會讓「邀請日最晚」整整多算幾年，方向是「以為還很久」。
+       這個提醒不放在面板最底下——放在那裡的話，粗體的「先關的是…」結論已經先講完了，
+       caveat 只是替一句已經印出去的話道歉。它要跟著那個數字走。 */
+    const saFuture = !!saD && dayGap(now, saD) > 0;
+    const saIf = saFuture
+      ? '（提醒：這個核發日你填的是未來的 ' + fmtD(saD) + '，那份評估還沒發出來，'
+        + '所以這裡是「如果那天拿到」的推算，不能拿去排遞件。）'
+      : '';
+    /* 結論句也要帶但書——它是拿上面那個還不存在的日期比出來的。
+       但不能把整段話再貼一次：同一件事逐字講兩遍會把兩次都稀釋掉，
+       所以這裡只留指路，全文留在它第一次出現的地方。 */
+    const saIfShort = saFuture
+      ? '（這個比較是拿一個還沒發出來的核發日推的，全文見上面那一行。）' : '';
 
     let tone = "ok";
     if(!g.level || left < 0 || blocked.length) tone = "bad";
@@ -4313,8 +4357,12 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     } else {
       h += '<p><strong>這張成績能用到 <b class="num">' + fmtD(exp) + '</b>'
          + (left < 0 ? '（已經過了 ' + human(exp, now) + '）' : '（還有 ' + human(now, exp) + '）')
-         + '</strong>。規則是<b>遞件那天</b>往回看 ' + E.validYears + ' 年之內考的才算，'
-         + '不是從你拿到成績單那天起算 ' + E.validYears + ' 年。</p>';
+         + '</strong>。這 ' + E.validYears + ' 年是從<b>考試那天</b>起算的，'
+         + '不是從你拿到成績單那天起算；'
+         + (isT1
+            ? '而且法規量的終點是<b>收到邀請</b>那天，不是遞件那天。'
+            : '而且你這張是 ' + E.t2.until + ' 以前考的，另有一條把終點壓到<b>遞件</b>那天（下面說明）。')
+         + '</p>';
       if(left >= 0 && left <= 90){
         h += '<p class="note"><b>不到 3 個月就到期。</b>重考不是說考就考——考位要排、成績也要幾天才出來。'
            + '如果你的目標日期在到期之後，現在就該去看考位，不是等成績過期才發現。</p>';
@@ -4339,64 +4387,163 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     if(noClock){
       /* 理由上面已經講過了，這裡不再補一段——重複講會把版面拉長，反而稀釋掉那句話。 */
     } else if(left < 0){
+      /* ⚠️ 這一支原本無條件寫「技術評估那一邊的日期也要跟著重算一次」——
+         但技評自己也可能已經過期。那種情況下讀者會以為只是「重算」，
+         其實那一邊要整份重做、要再走一次機構的流程。
+         少報一件要花錢花時間的事，跟報錯日期一樣是低估。 */
       h += '<p><strong>邀請日的換算這裡跳過。</strong>這張成績的 ' + E.validYears
          + ' 年已經走完了，往回推得到的只會是一個早就過去的日期——'
          + '那不是時程表，是一扇已經關上的門。先去安排重考；'
-         + '拿到新成績之後技術評估那一邊的日期也要跟著重算一次。</p>';
+         + (saGone
+            ? '另外<b>技術評估那一邊也已經過期</b>（' + fmtD(saLatest.d)
+              + '）——那一份不是重算就好，要重新跑一次評估機構的流程，'
+              + '兩件事可以同時排，不必等英文成績出來再開始。'
+            : '拿到新成績之後技術評估那一邊的日期也要跟著重算一次。')
+         + '</p>';
     } else {
       const sa = saD;   /* 上面判 tone 的時候已經算過一次了，這裡不重算 */
       const draw = (dlIn.value || "").trim();
-      let dd = null, ddOver = false, ddBad = false;
+      let dd = null, ddOver = false, ddBad = false, ddNeg = false, ddRound = null, ddFloor = null;
       if(draw !== ""){
         const n = Number(draw);
-        if(isFinite(n) && n >= 0){ dd = Math.floor(n); if(dd > E.inviteDays){ ddOver = true; dd = E.inviteDays; } }
-        else ddBad = true;
+        /* 三種「不是正常天數」要分開講，不能全部歸到「看不懂」：
+           −5 是打錯字或想表達「邀請前就送」（送不了，邀請還沒發），跟 "abc" 不一樣；
+           30.7 原本被 Math.floor 靜默吃掉，讀者不會知道自己填的小數被改過。
+           少講一句就是替讀者做了一個他不知道的決定。 */
+        if(isFinite(n)){
+          if(n < 0){ ddNeg = true; }
+          else {
+            dd = Math.floor(n);
+            if(n !== dd) ddRound = n;
+            /* 夾之前先留一份。夾完 dd 已經是 60，拿它去講「小數當成幾天」會印出
+               「你填的是 90.5，這裡當成 60 天」——把兩件事（取整、夾上限）併成一句假話。 */
+            ddFloor = dd;
+            if(dd > E.inviteDays){ ddOver = true; dd = E.inviteDays; }
+          }
+        } else ddBad = true;
       }
 
-      h += '<p><strong>換算成「最晚什麼時候要收到邀請」</strong>——英文的 ' + E.validYears
-         + ' 年量到<b>遞件</b>那天，技術評估的 ' + E.validYears + ' 年量到<b>收到邀請</b>那天。'
-         + '兩邊起算點不同、終點也不同，所以它們不會同時到期；'
-         + '邀請到遞件之間你花掉的每一天，都是從英文那一邊扣。</p>';
+      /* 這一格怎麼被解讀，兩支都要講同一套。
+         ⚠️ 原本 isT1／舊制各自組一段話，就是這個站抓了十八次的那個形狀——
+            改一邊、另一邊靜靜地不同步。組一次，兩邊都接同一個字串。 */
+      let ddNote = '';
+      if(ddBad) ddNote += '（遞件天數那一格看不懂，當成沒填。）';
+      if(ddNeg) ddNote += '（遞件天數填了負數。邀請還沒發出來之前遞不了件，'
+        + '所以這裡當成沒填。）';
+      if(ddRound !== null) ddNote += '（你填的是 ' + ddRound
+        + '，天數只能整天算，這裡當成 ' + ddFloor + ' 天。）';
+      /* ⚠️ 這一句只講「超過沒有意義」，不講「所以日期變成幾號」——
+         那件事兩支的答案不一樣（新制根本不動日期），寫進共用字串就會有一支是假的。 */
+      if(ddOver) ddNote += '（你填的天數超過 <b class="num">' + E.inviteDays + '</b> 天。'
+        + '189／190／491 的邀請期就是 ' + E.inviteDays
+        + ' 天，拖過那天邀請本身就失效了，所以填再大的數字都沒有意義。）';
+      if(dd === 0) ddNote += '（0 天＝當天就送。這跟「留空」不是同一件事：'
+        + '留空是還不知道，0 是你確定當天送得出去。）';
 
-      /* 底下每一個日期都是拿 inviteDays 往回推出來的，所以那個數字的出處要看得見。
-         原本只寫在 DATA 的註解裡——註解不是頁面，讀者沒有辦法質疑一個他看不到的東西。
-         連同適用範圍一起講：這句話是在 189 那一頁抓到的，190／491 兩頁上沒有同一句，
-         我沒查到就不能替它們背書。 */
-      h += '<p class="note">底下的日期全靠 <b class="num">' + E.inviteDays
-         + '</b> 天這個數字往回推。它的出處是 189 積分測驗那一頁：<i>&ldquo;You have '
-         + E.inviteDays + ' days from the date of your invitation to apply for the visa.&rdquo;</i>——'
-         + '<b>這句話我只在 189 那一頁查到。</b>190／491 走州提名，流程不一樣，'
-         + '那兩頁上找不到同一句話——你要走那兩條的話，這個天數請自己再確認一次。</p>';
-
-      const engNow = exp;                                /* 收到邀請當天就遞件 */
-      const engMax = shiftDays(exp, -E.inviteDays);      /* 用滿 189 的 60 天邀請期 */
-      const engCmp = dd === null ? engMax : shiftDays(exp, -dd);
+      /* ---- 最晚邀請日：兩支算法不同，分界就是 cutover（理由見 DATA.eng 那段註解） ----
+         ⚠️ 原本兩支共用「效期往前扣邀請期」，等於對新制成績少報最多 60 天。
+            方向是誤以為來不及，代價是白花錢重考一張還能用的成績——
+            跟第十八次抓到的那個結論句是同一種傷，只是這次錯的是算式不是句子。 */
+      const engNow  = exp;                             /* 收到邀請當天就遞件 */
+      const engSafe = shiftDays(exp, -E.inviteDays);   /* 用滿邀請期往回推的保守值 */
+      const engMax  = isT1 ? exp : engSafe;
+      const engCmp  = isT1 ? exp : (dd === null ? engSafe : shiftDays(exp, -dd));
       /* ⚠️ 這個「最晚邀請日」算得出來，不代表它還在未來。
-         成績剩不到 60 天的時候，用滿邀請期的那個日期早就過去了，
+         舊制成績剩不到 60 天的時候，用滿邀請期的那個日期早就過去了，
          而原本的寫法照印「最晚落在 2026-08-02 到 2026-10-01 之間」——
-         把一個過去的日期擺在「最晚」的位置，讀起來像還有得排。 */
+         把一個過去的日期擺在「最晚」的位置，讀起來像還有得排。
+         新制那一支 engCmp 就是 exp，而這裡 left ≥ 0，所以 gone 必為 false。 */
       const gone = dayGap(now, engCmp) < 0;
+
+      h += '<p><strong>換算成「最晚什麼時候要收到邀請」</strong>——'
+         + (isT1
+            ? '你這張是 ' + E.t1.from + '（含）以後考的，法規量的終點跟技術評估<b>是同一天</b>：'
+              + '都是<b>收到邀請</b>那天。兩邊可以直接比，先到期的那一個就是你的死線。'
+            : '你這張是 ' + E.t2.until + ' 以前考的。技術評估量到<b>收到邀請</b>那天，'
+              + '而舊制成績另外被壓在<b>遞件</b>那天，兩邊終點不同——'
+              + '邀請到遞件之間你花掉的每一天，都是從英文那一邊扣。')
+         + '</p>';
+
+      /* 出處要看得見。原本只寫在 DATA 的註解裡——註解不是頁面，
+         讀者沒有辦法質疑一個他看不到的東西。
+         ⚠️ 而且原本這一段講錯兩件事：說 60 天「只在 189 那一頁查到」（三頁都有），
+            以及整區預設英文量到遞件日（新制量到邀請日）。兩個都往「時間比較少」的方向錯。 */
+      /* 60 天這個數字兩支都會提到，所以原文只組一次、兩邊接同一個字串。
+         分開寫的話，改一邊、另一邊就會靜靜地留著舊說法——這一段本身就是那樣壞掉的。 */
+      const inviteSrc = '<i>&ldquo;You have ' + E.inviteDays + ' days from the date of your '
+        + 'invitation to apply for the visa.&rdquo;</i>（189／190／491 三頁都有這一句）';
+
+      if(isT1){
+        h += '<p class="note"><b>為什麼是量到「收到邀請」那天，不是遞件那天？</b>'
+           + '法規原文：<i>&ldquo;the test was conducted in the ' + E.validYears
+           + ' years immediately before the date of the invitation&rdquo;</i>'
+           + '（Migration Regulations 1994 reg 1.15C(1)(ba)；Proficient 是 1.15D(b)、'
+           + 'Superior 是 1.15EA(b)），Schedule 2 的 189.223／190.213／491.215 '
+           + '同樣寫 at the time of invitation。<b>收到邀請之後你還有 ' + E.inviteDays
+           + ' 天可以遞件，那 ' + E.inviteDays + ' 天不從上面的日期扣。</b>'
+           + '那 ' + E.inviteDays + ' 天的出處：' + inviteSrc + '。</p>';
+        /* 兩份官方文件口徑寬鬆不一，這種時候不替讀者選一個——把兩個日期都給他，
+           並且標明哪一個是法條、哪一個是保守。不講的話，他遲早會在別的地方
+           讀到比較嚴的那個版本，然後不知道該信誰。 */
+        h += '<p class="note"><b>但移民部的說明頁寫得比較鬆。</b>'
+           + 'Competent／Proficient／Superior／Vocational 四頁都只寫 <i>&ldquo;in the '
+           + E.validYears + ' years before your visa application, depending on the visa '
+           + 'subclass&rdquo;</i>——那句話自己留了 depending on 的活口，而 189／190／491 的 '
+           + 'subclass 規則就是上面引的那兩處，所以兩邊不牴觸。'
+           + '真要抓最保守的版本，就把頁面那句話當準：<b class="num">' + fmtD(engSafe)
+           + '</b>（效期往前扣滿 ' + E.inviteDays + ' 天邀請期）。'
+           + '<b>兩個日期差 ' + E.inviteDays + ' 天，只有在你剩不到 '
+           + E.inviteDays + ' 天的時候才咬得到你</b>——那時候照保守日排；'
+           + '但<b>不要因為保守日過去了就以為來不及</b>，法條那一邊還開著。</p>';
+      } else {
+        h += '<p class="note"><b>為什麼舊成績被壓到「遞件」那天？</b>'
+           + '因為 ' + E.t2.until + ' 以前考的成績，要先過 LIN 25/016 第 10 條才算得上是證據，'
+           + '而那一條寫的是 <i>&ldquo;in the period of 36 months immediately before the day '
+           + 'on which the visa application is made&rdquo;</i>——量的是<b>遞件日</b>。'
+           + '法規那條「量到邀請日」同時也要過，但遞件一定晚於邀請，'
+           + '所以<b>先咬到你的是這一條</b>。底下的日期就是拿它往回推的。'
+           + '往回推用的 <b class="num">' + E.inviteDays + '</b> 天，出處是 ' + inviteSrc + '。</p>';
+      }
+
       let engLine;
-      if(dd === null){
+      if(isT1){
+        /* 新制這一支只有一個日期，沒有區間——遞件隔幾天不影響它。
+           那一格不是白填的（舊制要用），但在這裡要明說它動不了上面的日期，
+           不然讀者會以為自己填的數字被吃掉了。 */
+        engLine = '英文這一邊：<b>最晚要在 <span class="num">' + fmtD(engMax)
+          + '</span> 收到邀請</b>——就是這張成績的效期那天本身。'
+          + (dd === null
+             ? '（沒填遞件要隔幾天也沒關係，這一支用不到那個數字。）'
+             /* ⚠️ 這裡用 ddFloor 不用 dd：dd 已經被夾到 60，填 90 的人會看到
+                「你填了隔 60 天」——跟他自己打的字不一樣。這一支根本用不到那個夾，
+                夾完的數字拿來複述使用者的輸入是純粹的失真。 */
+             : '你填了隔 <b class="num">' + ddFloor + '</b> 天遞件，'
+               + '<b>那不會改變上面的日期</b>，它只決定你實際哪一天送出去；'
+               + '只要在邀請後 ' + E.inviteDays + ' 天內送出去就行。')
+          + ddNote;
+      } else if(dd === null){
         engLine = '英文這一邊：邀請日最晚落在 <b class="num">' + fmtD(engMax) + '</b> 到 <b class="num">'
           + fmtD(engNow) + '</b> 之間，差別只在你收到邀請後隔幾天才遞件。'
-          + '<b>沒填就抓前面那個日期</b>——那是把 189 的 ' + E.inviteDays + ' 天邀請期用好用滿的情況。';
+          + '<b>沒填就抓前面那個日期</b>——那是把 ' + E.inviteDays + ' 天邀請期用好用滿的情況。';
         if(gone) engLine += '<b>但那個保守日期已經過去了</b>（今天 ' + fmtD(now) + '）——'
           + '這張成績只剩 <b class="num">' + left + '</b> 天，'
           + '就算現在收到邀請也用不滿 ' + E.inviteDays + ' 天的邀請期，'
           + '收到之後要在 ' + left + ' 天內遞出去。';
-        if(ddBad) engLine += '（遞件天數那一格看不懂，當成沒填。）';
+        engLine += ddNote;
       } else {
-        engLine = '英文這一邊：你填的是收到邀請後 <b class="num">' + dd + '</b> 天遞件，'
-          + '所以邀請日最晚是 <b class="num">' + fmtD(engCmp) + '</b>。';
+        /* ⚠️ 原本這句無條件寫「你填的是收到邀請後 dd 天」，但 dd 在上面已經被夾到 60 了——
+           填 90 的人會看到「你填的是 60 天」，跟他自己打的字不一樣，
+           而下一句才說「你填的天數超過 60 天」。同一段話自己打自己。 */
+        engLine = ddOver
+          ? '英文這一邊：你填的天數超過 <b class="num">' + E.inviteDays + '</b> 天，'
+            + '這裡照 ' + E.inviteDays + ' 天算，所以邀請日最晚是 <b class="num">'
+            + fmtD(engCmp) + '</b>。'
+          : '英文這一邊：你填的是收到邀請後 <b class="num">' + dd + '</b> 天遞件，'
+            + '所以邀請日最晚是 <b class="num">' + fmtD(engCmp) + '</b>。';
         if(gone) engLine += '<b>那一天已經過了</b>（今天 ' + fmtD(now) + '）——'
           + '這張成績只剩 <b class="num">' + left + '</b> 天，'
           + '隔 ' + dd + ' 天再遞件的話會撞到期日。';
-        if(dd === 0) engLine += '（0 天＝當天就送。這跟「留空」不是同一件事：'
-          + '留空是還不知道，0 是你確定當天送得出去。）';
-        if(ddOver) engLine += '<b>你填的天數超過 ' + E.inviteDays + ' 天</b>，'
-          + '但 189 的邀請期就是 ' + E.inviteDays + ' 天，過了邀請本身就失效——這裡照 '
-          + E.inviteDays + ' 天算。';
+        engLine += ddNote;
       }
 
       /* ⚠️ 英文那一邊已經有 `gone` 在守「算得出來 ≠ 還在未來」，技術評估這一邊當初沒有——
@@ -4408,8 +4555,9 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
       let saLine;
       if(!saLatest){
         saLine = '技術評估這一邊：<b>你沒填核發日，所以這一邊沒有日期可以比。</b>'
-          + '它的 ' + E.validYears + ' 年量到<b>收到邀請</b>那天，跟英文量的終點不一樣——'
-          + '兩個都填進來，才看得出哪一扇門先關。';
+          + '它的 ' + E.validYears + ' 年量到<b>收到邀請</b>那天'
+          + (isT1 ? '，跟你這張成績量的是同一天' : '，跟你這張舊制成績量的終點不一樣')
+          + '——兩個都填進來，才看得出哪一扇門先關。';
       } else if(saGone){
         saLine = '技術評估這一邊：核發日 <b class="num">' + fmtD(sa) + '</b>，'
           + '它的 ' + E.validYears + ' 年在 <b class="num">' + fmtD(saLatest.d)
@@ -4418,9 +4566,14 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
           + '拿到新的核發日之後，這一區的日期要整個重算一次。';
       } else {
         saLine = '技術評估這一邊：核發日 <b class="num">' + fmtD(sa) + '</b>，邀請日最晚是 <b class="num">'
-          + fmtD(saLatest.d) + '</b>。官方原文：<i>&ldquo;a suitable skills assessment … '
-          + 'which has been obtained within the 60 day invitation period&rdquo;</i>，'
-          + '量的是<b>邀請日</b>不是遞件日。<b>評估書上如果自己寫了更短的效期，以短的為準。</b>';
+          + fmtD(saLatest.d) + '</b>。官方原文：<i>&ldquo;Your skills assessment must have been '
+          + 'obtained in the ' + E.validYears + ' years before the date of your invitation&rdquo;</i>'
+          + '（189／190／491 三頁都有這一句），量的是<b>邀請日</b>不是遞件日。'
+          + '<b>評估書上如果自己寫了更短的效期，以短的為準</b>——官方下一句就是 '
+          /* 句號要在這裡收掉。少了它，後面接 saIf 的時候會變成
+             「…must not have passed."而且只剩 3 天」——兩句黏成一句。 */
+          + '<i>&ldquo;If the assessment was for a shorter period, that period must not have passed.&rdquo;</i>。'
+          + saIf;
         if(saGap <= 90) saLine += '<b>而且只剩 <span class="num">' + saGap + '</span> 天。</b>'
           + '技術評估重做要跑機構的流程，不是幾天的事——現在就該去問，不是等它過期。';
       }
@@ -4433,10 +4586,33 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
              底下那句 dd===null 的補述在這一支會把同一個日期講第二次，所以就地收掉，
              改成在自己這句話裡標明它是保守值——同一件事講兩次會把重點稀釋掉。 */
           h += '<p class="note"><strong>技術評估那一邊已經關了。</strong>'
-             + '英文那一邊還開著，到 <b class="num">' + fmtD(engCmp) + '</b>'
-             + (dd === null ? '（保守值，因為你沒填遞件要隔幾天）' : '')
-             + '——但兩扇門要同時開著才遞得出去，'
+             + (gone
+                ? '英文那一邊也排不出「最晚哪一天收到邀請」了（<b class="num">' + fmtD(engCmp)
+                  + '</b> 已經過去）——成績本身還有 <b class="num">' + left + '</b> 天，'
+                  + '但重做一份評估要跑機構的流程，那個時間對不上這 ' + left + ' 天。'
+                : '英文那一邊還開著，到 <b class="num">' + fmtD(engCmp) + '</b>'
+                  + (!isT1 && dd === null ? '（保守值，因為你沒填遞件要隔幾天）' : '') + '——但')
+             + '兩扇門要同時開著才遞得出去，'
              + '所以現在沒有「最晚哪一天」可以排。先把評估重做出來，這一區的日期才有意義。</p>';
+        } else if(gone){
+          /* ⚠️ 第十八次，而且這次躲在整個面板的**結論句**裡。
+             `gone` 原本只守到 engLine，沒守到這裡。成績剩不到 60 天的時候，
+             這一段會印「先關的是：英文。你能收到邀請的最晚日期是 2026-08-02」——
+             那天是兩星期前。它排在所有內容最後、粗體、句型就是在下定論，
+             讀起來像門已經關了；而正上方那一行才剛說「這張成績只剩 45 天」。
+             方向是「誤以為來不及」，代價是白花錢去重考一張還能用的成績。
+             跟 saGone 的差別要講清楚：那邊是門**真的關了**，
+             這邊是門還開著、只是**排不出「最晚哪一天」**——排不出日期不等於來不及。 */
+          h += '<p class="note"><strong>英文這一邊排不出「最晚哪一天收到邀請」了，'
+             + '但這不等於來不及。</strong>'
+             + '往回推得到的是 <b class="num">' + fmtD(engCmp) + '</b>，已經過去了；'
+             + '它的意思只是你<b>用不滿'
+             + (dd === null ? ' ' + E.inviteDays + ' 天的邀請期' : '你填的那 ' + dd + ' 天')
+             + '</b>，不是這張成績不能用。'
+             + '成績還有 <b class="num">' + left + '</b> 天——'
+             + '今天收到邀請、' + left + ' 天內遞得出去就算數。'
+             + '技術評估那一邊還開著（到 <b class="num">' + fmtD(saLatest.d) + '</b>），'
+             + '所以現在卡的是英文的這 <b class="num">' + left + '</b> 天。' + saIfShort + '</p>';
         } else if(diff === 0){
           /* 「先關的是：兩邊同一天」讀起來像在回答一個它沒回答的問題。
              同一天就直接講同一天，不要套進「誰先關」那個句型。 */
@@ -4449,12 +4625,14 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
              + fmtD(diff > 0 ? engCmp : saLatest.d) + '</b>——那天之後才收到邀請，'
              + first + '那一邊已經不算數了。';
         }
-        /* saGone 那一支已經自己收尾了（它把保守值寫進自己的句子裡，
+        /* saGone 與 gone 那兩支已經自己收尾了（它們把保守值寫進自己的句子裡，
            再補一次會把同一個日期講第二遍）。 */
-        if(!saGone){
-          if(dd === null) h += '（英文那一邊用的是保守值 ' + fmtD(engMax) + '，'
+        if(!saGone && !gone){
+          /* 新制那一支沒有保守值可言：engCmp 就是效期本身，不是推出來的。
+             在那裡補一句「用的是保守值」會憑空製造一個並不存在的不確定。 */
+          if(!isT1 && dd === null) h += '（英文那一邊用的是保守值 ' + fmtD(engMax) + '，'
             + '因為你沒填遞件要隔幾天。）';
-          h += '</p>';
+          h += saIfShort + '</p>';
         }
       }
     }

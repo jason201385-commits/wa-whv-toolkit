@@ -216,4 +216,28 @@ const daysAgo = n => { const d = new Date(TODAY); d.setDate(d.getDate() - n); re
   show("遞件天數填 90（超過 60 天邀請期）", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(6), delay: 90 });
   show("四項連 Competent 都沒到", { date: monthsAgo(6), test: "ieltsA", sc: [5, 5.5, 5, 6] });
   show("換到舊制表之後選了新制才有的 CELPIP", { date: "2024-03-01", test: "celpip", sc: [9, 9, 10, 9] });
+  /* 這兩格是「排不出日期 ≠ 來不及」。英文剩不到 60 天的時候，往回推的邀請日已成過去式，
+     而結論句原本照樣寫「先關的是：英文，最晚 <過去的日期>」——
+     讀起來像門關了，實際上成績還能用。方向是「誤以為來不及」，代價是白花錢重考。 */
+  show("英文排不出邀請日、技評還開著（排不出 ≠ 來不及）",
+    { date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65], sa: monthsAgo(19) });
+  show("兩邊都排不出來（技評也關了）",
+    { date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65], sa: monthsAgo(55) });
+  show("遞件天數填負數", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], delay: -5 });
+  show("遞件天數填小數（不能靜默捨去）", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], delay: 30.7 });
+  show("技評核發日填在未來", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], sa: daysAgo(-120) });
+  /* ⚠️ 2026-08-17 這一輪錯的不是句子是算式：英文的 3 年原本一律「量到遞件那天」，
+     對 2025-08-07（含）以後考的成績是錯的——那一支量到「收到邀請」那天，
+     效期那天本身就是最晚邀請日。這四格把兩支的長相攤開讀，
+     重點是兩支的**理由段**要各自說得通，不是只有日期對。
+     舊制的考試日寫死 2025-08-01（cutover 前一週）：既落在表二，效期又還很遠，
+     不會跟「剩不到 3 個月」那一格的守混在一起。 */
+  show("新制・填了遞件天數（那個數字不會改變邀請日）",
+    { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(2), delay: 14 });
+  show("舊制・填了遞件天數（終點被壓到遞件那天）",
+    { date: "2025-08-01", test: "pte", sc: [65, 65, 65, 65], sa: monthsAgo(2), delay: 14 });
+  show("舊制・沒填遞件天數（給區間＋保守值）",
+    { date: "2025-08-01", test: "pte", sc: [65, 65, 65, 65], sa: monthsAgo(2) });
+  show("cutover 前一天考的（仍走舊制那一支）",
+    { date: "2025-08-06", test: "pte", sc: [65, 65, 65, 65], sa: monthsAgo(2), delay: 0 });
 })();

@@ -104,6 +104,21 @@ function flat(node) {
   return (node.innerHTML || "") + node.children.map(flat).join("");
 }
 
+/* 面板攤成「讀者實際讀到的字」。跟 render.js／golden.test.js 是同一套規則，
+   同樣刻意各留一份（見檔頭）。
+   為什麼斷言需要它：這個站抓到十八次的那個形狀，有一半躲在
+   「兩截話都在同一個 innerHTML 裡、彼此矛盾」——`html.includes(...)` 對它是瞎的，
+   因為兩截都在、兩截都 includes 得到。要判「這兩句不該同時出現」，
+   得先有一份沒有標籤的文字，才寫得出否定式斷言。
+   另外 `超過 <b class="num">60</b> 天` 這種橫跨標籤的句子，
+   在原始 HTML 上根本比對不到——比對不到會偽裝成「這句話沒印」。 */
+const plain = h => String(h)
+  .replace(/<\/t[dh]>/g, "　│　").replace(/<\/tr>/g, "\n")
+  .replace(/<span class="n">/g, "\n")
+  .replace(/<\/li>|<\/p>|<\/div>/g, "\n").replace(/<br\s*\/?>/g, "\n")
+  .replace(/<[^>]+>/g, "").replace(/&ldquo;|&rdquo;/g, '"').replace(/&mdash;/g, "—")
+  .split("\n").map(l => l.trim()).filter(Boolean).join("\n");
+
 /* 一次操作 = 填日期 → 觸發換表 → 選考試 → 填四項 → 按鈕。
    換表一定要在選考試之前，順序反了會被 fillTests() 覆蓋掉 value——
    這正是畫面上的真實順序，測試不該偷跑。 */
@@ -124,6 +139,7 @@ function run(o) {
     tone: box.className.replace("ans", "").trim(),
     verdict: (box.innerHTML.match(/<div class="verdict">([\s\S]*?)<\/div>/) || [, ""])[1],
     html: box.innerHTML,
+    text: plain(box.innerHTML),
     hidden: box.hidden,
   };
 }
@@ -270,7 +286,13 @@ Object.keys(E.t1.tests).forEach(k => {
     const th = E.t1.tests[k][lv.k];
     if (!Array.isArray(th)) return;
     const r = run({ date: "2026-02-17", test: k, sc: th });
-    if (!r.verdict.includes(lv.n)) exact.push(k + " 剛好 " + lv.n + " 的門檻卻判成「" + r.verdict + "」");
+    /* ⚠️ 不能只寫 includes(lv.n)：判定失敗那一句是「四項還沒到 Competent」，
+       它自己就含著 "Competent" 三個字，所以 lv.n === "Competent" 那一輪
+       無論算對算錯都會綠。整支測試最貴的一條斷言（每張考試 × 每一級）
+       在最低那一級上是瞎的——把門檻改成 `<=` 這種突變照樣過。
+       這跟 cost.test.js 那個 `[\d.]+` 是同一個病：比對條件寬到把反例也吃進去。 */
+    const negated = r.verdict.includes("還沒到");
+    if (!r.verdict.includes(lv.n) || negated) exact.push(k + " 剛好 " + lv.n + " 的門檻卻判成「" + r.verdict + "」");
   });
 });
 ok("新制表每張考試、每一級，剛好踩在門檻上都判得到那一級", exact.length === 0, exact.join("\n    "));
@@ -401,19 +423,68 @@ ok("沒到 Competent 時，就算兩個時鐘都填了也不印",
 /* ================================================ 8. 邀請日換算 */
 console.log("\n— 邀請日換算（189 的 " + E.inviteDays + " 天邀請期）—");
 
-ok("留空 → 給區間，並說明保守值是用滿邀請期",
-  prof.html.includes("2028-12-19") && prof.html.includes("用好用滿"));
+/* ⚠️ 這一整區 2026-08-17 改過語意。原本整個模組寫死「英文的 3 年量到遞件那天」，
+   對 cutover（E.cutover）以後考的成績是錯的：那一支只受
+   Migration Regulations 1994 reg 1.15C(1)(ba) 管，量到「收到邀請」那天，
+   效期那天本身就是最晚邀請日，不必再往前扣邀請期。
+   舊寫法對新制成績少報最多一個邀請期，而且方向是「誤以為來不及」——
+   代價是白花錢重考一張其實還能用的成績。底下的斷言全部照兩支分開釘。 */
+ok("新制留空 → 最晚邀請日就是效期那天本身，不再往前扣邀請期",
+  prof.text.includes("最晚要在 2029-02-17 收到邀請"), prof.text.slice(-1200));
+ok("而且要明說那 " + E.inviteDays + " 天不從這個日期扣（不講的話讀者會自己再扣一次）",
+  prof.text.includes("不從上面的日期扣"), prof.text.slice(-1200));
+ok("新制不該再出現「用好用滿」那個區間句型",
+  !prof.text.includes("用好用滿"), prof.text.slice(-1200));
+
+/* 移民部說明頁比法規鬆（"in the 3 years before your visa application"），
+   兩份官方文件不牴觸——頁面那句自己留了 depending on the visa subclass 的活口。
+   這種時候不替讀者選一個，兩個日期都給，並標明哪個是法條、哪個是保守。 */
+ok("兩份官方文件口徑不同要講出來，並附上保守日",
+  prof.text.includes("2028-12-19") && prof.text.includes("depending on the visa subclass"),
+  prof.text.slice(-1200));
+ok("但保守日不能被寫成死線——它過去了不等於來不及",
+  prof.text.includes("不要因為保守日過去了就以為來不及"), prof.text.slice(-1000));
 
 const d0 = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: 0 });
 ok("填 0 天 → 邀請日就是到期日本身", d0.html.includes("2029-02-17"));
 ok("而且要說明 0 跟留空不是同一件事", d0.html.includes("留空是還不知道"));
 
 const d90 = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: 90 });
-ok("填超過 " + E.inviteDays + " 天 → 夾到 " + E.inviteDays + " 天並說明邀請本身會失效",
-  d90.html.includes("超過 " + E.inviteDays + " 天") && d90.html.includes("2028-12-19"));
+ok("填超過 " + E.inviteDays + " 天 → 要說明邀請本身會失效",
+  d90.text.includes("超過 " + E.inviteDays + " 天") && d90.text.includes("邀請本身就失效"),
+  d90.text.slice(-600));
+/* ⚠️ 這一條要用 text 不能用 html：句子裡的數字包在 <b class="num"> 裡，
+   原始 HTML 上比對「超過 60 天」永遠是 false——而 false 會偽裝成「這句沒印」。 */
+ok("而且不准同時說「你填的是 " + E.inviteDays + " 天」——填 90 的人沒填過 " + E.inviteDays,
+  !d90.text.includes("你填的是收到邀請後 " + E.inviteDays + " 天"), d90.text.slice(-500));
+/* 同一個形狀的另一半：新制那一支複述使用者輸入時也不能拿夾完的數字。 */
+ok("新制複述遞件天數要用使用者填的 90，不是夾完的 " + E.inviteDays,
+  d90.text.includes("你填了隔 90 天遞件"), d90.text.slice(-600));
+ok("而且要說清楚那個數字改不動上面的日期（不然讀者以為被吃掉了）",
+  d90.text.includes("那不會改變上面的日期"), d90.text.slice(-600));
 
 const dbad = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: "abc" });
 ok("遞件天數看不懂 → 當成沒填並講出來", dbad.html.includes("看不懂"));
+
+/* 負數與小數原本各自被吃掉：−5 歸到「看不懂」（跟打錯字混為一談），
+   30.7 被 Math.floor 靜默改成 30，讀者完全不會知道。 */
+const dneg = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: -5 });
+ok("遞件天數填負數 → 要單獨講，不跟「看不懂」混為一談",
+  dneg.text.includes("負數") && !dneg.text.includes("看不懂"), dneg.text.slice(-400));
+ok("而且要講明理由是邀請還沒發出來", dneg.text.includes("邀請還沒發出來"));
+
+/* 考試日有「還沒到」的守，核發日當初沒有。`saIn.max` 只是 HTML 屬性，擋不住貼上。 */
+const saFut = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2027-01-01" });
+ok("技評核發日填在未來 → 要講明那份還沒發出來，不能當成既有事實",
+  saFut.text.includes("還沒發出來"), saFut.text.slice(-600));
+ok("而且提醒要跟著那個數字走（在技評那一行，不是等結論講完才補）",
+  saFut.text.indexOf("還沒發出來") < saFut.text.indexOf("先關的是"), saFut.text.slice(-600));
+ok("結論句也要帶著這個但書（那句話是拿未來的日期比出來的）",
+  saFut.text.lastIndexOf("還沒發出來") > saFut.text.indexOf("先關的是"), saFut.text.slice(-600));
+
+const dfrac = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: 30.7 });
+ok("遞件天數填小數 → 要說出被當成幾天，不能靜默無條件捨去",
+  dfrac.text.includes("30.7") && dfrac.text.includes("當成 30 天"), dfrac.text.slice(-400));
 
 /* ⚠️ 算得出來不等於還在未來。成績剩不到 60 天時，用滿邀請期的那個日期早就過去了。 */
 ok("保守邀請日已經過去時要講出來，不能擺在「最晚」的位置裝作還有得排",
@@ -421,15 +492,51 @@ ok("保守邀請日已經過去時要講出來，不能擺在「最晚」的位�
 const gone2 = run({ date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65], delay: 60 });
 ok("填了具體天數而那一天也過了，同樣要講", gone2.html.includes("那一天已經過了"));
 
+/* ============================ 8b. 舊制那一支：終點被壓到「遞件」那天
+   分界就是 E.cutover，跟表一／表二用的是同一個日期。這一支的日期算法沒有變
+   （效期往前扣邀請期），但**理由**必須印出來——原本整區沒有任何一句說明
+   「為什麼要扣」，讀者只能看到一個憑空出現的減法。
+   考試日刻意挑 cutover 前一週：既落在表二，效期又還很遠，不會跟 gone 那條守混在一起。 */
+console.log("\n— 舊制成績的邀請日換算（" + E.t2.until + " 以前考）—");
+
+const old1 = run({ date: "2025-08-01", test: "pte", sc: [65, 65, 65, 65], sa: "2026-06-17", delay: 14 });
+ok("舊制填了天數 → 邀請日 = 效期往前扣那幾天", old1.html.includes("2028-07-18"), old1.text.slice(-900));
+ok("而且要講出為什麼要扣：LIN 25/016 第 10 條把終點壓到遞件日",
+  old1.html.includes("LIN 25/016 第 10 條"), old1.text.slice(-900));
+ok("那一條也要附官方原文，不能只報條號",
+  old1.html.includes("in the period of 36 months immediately before the day "
+    + "on which the visa application is made"), old1.text.slice(-900));
+ok("要說明兩條規則同時要過、而這一條比較嚴",
+  old1.text.includes("先咬到你的是這一條"), old1.text.slice(-900));
+ok("舊制不准說兩邊量的是同一天（那是新制才成立的）",
+  !old1.html.includes("是同一天"), old1.text.slice(-900));
+ok("往回推用的天數在這一支也要有官方原文接地",
+  old1.html.includes("You have " + E.inviteDays
+    + " days from the date of your invitation to apply for the visa."), old1.text.slice(-900));
+
+const oldBlank = run({ date: "2025-08-01", test: "pte", sc: [65, 65, 65, 65], sa: "2026-06-17" });
+ok("舊制留空 → 給區間，並說明保守端是用滿邀請期",
+  oldBlank.html.includes("2028-06-02") && oldBlank.html.includes("2028-08-01")
+    && oldBlank.html.includes("用好用滿"), oldBlank.text.slice(-900));
+ok("舊制留空 → 結論要標注英文那邊用的是保守值",
+  oldBlank.html.includes("用的是保守值"), oldBlank.text.slice(-600));
+
 /* ================================================ 9. 兩個時鐘誰先關 */
 console.log("\n— 兩個時鐘 —");
 
+/* ⚠️ 2025-09-01 是 cutover 之後考的，所以拿來比的是效期本身 2028-09-01，
+   不是舊寫法的 2028-08-02（效期扣 60 天）。填的 delay:30 在這一支動不了日期。 */
 const engFirst = run({ date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2026-06-17", delay: 30 });
-ok("英文先關", engFirst.html.includes("先關的是：英文") && engFirst.html.includes("2028-08-02"));
+ok("英文先關", engFirst.html.includes("先關的是：英文") && engFirst.html.includes("2028-09-01"));
+ok("新制拿去比的是效期本身，不是效期扣掉邀請期的那個舊日期",
+  !engFirst.html.includes("2028-08-02"), engFirst.text.slice(-900));
 
 const saFirst = run({ date: "2026-06-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2024-02-17" });
 ok("技術評估先關", saFirst.html.includes("先關的是：技術評估") && saFirst.html.includes("2027-02-17"));
-ok("沒填遞件天數時要標注英文那邊用的是保守值", saFirst.html.includes("保守值"));
+/* ⚠️ 這一條原本是反過來的（要求標注「保守值」）。新制那一支的日期不是推出來的，
+   它就是效期本身——在那裡補一句「用的是保守值」等於憑空製造一個並不存在的不確定。 */
+ok("新制不填遞件天數時，結論不准說英文那邊用的是保守值",
+  !saFirst.html.includes("用的是保守值"), saFirst.text.slice(-700));
 
 const same = run({ date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2025-09-01", delay: 0 });
 ok("同一天關 → 不套用「先關的是」句型", !same.html.includes("先關的是"), same.html.slice(-400));
@@ -452,6 +559,43 @@ ok("技評剩不到 3 個月 → 比照英文那一邊提醒（重做要跑機�
   saNear.html.includes("只剩 <span class=\"num\">3</span> 天") && saNear.html.includes("跑機構的流程"),
   saNear.html.slice(-700));
 ok("技評還很久 → 不亂加急迫提醒", !saFirst.html.includes("跑機構的流程"));
+
+/* ⚠️ 第十八次，而且是同一個形狀繞了一圈回來咬招牌功能：
+   `gone` 守住了 engLine，卻沒守到最後那句結論。這個場景是英文剩 45 天、技評還有兩年多，
+   舊寫法會在面板最底下、粗體、下定論的位置印
+   「先關的是：英文。你能收到邀請的最晚日期是 2026-08-02」——那天是兩星期前。
+   方向是「誤以為來不及」：讀者會為了一張還能用的成績再花錢重考一次。
+
+   舊斷言看不見它，有兩個原因，兩個都得修：
+   （1）`near` 沒填 sa，整個「先關的是」區塊根本不會渲染；
+   （2）它只 includes 正面字串，而那句謊話跟真話在同一個 innerHTML 裡並存——
+        要判「這兩句不該同時出現」，只能寫否定式、而且要讀純文字。 */
+const engGoneSaOk = run({
+  date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65], sa: "2025-01-01",
+});
+ok("英文保守邀請日已過、技評還開著 → 不准把過去的日期擺在「最晚」的位置",
+  !engGoneSaOk.text.includes("先關的是")
+  && !engGoneSaOk.text.includes("你能收到邀請的最晚日期是 2026-08-02"),
+  engGoneSaOk.text.slice(-800));
+ok("而且要明說「排不出日期」不等於「來不及」",
+  engGoneSaOk.text.includes("不等於來不及"), engGoneSaOk.text.slice(-500));
+ok("要把還剩的天數與技評那一邊的日期一起講出來（讀者要知道現在卡在哪）",
+  engGoneSaOk.text.includes("45 天") && engGoneSaOk.text.includes("2028-01-01"),
+  engGoneSaOk.text.slice(-500));
+/* 同一句話不准自己打自己：上面說「成績只剩 45 天」，下面就不能說門已經關了。 */
+ok("同一個面板裡不准一邊說還剩 45 天、一邊說已經不算數",
+  !engGoneSaOk.text.includes("英文那一邊已經不算數了"), engGoneSaOk.text.slice(-800));
+
+/* 兩邊都算不出日期的情況：技評關了、英文的保守日期也過去了。
+   舊寫法會印「英文那一邊還開著，到 2026-08-02」——同一個謊，換一支分支。 */
+const bothGone = run({
+  date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65], sa: "2022-01-01",
+});
+ok("技評關了、英文也排不出日期 → 不准說「英文那一邊還開著，到 <過去的日期>」",
+  !bothGone.text.includes("英文那一邊還開著"), bothGone.text.slice(-700));
+ok("這種情況要說英文也排不出來，但成績本身還有天數",
+  bothGone.text.includes("也排不出") && bothGone.text.includes("45 天"),
+  bothGone.text.slice(-700));
 
 /* ⚠️ 第十七次同一個形狀，這次說謊的是面板最上面那兩個訊號。
    內文寫著「技術評估那一邊已經關了」，顏色是綠的、判定印「Proficient　10 分」——
@@ -477,10 +621,21 @@ ok("成績本身不能用時，判定不摻技評那一句",
 
 ok("沒填技術評估核發日 → 明說這一邊沒有日期可以比，不留白",
   prof.html.includes("沒填核發日"));
-ok("要講清楚兩邊量的終點不一樣（遞件 vs 收到邀請）",
-  prof.html.includes("量到<b>遞件</b>那天") && prof.html.includes("量到<b>收到邀請</b>那天"));
+/* ⚠️ 這一條原本寫死「兩邊量的終點不一樣（遞件 vs 收到邀請）」——那只對舊制成立。
+   新制兩邊量的是同一天，講「不一樣」是錯的。拆成兩支各自釘。 */
+ok("新制要講明兩邊量的是同一天（都到「收到邀請」）",
+  prof.html.includes("量到<b>收到邀請</b>那天") && prof.html.includes("同一天"),
+  prof.text.slice(-1000));
+ok("而且新制不准出現「量到遞件那天」",
+  !prof.html.includes("量到<b>遞件</b>那天"), prof.text.slice(-1000));
+/* ⚠️ 官方原文換過：原本引的是 Thapa 那條 60 天寬限，但技評 3 年的主規則是另一句。
+   引寬限條款當主規則等於拿例外去解釋通則。 */
 ok("技術評估那一邊要附官方原文與「以短的為準」",
-  saFirst.html.includes("60 day invitation period") && saFirst.html.includes("以短的為準"));
+  saFirst.html.includes("obtained in the " + E.validYears
+    + " years before the date of your invitation")
+  && saFirst.html.includes("以短的為準")
+  && saFirst.html.includes("If the assessment was for a shorter period"),
+  saFirst.text.slice(-900));
 
 /* 已過期的成績不做邀請日換算——往回推只會得到一個早就過去的日期。 */
 ok("已過期 → 不做邀請日換算", !dead.html.includes("最晚什麼時候要收到邀請"));
@@ -535,11 +690,22 @@ ok("depending on the visa subclass 這個但書要留著", HTML.includes("depend
 /* 這一條刻意驗**渲染後的面板**而不是原始碼：原文是用字串串接組出來的，
    在原始碼裡查不到完整那一句。而且註解裡有不算數——讀者看不到註解，
    看不到就沒辦法質疑一個他被要求相信的數字。 */
-ok("189 的 " + E.inviteDays + " 天邀請期在面板上有官方原文接地",
+ok(E.inviteDays + " 天邀請期在面板上有官方原文接地",
   prof.html.includes("You have " + E.inviteDays + " days from the date of your invitation to apply for the visa."),
   "面板上找不到那句原文");
-ok("而且要標明這句話只在 189 那一頁查得到，190／491 沒有替它背書",
-  prof.html.includes("只在 189 那一頁查到") && prof.html.includes("190／491"));
+/* ⚠️ 這一條原本反過來，要求面板寫「這句只在 189 那一頁查得到」。
+   那是**查得不夠**不是事實：189 points-tested、190、491/application 三頁逐字都有
+   （491 的在 /application 子頁，主頁沒有——當初就是停在主頁才誤判）。
+   少報適用範圍跟報錯數字一樣傷：讀者會以為自己那條路不能用這個天數。 */
+ok("而且適用範圍要寫對：189／190／491 三頁都有，不是只有 189",
+  prof.html.includes("189／190／491 三頁都有這一句"), prof.text.slice(-1200));
+/* 驗渲染後的面板，不驗原始碼：原始碼裡那句話還在，但它活在一段
+   「這裡原本寫…，那是查得不夠」的更正註解裡。讀者看不到註解，
+   要守的是「讀者看得到的地方沒有這個錯誤宣稱」。 */
+ok("那句被推翻的宣稱不准出現在讀者看得到的面板上",
+  !prof.html.includes("只在 189") && !engFirst.html.includes("只在 189")
+    && !near.html.includes("只在 189"),
+  "面板上還留著「只在 189」");
 ok("拿不出去的成績連這段出處說明都不印（它屬於邀請日換算的一部分）",
   !bad1.html.includes("You have " + E.inviteDays + " days") &&
   !under.html.includes("You have " + E.inviteDays + " days"));
