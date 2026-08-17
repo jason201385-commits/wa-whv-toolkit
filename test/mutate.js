@@ -6,6 +6,7 @@
    65% 改成 15%，測試照樣全綠（別的 bullet 剛好也含那些字）。是這支程式把它抓出來的。
 
    跑法：node test/mutate.js      （會依序改壞→跑測試→還原，**十分鐘以上**）
+         node test/mutate.js --from 1 --to 30   （只跑第 1–30 條，見下方分段說明）
    注意：它會**真的寫** public/index.html。跑之前先確認工作區是乾淨的，
    中途 Ctrl+C 也會還原（finally），但還是先 commit 比較安全。
 
@@ -15,35 +16,53 @@
    而且**每次看到的殘留不一樣**（那是它正跑到第幾條）。當時查了三輪才找到孤兒行程。
    兩件事要記住：①殼的結束碼描述的是殼，不是它啟動的那個行程；
    ②工作區突然變髒時，先 `Get-CimInstance Win32_Process` 找還在跑的 mutate，
-   不要先懷疑還原邏輯——底下那個 git 覆核就是為了讓這件事下次一眼看得出來。 */
+   不要先懷疑還原邏輯——底下那個 git 覆核就是為了讓這件事下次一眼看得出來。
+
+   ⚠️ **分段跑（`--from` / `--to`）是為了「跑得完」，不是為了「跑得快」。**
+   2026-08-17 又試了一次，這次連背景殼都撐不住：殼在 4 分鐘後回報 `EXIT=127`
+   （127 是「找不到指令」，跟這支程式在做的事毫無關係——那個碼描述的是殼自己怎麼死的），
+   node 又多活了 18 秒才跑完 finally。output 停在第 36 條，**而且沒有結案摘要**。
+   沒有摘要的輸出最危險：前面 33 個 `✓ 抓到` 看起來一切順利，
+   「漏網 0 / 92」那一行不在，卻很容易被讀成「沒看到漏網＝沒有漏網」。
+   所以分段之後，**只要不是完整的一輪，結案那一行就必須自己講出來**——
+   底下 `RANGE` 那段做的就是這件事，不准把部分結果印成跟全跑一樣的形狀。
+
+   ⚠️ **被丟下之後留在工作區的那條突變，是這支程式最危險的產物。**
+   同一天第三次踩到才看懂：真正的傷害不是「工作區莫名變髒」（那看得見、也修得掉），
+   而是那份殘骸**長得就像一次正常的文案修改**——diff 只有一行、改的是一個年份、
+   前後文完全通順。於是它被 commit 進去了（58b5d56），而且是被
+   一個 commit 訊息正好在講「殼逾時會留下孤兒行程」的 commit 收進去的。
+   **寫下一個坑的存在，跟檢查自己有沒有正在掉進去，是兩件事。**
+   現在下面那段髒檢查會拿 HEAD 逐條套用突變去比對，認出自己的殘骸就自動還原；
+   認不出來的才當成別人的修改而拒跑。 */
 const fs = require("fs"), cp = require("child_process"), path = require("path");
 const ROOT = path.join(__dirname, "..");
 const F = path.join(ROOT, "public", "index.html");
-const ORIG = fs.readFileSync(F, "utf8");
+/* `let` 而不是 `const`：底下認出「上一輪的殘骸」時會先還原檔案再重讀一次。 */
+let ORIG = fs.readFileSync(F, "utf8");
 
 /* `--count` 只印突變條數就退出，給 counts.js 對帳用。
    放在髒工作區檢查之前：只是數數、不寫檔，沒有需要備份的東西。 */
 const COUNT_ONLY = process.argv.includes("--count");
 
-/* 這支程式會真的覆寫 index.html，靠 finally 把 ORIG 寫回去還原。
-   ORIG 是「開跑當下磁碟上的內容」——如果那份已經含有還沒 commit 的修改，
-   還原是還原得回來的；但只要 finally 沒跑到（斷電、kill -9、磁碟滿），
-   那些沒 commit 的修改就跟著突變一起沒了，而且沒有任何地方留著它們。
-   乾淨的工作區有 git 當備份，髒的沒有。所以髒的就不跑。 */
-const dirty = COUNT_ONLY ? { status: 0, stdout: "" }
-  : cp.spawnSync("git", ["-C", ROOT, "status", "--porcelain", "--", "public/index.html"],
-    { encoding: "utf8" });
-if (dirty.status === 0 && dirty.stdout.trim()) {
-  console.log("✗ public/index.html 有還沒 commit 的修改，不跑突變測試。");
-  console.log("  這支會覆寫該檔再還原，萬一還原沒跑到，那些修改沒有任何地方救得回來。");
-  console.log("  先 git commit（或 git stash）再跑。");
-  process.exit(1);
-}
-if (dirty.status !== 0) {
-  /* 不在 git 底下就沒有備份可言，更不該跑。「查不到」不等於「乾淨」。 */
-  console.log("✗ 查不到 git 狀態（不是 git 工作區？），不跑突變測試——沒有備份就不覆寫檔案。");
-  process.exit(1);
-}
+/* 分段執行。1-based、兩端都含。給不了完整十分鐘的殼用（見檔頭）。
+   刻意不做「自動分段跑完」——那會把「這一段乾淨」的判定藏進迴圈裡，
+   而每一段結束時的 git 覆核正是這支程式唯一的外部證據，要留在外面看得見。 */
+const argNum = (flag) => {
+  const i = process.argv.indexOf(flag);
+  if (i < 0) return null;
+  const n = Number(process.argv[i + 1]);
+  if (!Number.isInteger(n) || n < 1) {
+    console.log("✗ " + flag + " 要接一個 ≥1 的整數，收到的是 " + JSON.stringify(process.argv[i + 1]));
+    process.exit(1);
+  }
+  return n;
+};
+const FROM = argNum("--from"), TO = argNum("--to");
+
+/* 髒工作區的檢查搬到突變清單定義完之後（找「if (COUNT_ONLY)」那一行的下面）。
+   理由：那個檢查現在要能分辨「別人的修改」與「本程式上一輪留下的殘骸」，
+   而後者只有拿得到清單才判斷得出來。 */
 
 /* 每一條都對應一個「曾經漏掉」或「很容易漏掉」的類別，不是隨機改字。
    加新斷言時順手加一條突變進來——沒有突變證明過的斷言，等於沒有被驗收過。 */
@@ -493,10 +512,78 @@ const M = [
 
 if (COUNT_ONLY) { console.log(String(M.length)); process.exit(0); }
 
-const SUITES = ["settle", "cost", "pr", "flags", "wage", "english", "golden"];
+/* 這支程式會真的覆寫 index.html，靠 finally 把 ORIG 寫回去還原。
+   ORIG 是「開跑當下磁碟上的內容」——如果那份已經含有還沒 commit 的修改，
+   還原是還原得回來的；但只要 finally 沒跑到（斷電、kill -9、磁碟滿），
+   那些沒 commit 的修改就跟著突變一起沒了，而且沒有任何地方留著它們。
+   乾淨的工作區有 git 當備份，髒的沒有。所以髒的就不跑。
+
+   2026-08-17 加上「認得出自己的殘骸」這一段，起因是同一天發生兩次：
+   有東西在這個 repo 上跑了這支程式、又中途把它丟下，工作區留著一條突變，
+   而**那個殘骸後來被 commit 進去了**——58b5d56 把 nhi[0] 的民國 113 收成了 115，
+   線上那句話從此變成「自 115 年起不受理」後面接「（＝2024-12-23）」，自己打自己。
+
+   為什麼它躲得過人眼：留下來的東西**看起來就是一次正常的文案修改**。
+   diff 只有一行、改的是一個年份、前後文完全通順。
+   「commit 前看一下 diff」這個習慣擋不住它，因為它長得跟該有的樣子一樣。
+   所以這裡不只問「髒不髒」，還要問「這份髒是不是我自己的殘骸」：
+   拿 HEAD 的內容逐條套用突變，套出來跟磁碟上的一模一樣，那就是。
+   認出來就自己還原——那份殘骸沒有任何值得保留的資訊；
+   認不出來就照舊拒跑，那是別人的修改，輪不到這支程式決定它的死活。 */
+const git = (...a) => cp.spawnSync("git", ["-C", ROOT, ...a],
+  { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const st = git("status", "--porcelain", "--", "public/index.html");
+if (st.status !== 0) {
+  /* 不在 git 底下就沒有備份可言，更不該跑。「查不到」不等於「乾淨」。 */
+  console.log("✗ 查不到 git 狀態（不是 git 工作區？），不跑突變測試——沒有備份就不覆寫檔案。");
+  process.exit(1);
+}
+if (st.stdout.trim()) {
+  /* 比對前把換行正規化。autocrlf 之下 `git show` 給的是 blob（LF）、
+     磁碟上可能是 CRLF，那個差別會讓每一條都比不中，於是殘骸被誤判成別人的修改。 */
+  const norm = (s) => s.replace(/\r\n/g, "\n");
+  const head = git("show", "HEAD:public/index.html");
+  const cur = norm(fs.readFileSync(F, "utf8"));
+  const src = head.status === 0 ? norm(head.stdout) : null;
+  const hit = src === null ? -1 : M.findIndex(([, from, to]) =>
+    src.split(from).length - 1 === 1 && src.split(from).join(to) === cur);
+  if (hit < 0) {
+    console.log("✗ public/index.html 有還沒 commit 的修改，不跑突變測試。");
+    console.log("  這支會覆寫該檔再還原，萬一還原沒跑到，那些修改沒有任何地方救得回來。");
+    console.log("  先 git commit（或 git stash）再跑。");
+    process.exit(1);
+  }
+  console.log("⚠️ 工作區裡留著的，正是本程式第 " + (hit + 1) + " 條突變：" + M[hit][0]);
+  console.log("   也就是上一輪被中途丟下了（殼逾時／被 kill），finally 沒跑到。");
+  console.log("   這種殘骸長得像一次正常的文案修改，commit 前掃 diff 攔不住它——58b5d56 就是這樣進去的。");
+  if (git("checkout", "--", "public/index.html").status !== 0) {
+    console.log("✗ 自動還原失敗，請手動：git checkout -- public/index.html");
+    process.exit(1);
+  }
+  ORIG = fs.readFileSync(F, "utf8");
+  console.log("   已還原成 HEAD 的版本，繼續。");
+}
+
+const SUITES =["settle", "cost", "pr", "flags", "wage", "english", "golden"];
+
+/* 夾到清單範圍內，並記住「使用者到底有沒有指定範圍」——
+   `--from 1 --to 92` 跟不給參數在行為上一樣，但**在報告上不一樣**：
+   前者是使用者宣告了一個範圍（下次改成 93 條時那個 92 就變成靜默的截斷），
+   後者才是「全部」。所以判斷依據是有沒有給旗標，不是算出來的數字剛好等於全長。 */
+const RANGED = FROM !== null || TO !== null;
+const lo = Math.min(FROM === null ? 1 : FROM, M.length);
+const hi = Math.min(TO === null ? M.length : TO, M.length);
+if (lo > hi) {
+  console.log("✗ --from " + lo + " 大於 --to " + hi + "，這樣一條都不會跑。");
+  process.exit(1);
+}
+const SLICE = M.slice(lo - 1, hi);
+console.log("共 " + M.length + " 條突變，這一輪跑第 " + lo + "–" + hi + " 條（" + SLICE.length + " 條）"
+  + (RANGED ? "  ←— **分段**，這不是完整的一輪" : ""));
+
 let missed = 0;
 try {
-  for (const [name, from, to] of M) {
+  for (const [name, from, to] of SLICE) {
     /* 找不到標的通常代表文案改過了——那條突變本身要跟著改，不是把它刪掉。 */
     const hits = ORIG.split(from).length - 1;
     if (hits === 0) { console.log("？ 找不到標的：" + name + "  ←— 突變本身寫錯了"); missed++; continue; }
@@ -533,5 +620,9 @@ try {
        : gitOK ? "工作區跟 HEAD 一致"
        : "✗ 工作區仍有殘留 ←— 立刻 git checkout -- public/index.html\n" + vs.stdout.trim()));
 }
-console.log("漏網 " + missed + " / " + M.length);
+/* 分母是「這一輪實際跑了幾條」，不是清單全長——拿全長當分母會讓
+   「跑 30 條、漏網 0」印成「漏網 0 / 92」，那是一句假話。
+   而且分段時要把話講死：這一行單獨被貼出來時，也要看得出來它不是全跑。 */
+console.log("漏網 " + missed + " / " + SLICE.length
+  + (RANGED ? "（**只跑了第 " + lo + "–" + hi + " 條，全部有 " + M.length + " 條**）" : ""));
 process.exit(missed === 0 ? 0 : 1);
