@@ -109,7 +109,7 @@ node test/english.test.js
 
 ```bash
 node test/golden.test.js   # 快照：69 個場景的答案面板逐字比對（含剪貼簿那一份）
-node test/mutate.js        # 突變測試：改壞一個字，看測試會不會紅（目前 76 條全被抓到）
+node test/mutate.js        # 突變測試：改壞一個字，看測試會不會紅（目前 80 條全被抓到）
 node test/render.js        # 把答案面板印成純文字，用眼睛讀一遍（唯讀）
 node test/counts.js        # 對帳：這兩份 README 寫的數字跟實際跑出來的對不對得上
 node test/contrast.test.js # 對比度：兩個主題每一組前景╱背景都要算得過 WCAG AA

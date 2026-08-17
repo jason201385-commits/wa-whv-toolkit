@@ -383,6 +383,38 @@ const M = [
      讀者只看得到一個憑空出現的減法——看不懂的規則沒辦法被質疑。 */
   ["拿掉舊制「先咬到你的是這一條」（那個減法變成沒有理由）",
     "所以<b>先咬到你的是這一條</b>。", ""],
+
+  /* ---- 換表：原本選的那一張的三種下場 ----
+     這一組全部指著同一支 fillTests()。它為什麼值得四條:那個 bug 活下來
+     不是因為沒人寫測試,是因為**測試在替它背書**——假 DOM 讓測試可以把
+     value 塞成任何字串,而斷言只問「是不是舊表上的合法值」,c1 剛好合法。
+     突變是唯一問得出「你的斷言指名了哪一個值嗎」的東西。 */
+
+  /* 這一條就是 bug 本人。兩張表濾掉 oet 之後的 keys[0] 都是 c1,
+     所以它的效果是把考 IELTS 的人靜默改判成劍橋 C1,然後說他差一百多分。 */
+  ["換表時原本那張不在新表上就落到第一項（IELTS 被靜默改判成劍橋 C1）",
+    `               : "";
+    if(prev) sel.dataset.was = prev;`,
+    `               : keys[0];
+    if(prev) sel.dataset.was = prev;`],
+
+  /* 拆開 → 合併的方向是可以自動對映的(舊表的一格 ielts 就是新表的兩格),
+     拿掉它,考 IELTS Academic 的人把日期改回 2024 年會被清空重問一次。
+     不是誤判,但是白問——資訊明明夠。 */
+  ["拿掉 splitInto 的反向對映（ieltsA 換回舊表時不再合併成 ielts）",
+    "               : keys.indexOf(mergeTo[prev]) >= 0 ? mergeTo[prev]\n", ""],
+
+  /* 新表**有** IELTS,只是拆成兩張。這時候印「這張表上沒有這個考試」是假的,
+     而且會讓人以為那張成績整個作廢——實際上只要照成績單抬頭重選一次。 */
+  ["把「拆成兩種」也講成「這張表上沒有這個考試」（那句話是假的）",
+    "const splitNow = E.splitInto[was] && E.splitInto[was].every(k => tb.tests[k]);",
+    "const splitNow = false;"],
+
+  /* 語氣也是判定的一部分:要重選一次是 warn,不是 bad。
+     紅色會讓人以為成績不能用了,而那正是這一格最需要澄清的誤解。 */
+  ["「拆成兩種」用紅色（讀起來像成績不能用了）",
+    `box.className = "ans " + (splitNow || !was ? "warn" : "bad");`,
+    `box.className = "ans " + (!was ? "warn" : "bad");`],
 ];
 
 if (COUNT_ONLY) { console.log(String(M.length)); process.exit(0); }
