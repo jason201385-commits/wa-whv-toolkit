@@ -348,6 +348,7 @@ footer a{color:var(--accent)}
     <li><a href="#ask"><span class="u">/ask</span><b>出門前先問</b><span>別為了一則失效貼文白跑</span></a></li>
     <li><a href="#landing"><span class="u">/landing</span><b>落地清單</b><span>前 72 小時要辦什麼</span></a></li>
     <li><a href="#pr"><span class="u">/pr</span><b>年齡與點數</b><span>你的門什麼時候關</span></a></li>
+    <li><a href="#english"><span class="u">/english</span><b>英文哪一級</b><span>成績單對回官方那張表</span></a></li>
     <li><a href="#settle"><span class="u">/settle</span><b>定居的兩個時鐘</b><span>PR 之後會自己到期的東西</span></a></li>
   </ul>
 </nav>
@@ -829,6 +830,48 @@ footer a{color:var(--accent)}
       <ul id="prflags"></ul>
     </div>
     <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="prsrc"></ul></details>
+  </div>
+</section>
+
+<!-- ================= 英文 ================= -->
+<section class="tool" id="english">
+  <header>
+    <h2>英文：哪一級、還剩多久<span class="slug">/english</span></h2>
+    <p class="q">上面那張點數表問你「英文是哪一級」，卻沒有一頁告訴你<strong>怎麼知道自己是哪一級</strong>。這一區把成績單對回官方那兩張表，順便算出那張成績能用到哪一天——然後跟技術評估放在一起比。兩邊都是 3 年，<b>但一個量到「收到邀請」那天、一個量到「遞件」那天</b>，所以它們不會同時到期，先關的那一扇才是你的死線。</p>
+  </header>
+  <div class="body">
+    <div class="ask">
+      <label for="edate">考試日期（成績單上那一天）</label>
+      <input type="date" id="edate" autocomplete="off">
+      <label for="etest">考的是哪一張（選單會依考試日期自動換表）</label>
+      <select id="etest" aria-label="考試種類"></select>
+      <label>四項分數，依序是 聽 / 讀 / 寫 / 說（照成績單填，不要自己四捨五入）</label>
+      <input type="number" id="el" inputmode="decimal" step="0.5" min="0" placeholder="聽" aria-label="聽力分數">
+      <input type="number" id="er" inputmode="decimal" step="0.5" min="0" placeholder="讀" aria-label="閱讀分數">
+      <input type="number" id="ew" inputmode="decimal" step="0.5" min="0" placeholder="寫" aria-label="寫作分數">
+      <input type="number" id="es" inputmode="decimal" step="0.5" min="0" placeholder="說" aria-label="口說分數">
+      <label for="esa">技術評估的核發日（還沒做就留空）</label>
+      <input type="date" id="esa" autocomplete="off">
+      <label for="edelay">收到邀請後打算隔幾天遞件（不知道就留空，下面會給你區間）</label>
+      <input type="number" id="edelay" inputmode="numeric" step="1" min="0" max="60" placeholder="0–60 天" aria-label="邀請到遞件的天數">
+      <button class="btn" id="ego">對表</button>
+    </div>
+    <p class="hint">分數只留在你自己的瀏覽器裡，這個站沒有伺服器可以送。<b>四項是各自比對的，不看平均、也不能互相補</b>——一項差一分，整張成績就掉一級，這是這一區最常被誤會的地方。</p>
+    <div class="ans" id="eans" hidden></div>
+
+    <h3 style="margin:26px 0 0;font-size:17px">現行門檻總表：每一張考試要幾分才算 Competent</h3>
+    <div id="etbl"></div>
+
+    <div class="flags rule">
+      <b>台灣護照沒有免試路</b>
+      <ul id="epass"></ul>
+    </div>
+
+    <div class="flags">
+      <b>看到這些就先停下來</b>
+      <ul id="eflags"></ul>
+    </div>
+    <details class="src"><summary>來源與生效日</summary><ul class="srclist" id="englishsrc"></ul></details>
   </div>
 </section>
 
@@ -1866,6 +1909,94 @@ const DATA = {
     ]
   },
 
+  /* ---------------- 英文：哪一級、還剩多久 ----------------
+     跟 /pr 的分工：/pr 的點數表有一題「英文能力」（上面 q 陣列的 k:"eng"），
+     但它只問你是哪一級，站上原本沒有任何地方告訴你「你到底是哪一級」。
+     這一區補的就是那個缺口。
+
+     官方把門檻拆成三頁（competent／proficient／superior），每一頁又各有兩張表，
+     分界在考試日 2025-08-07。所以要先選表、再選考試、再四項各自比，三層都不能跳。
+
+     ⚠️ 四項順序永遠是 聽(L) 讀(R) 寫(W) 說(S)，跟官網欄位順序一致。
+        為了中文語感重排一次，所有比對就整組錯位，而且不會有任何錯誤訊息。
+     ⚠️ met.superior 是 null，那是真的——官網 Superior 那一頁根本沒有 MET 這一列。
+        不可以靜默當成「沒過」或落回 Proficient，要明講這張考試沒有這一級。
+     ⚠️ 舊制（Table 2）的 OET 是字母級：Competent 與 Proficient 同樣是 B，
+        中間沒有級距，Superior 才是 A。字母沒辦法跟數字共用一套比較，加上它是
+        醫療專業考試，所以計算機不收 OET（noCalc）——但參考表照列，
+        官方表上有的東西不該在這裡憑空消失。 */
+  eng: {
+    cutover:    "2025-08-07",  /* 這一天（含）以後考的看 t1，以前看 t2 */
+    oldExpiry:  "2028-08-06",  /* 舊制成績的絕對大限，官方腳註寫 inclusive */
+    validYears: 3,
+    /* 189 的邀請期。官方原文：「You have 60 days from the date of your invitation
+       to apply for the visa.」——這句話是 189 那一頁寫的。190／491 走州提名，
+       流程不一樣，同一句話在那兩頁上查不到，所以這裡只敢用在 189 的換算。 */
+    inviteDays: 60,
+    parts:  ["聽","讀","寫","說"],
+    points: { competent:0, proficient:10, superior:20 },
+    /* 由高到低。判定時第一個四項全達標的就是答案——順序反過來會讓所有人變成 Competent。 */
+    levels: [
+      { k:"superior",   n:"Superior" },
+      { k:"proficient", n:"Proficient" },
+      { k:"competent",  n:"Competent" }
+    ],
+    noCalc: ["oet"],
+    t1: {
+      from: "2025-08-07",
+      tests: {
+        c1:     { name:"C1 Advanced（劍橋）",           competent:[163,163,170,179], proficient:[175,179,193,194], superior:[186,190,210,208] },
+        celpip: { name:"CELPIP General",                competent:[7,7,7,7],         proficient:[9,8,10,8],        superior:[10,10,12,10] },
+        ieltsA: { name:"IELTS Academic",                competent:[6,6,6,6],         proficient:[7,7,7,7],         superior:[8,8,8,8] },
+        ieltsG: { name:"IELTS General Training",        competent:[6,6,6,6],         proficient:[7,7,7,7],         superior:[8,8,8,8] },
+        met:    { name:"MET（Michigan English Test）",  competent:[56,55,57,48],     proficient:[61,63,74,59],     superior:null,
+                  note:"官網 Superior 那一頁沒有 MET 這一列——這張考試最高只對得到 Proficient。要 20 分就得換一張考。" },
+        lc:     { name:"LANGUAGECERT Academic",         competent:[57,60,64,70],     proficient:[67,71,78,82],     superior:[80,83,89,89],
+                  note:"官網三頁都把它拼成「LANGUGECERT」，少一個 A。那是官方的錯字，不是另一張考試。" },
+        pte:    { name:"PTE Academic",                  competent:[47,48,51,54],     proficient:[58,59,69,76],     superior:[69,70,85,88] },
+        toefl:  { name:"TOEFL iBT",                     competent:[16,16,19,19],     proficient:[22,22,26,24],     superior:[26,27,30,28] },
+        oet:    { name:"OET（職業英語測驗）",            competent:[290,310,290,330], proficient:[350,360,380,360], superior:[390,400,420,400],
+                  note:"醫療專業考試，成績單上不給 overall。上面的計算機不收 OET：它的舊制是字母級，跟數字沒辦法共用一套比較。" }
+      }
+    },
+    t2: {
+      until: "2025-08-06",
+      tests: {
+        c1:    { name:"C1 Advanced（劍橋・舊制）",              competent:[169,169,169,169], proficient:[185,185,185,185], superior:[200,200,200,200] },
+        ielts: { name:"IELTS（Academic 或 General Training）",  competent:[6,6,6,6],         proficient:[7,7,7,7],         superior:[8,8,8,8] },
+        pte:   { name:"PTE Academic（舊制）",                   competent:[50,50,50,50],     proficient:[65,65,65,65],     superior:[79,79,79,79] },
+        toefl: { name:"TOEFL iBT（舊制）",                      competent:[12,13,21,21],     proficient:[24,24,27,23],     superior:[28,29,30,26] },
+        oet:   { name:"OET（舊制・字母級）",                     competent:"B",               proficient:"B",               superior:"A",
+                 note:"舊制的 Competent 與 Proficient 同樣是 B，中間沒有級距——四項都 B 就已經是 Proficient。這張表計算機同樣不收。" }
+      }
+    },
+    /* 考試日期落在特定區間會整個不算數，或只認某一種考法。
+       kind:"bad" = 那段期間的成績不能用；"warn" = 能用但有條件。 */
+    windows: [
+      { test:"toefl", kind:"bad", from:"2023-07-26", to:"2024-05-04",
+        text:"<strong>TOEFL iBT 在 2023-07-26 到 2024-05-04 之間不被承認。</strong>官方原文：<i>&ldquo;From 26 July 2023 to 4 May 2024, the TOEFL iBT test was not approved&rdquo;</i>。那段期間考的成績<b>不是分數不夠，是整張不能用來證明英文能力</b>，要重考。" },
+      { test:"c1", kind:"warn", from:"2024-02-12", to:"2025-08-06",
+        text:"<strong>C1 Advanced 在 2024-02-12 到 2025-08-06 之間只認紙筆版。</strong>官方原文：<i>&ldquo;only accept … paper-based test&rdquo;</i>。同一段話也寫明 2024-02-12 之前考的，紙筆與電腦版<b>都還是認的</b>。你這張如果是那段期間的電腦版，先確認一次再遞件。" }
+    ],
+    pass: [
+      "<strong>台灣護照不在免試名單上。</strong>官方只認五本護照的持有人免附成績：<b>Canada、New Zealand、The Republic of Ireland、The United Kingdom of Great Britain and Northern Ireland、The United States of America</b>。名單就這五個，沒有「英語授課學位可以抵」這種通則寫在這一頁上。",
+      "<strong>「我在澳洲讀了幾年書」不會自動變成一個級別。</strong>這一頁認的是成績單上的四項分數。學歷抵免（如果某個簽證類別有）是那個類別自己的規則，不是這張表的規則——要用就得回那個簽證頁面找到白紙黑字。"
+    ],
+    flags: [
+      "<strong>線上在家考的版本，官方逐一點名不收。</strong>被排除的是：<b>CELPIP Online、IELTS Online、LANGUAGECERT Academic Online、MET Digital（在家考）、OET@Home、TOEFL iBT – Home Edition</b>。這些跟考場版同名，成績單上也長得一樣——<b>報名前就要選對，考完才發現沒有補救</b>。",
+      "<strong>TOEFL 報名時要選對那個選項。</strong>官方原文：<i>&ldquo;you must select 'Taking TOEFL for Australia' … Results not registered under this pathway are not eligible for Australian visa purposes&rdquo;</i>。分數再高，走錯報名路徑就是不算——這是所有陷阱裡最便宜也最常踩的一個。",
+      "<strong>PTE 有兩張同名的考試。</strong>官方認的是 <b>PTE Academic</b>。報名頁上還有名字很像的其他版本，選錯了成績單一樣寄到你手上，但用不了。",
+      "<strong>IELTS OSR 與 MET SSR 只對「部分簽證類別」有效。</strong>官方寫的是 <i>&ldquo;for eligible visas&rdquo;</i>——沒有列出是哪些。要用這兩種，先去你那個簽證類別的頁面確認，別假設跟一般成績等價。",
+      "<strong>各簽證類別對英文的要求不完全一樣。</strong>官方在這三頁上都寫 depending on the visa subclass。這一區算的是「你的成績對到哪一級、還能用多久」，<b>不是「你這個簽證過不過」</b>——後者要回該簽證的頁面對。"
+    ],
+    src: [
+      { t:"移民部 — Competent English（Table 1／Table 2 門檻、免試護照五國、線上版排除清單、TOEFL 報名路徑）", u:"https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/english-language/competent-english", as:"2026-08-17", v:true },
+      { t:"移民部 — Proficient English（Table 1／Table 2 門檻）", u:"https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/english-language/proficient-english", as:"2026-08-17", v:true },
+      { t:"移民部 — Superior English（Table 1／Table 2 門檻；此頁無 MET）", u:"https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/english-language/superior-english", as:"2026-08-17", v:true },
+      { t:"移民部 — 189 積分測驗說明（技術評估 3 年量到「邀請日」、邀請後 60 天內遞件）", u:"https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189/points-tested", as:"2026-08-17", v:true }
+    ]
+  },
+
   /* ---------------- 定居：PR 前後會自己到期的四件事 ----------------
      跟 /pr 的分工：/pr 算「進不進得去」，這一區算「進去那天起，哪些東西會在你
      沒注意的時候到期」。四件事分屬**兩個起點不同的時鐘**，混在一起是這一區最常
@@ -2098,6 +2229,8 @@ flags("#landflags", DATA.landing.flags);
 flags("#prflags", DATA.pr.flags);
 flags("#prwhv", DATA.pr.whv);
 flags("#prwa", DATA.pr.wa);
+flags("#epass", DATA.eng.pass);
+flags("#eflags", DATA.eng.flags);
 flags("#sdrive", DATA.settle.drive);
 flags("#snhi", DATA.settle.nhi);
 flags("#ssupr", DATA.settle.supr);
@@ -2124,6 +2257,7 @@ sources("#scamsrc", DATA.scam.src);
 sources("#aftersrc", DATA.after.src);
 sources("#landsrc", DATA.landing.src);
 sources("#prsrc", DATA.pr.src);
+sources("#englishsrc", DATA.eng.src);
 sources("#settlesrc", DATA.settle.src);
 
 /* ---- 閘門式清單 ---- */
@@ -3876,6 +4010,481 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
 
   go.addEventListener("click", run);
   ["#sout","#spr"].forEach(id => {
+    $(id).addEventListener("keydown", e => { if(e.key === "Enter") run(); });
+  });
+})();
+
+/* ================= 英文：哪一級、還剩多久 =================
+   共用上面的 ymd／norm／dayGap／fmtD／human，刻意不另寫一套——也因為共用，
+   這個 IIFE 一定要排在那些 const 後面（const 不 hoist，往前搬會踩 TDZ）。
+
+   這一區沒有剪貼簿按鈕，是刻意的：這個專案抓到的缺陷有一半是「畫面改了、
+   剪貼簿沒跟上」，而這裡的輸出是級別與日期，不是拿去跟雇主對質的數字。
+   要加剪貼簿是另一次改動，得連測試一起加，不能只補畫面那一半。 */
+(function english(){
+  const E = DATA.eng;
+  const box = $("#eans"), go = $("#ego"), sel = $("#etest"), dateIn = $("#edate");
+  const saIn = $("#esa"), dlIn = $("#edelay");
+  const IN = [$("#el"), $("#er"), $("#ew"), $("#es")];   /* 順序＝聽讀寫說，不准動 */
+
+  const four = v => Array.isArray(v) ? v.join(" / ") : String(v);
+
+  /* 考試日 + n 年。2024-02-29 加 3 年在曆法上不存在，夾到當月最後一天並回報夾過，
+     跟 /settle 的 addMonths 同一套做法：往前夾不會多報剩餘時間。 */
+  function addYears(d, n){
+    const y = d[0] + n;
+    const last = new Date(Date.UTC(y, d[1], 0)).getUTCDate();
+    return { d:[y, d[1], Math.min(d[2], last)], clamped: d[2] > last };
+  }
+  const shiftDays = (d, n) => norm([d[0], d[1], d[2] + n]);
+
+  /* 選表：2025-08-07 當天或之後 → Table 1；之前 → Table 2。日期還沒填就先給現行表。 */
+  const tableFor = d => (!d || dayGap(ymd(E.cutover), d) >= 0) ? E.t1 : E.t2;
+  const dateVal  = () => ymd((dateIn.value || "").trim());
+
+  /* ---- 現行門檻總表：開檔就渲染，不必按按鈕 ---- */
+  (function tbl(){
+    const w = $("#etbl"); if(!w) return;
+    const u = el("ul","kv");
+    Object.keys(E.t1.tests).forEach(k => {
+      const t = E.t1.tests[k], li = el("li"), left = el("span");
+      /* note 跟 flags 一樣是刻意帶 HTML 的欄位，所以不 esc；name 是純文字，要 esc。 */
+      let n = "Proficient " + four(t.proficient) + "　・　Superior "
+            + (t.superior ? four(t.superior) : "<b>這張考試沒有這一級</b>");
+      if(t.note) n += "<br>" + t.note;
+      left.innerHTML = esc(t.name) + '<span class="n">' + n + '</span>';
+      li.appendChild(left);
+      li.appendChild(el("span","v", esc(four(t.competent))));
+      u.appendChild(li);
+    });
+    w.appendChild(u);
+    const p = el("p","note");
+    p.innerHTML = '右邊那一欄是 <b>Competent</b>（' + E.points.competent + ' 分）的門檻，'
+      + '四個數字依序是 ' + E.parts.join(" / ") + '，適用 <b>' + E.t1.from + ' 當天或之後</b>考的成績。'
+      + E.t2.until + ' 以前考的走另一張 Table 2，那張表上只有 ' + Object.keys(E.t2.tests).length
+      + ' 種考試（<b>沒有 CELPIP、MET、LANGUAGECERT</b>）——上面的計算機會依你填的考試日期自動換表，'
+      + '你不用自己判斷是哪一張。<b>四項各自比，不看平均，也不能互相補。</b>';
+    w.appendChild(p);
+  })();
+
+  if(!box || !go) return;
+
+  /* 選單跟著考試日換表。Table 2 少了三種考試，換過去之後原本選的那一張可能整個
+     不存在——這時候一定要換成新表的第一項，不能靜默留著舊的 value。
+     （/cost 的 ctrans 就是被一個不存在的選項靜默落回預設值咬過一次。） */
+  function fillTests(){
+    const tb = tableFor(dateVal());
+    const keys = Object.keys(tb.tests).filter(k => E.noCalc.indexOf(k) < 0);
+    const prev = sel.value;
+    sel.innerHTML = keys.map(k =>
+      '<option value="' + esc(k) + '">' + esc(tb.tests[k].name) + '</option>').join("");
+    sel.value = keys.indexOf(prev) >= 0 ? prev : keys[0];
+  }
+  fillTests();
+  (function(){
+    /* 成績單上的日期不可能在未來。markup 裡不寫死，寫死的那一天會隨時間變成錯的。 */
+    const t = new Date(), today = fmtD([t.getFullYear(), t.getMonth()+1, t.getDate()]);
+    dateIn.max = today; saIn.max = today;
+  })();
+
+  /* 分數：空字串、看不懂的字、負數、Infinity 一律回 null，讓上面走「沒填完」。
+     ⚠️ Number("1,200") 是 NaN，這裡會當成沒填——那是對的，成績單上沒有逗號。 */
+  function score(node){
+    const raw = (node.value || "").trim();
+    if(raw === "") return null;
+    const n = Number(raw);
+    return (isFinite(n) && n >= 0) ? n : null;
+  }
+
+  /* 由高到低比，四項全部達標才算那一級。
+       th == null   → 這張考試沒有這一級（MET 的 Superior），跳過，但要講出來
+       th 不是陣列  → 舊制 OET 的字母級，這一頁不做字母比較 */
+  function grade(tb, key, sc){
+    const t = tb.tests[key];
+    if(!t) return { unknown:true };
+    const gone = [];
+    for(let i = 0; i < E.levels.length; i++){
+      const lv = E.levels[i], th = t[lv.k];
+      if(th == null){ gone.push(lv.n); continue; }
+      if(!Array.isArray(th)) return { letter:true, test:t };
+      let all = true;
+      for(let j = 0; j < 4; j++) if(sc[j] < th[j]){ all = false; break; }
+      if(all) return { test:t, level:lv, th:th, gone:gone };
+    }
+    return { test:t, level:null, th:t.competent, gone:gone };
+  }
+  /* 下一級：跳過這張考試沒有的級別。level 是 null（連 Competent 都沒到）時，
+     下一級就是 Competent 自己。 */
+  function nextUp(t, lv){
+    const i = lv ? E.levels.findIndex(x => x.k === lv.k) : E.levels.length;
+    for(let j = i - 1; j >= 0; j--) if(Array.isArray(t[E.levels[j].k])) return E.levels[j];
+    return null;
+  }
+  function shortOf(th, sc){
+    const out = [];
+    for(let i = 0; i < 4; i++) if(sc[i] < th[i])
+      out.push(E.parts[i] + " 差 " + (Math.round((th[i] - sc[i]) * 100) / 100));
+    return out;
+  }
+  function windowsFor(key, d){
+    return E.windows.filter(w => w.test === key
+      && dayGap(ymd(w.from), d) >= 0
+      && (!w.to || dayGap(d, ymd(w.to)) >= 0));
+  }
+
+  function run(){
+    const t = new Date(), now = [t.getFullYear(), t.getMonth()+1, t.getDate()];
+    const td = dateVal();
+    box.hidden = false;
+
+    if(!td){
+      box.className = "ans warn";
+      box.innerHTML = '<div class="verdict">先填考試日期</div><div class="detail">'
+        + '<p>「該對哪一張表」跟「這張成績還能用多久」都是從考試那天算的，'
+        + '<b>沒有那個日期，下面每一個數字都算不出來</b>。成績單上通常寫 Test Date 或 Test Report Form Date，'
+        + '不是你收到成績的那天，也不是報名那天。</p></div>';
+      return;
+    }
+
+    const tb = tableFor(td), isT1 = tb === E.t1;
+    const key = (sel.value || "").trim();
+
+    /* ⚠️ 不可以在這裡 switch 已知代碼然後 default 落到某一張表。
+       換表之後選單上不存在的考試，要走「這張表沒有這個考試」那條路，不能靜默改判。 */
+    if(!tb.tests[key]){
+      box.className = "ans bad";
+      box.innerHTML = '<div class="verdict">這張表上沒有這個考試</div><div class="detail">'
+        + '<p>你填的考試日期是 <b class="num">' + fmtD(td) + '</b>，適用的是 <b>'
+        + (isT1 ? "Table 1（" + E.t1.from + " 起）" : "Table 2（" + E.t2.until + " 以前）")
+        + '</b>，而那張表上沒有你選的這一張。'
+        + (isT1 ? '' : '舊制那張表只有 ' + Object.keys(E.t2.tests).length
+            + ' 種考試，<b>CELPIP、MET、LANGUAGECERT 都不在上面</b>——那不是分數不夠，'
+            + '是整張成績不能拿來證明英文能力。')
+        + '把上面的考試種類重選一次。</p></div>';
+      return;
+    }
+
+    const sc = IN.map(score);
+    const filled = sc.filter(v => v !== null).length;
+    if(filled < 4){
+      box.className = "ans warn";
+      box.innerHTML = '<div class="verdict">四項分數要填滿</div><div class="detail">'
+        + '<p>官方是<b>四項各自比對</b>，不是看平均、也不是看總分，所以少一項就判不出級別——'
+        + '不能拿其他三項推。目前填了 <b class="num">' + filled + '</b> 項。'
+        + (filled > 0 ? '負數與看不懂的字會被當成沒填。' : '')
+        + '</p></div>';
+      return;
+    }
+
+    const g = grade(tb, key, sc);
+
+    /* 字母級（舊制 OET）。noCalc 現在把 OET 擋在選單外，所以正常操作走不到這裡——
+       但 grade() 回的 {letter:true} 身上沒有 level 也沒有 gone，底下每一段都會踩空，
+       第一個踩到的是 g.gone.length，**拋例外**。拋在 click handler 裡的例外不會變成紅字，
+       它會讓面板停在上一次的結果——使用者看到的是一個看起來還在運作、其實沒更新的答案。
+       靜默停格比印錯更難查，所以就算現在到不了，也要留一條講得出話的路。 */
+    if(g.letter){
+      box.className = "ans warn";
+      box.innerHTML = '<div class="verdict">這張成績要自己對表</div><div class="detail">'
+        + '<p><b>' + esc(g.test.name) + '</b> 的門檻是<b>字母級</b>（'
+        + E.levels.slice().reverse().map(lv => lv.n + " " + four(g.test[lv.k])).join("、")
+        + '），跟數字沒辦法共用一套比較，這個計算機不做這一張。'
+        + '上面的門檻總表有列出來，拿成績單自己對一次。</p></div>';
+      return;
+    }
+
+    const win = windowsFor(key, td);
+    const blocked = win.filter(w => w.kind === "bad");
+
+    /* 有效期：考試日 + 3 年。舊制成績另有一條絕對大限。
+       ⚠️ 對任何合法的舊制日期（≤ 2025-08-06），考試日 + 3 年一定 ≤ 2028-08-06，
+          所以 capped 這一支現在碰不到。留著有兩個作用：把官方那條大限顯示出來，
+          以及萬一哪天「3 年」改成別的年數時它會自己夾住，而不是悄悄放行。
+          english.test.js 有一條逐日掃描把「碰不到」證明出來，不是我在這裡假設。 */
+    const base = addYears(td, E.validYears);
+    const cap  = ymd(E.oldExpiry);
+    const capped = !isT1 && dayGap(cap, base.d) > 0;
+    const exp = capped ? cap : base.d;
+    const left = dayGap(now, exp);
+
+    /* ⚠️ 第十七次同一個形狀，而且這次說謊的是面板最上面那兩個訊號。
+       技術評估的 3 年走完了，顏色照樣是綠的、判定照樣印「Proficient　10 分」，
+       「技術評估那一邊已經關了」躲在整個面板的最底下。
+       顏色跟判定是讀者第一眼看到的東西——它們跟內文各自組裝，就會出現
+       內文寫著門關了、標題還在報喜。這一區算一次，下面兩邊都拿它算。
+       只有填了核發日才管：沒填代表他還沒做評估，那是另一回事，內文另有一段在講。 */
+    const saD = ymd((saIn.value || "").trim());
+    const saLatest = saD ? addYears(saD, E.validYears) : null;
+    const saGap  = saLatest ? dayGap(now, saLatest.d) : null;
+    const saGone = saGap !== null && saGap < 0;
+
+    let tone = "ok";
+    if(!g.level || left < 0 || blocked.length) tone = "bad";
+    else if(g.level.k === "competent" || left <= 90) tone = "warn";
+    /* 技術評估那一邊關了或快關了就不准是綠的——兩扇門要同時開著才遞得出去。
+       但也不降到 bad：bad 在這個面板的意思是「這張成績拿不出去」，
+       而他的成績本身沒事，重做一份評估就能接著走。 */
+    if(tone === "ok" && saGap !== null && saGap <= 90) tone = "warn";
+
+    let verdict;
+    if(blocked.length)   verdict = "這段期間的成績不能用";
+    else if(!g.level)    verdict = "四項還沒到 Competent";
+    else if(left < 0)    verdict = g.level.n + "，但已經過期";
+    else verdict = g.level.n + "　" + E.points[g.level.k] + " 分"
+      /* 這一級他真的有，所以照印；但後面接一句擋著，不然它會被讀成「可以遞了」。 */
+      + (saGone ? "・技術評估已過期" : "");
+
+    let h = '<div class="detail">';
+    h += '<p>考試日 <b class="num">' + fmtD(td) + '</b> → 適用 <b>'
+       + (isT1 ? "Table 1（" + E.t1.from + " 起）" : "Table 2（" + E.t2.until + " 以前）")
+       + '</b>，對的是 <b>' + esc(g.test.name) + '</b>。</p>';
+
+    /* 整張不能用的話，理由要排在最前面。
+       ⚠️ 這件事第一版寫錯過：判定寫「不能用」，下面卻照印「這張成績能用到 2027-01-15」
+          跟整套邀請日換算，兩邊直接打架。**不能用的成績不該有到期日**。 */
+    if(blocked.length){
+      let ws = "";
+      blocked.forEach(w => { ws += '<li>' + w.text + '</li>'; });
+      h += '<ul>' + ws + '</ul>';
+    }
+
+    /* 逐項攤開。判到哪一級就跟那一級的門檻比；連 Competent 都沒到就跟 Competent 比。 */
+    const cmp = g.level ? g.th : g.test.competent;
+    const cmpName = g.level ? g.level.n : "Competent";
+    let rows = "";
+    for(let i = 0; i < 4; i++){
+      rows += '<li>' + E.parts[i] + '：<b class="num">' + sc[i] + '</b>　／　'
+            + cmpName + ' 要 <b class="num">' + cmp[i] + '</b>'
+            + (sc[i] >= cmp[i] ? '　✓'
+                : '　✗ 差 <b class="num">' + (Math.round((cmp[i] - sc[i]) * 100) / 100) + '</b>')
+            + '</li>';
+    }
+    /* ⚠️ 又一次同一個形狀，而且這次躲在最不像的地方：判定印「這段期間的成績不能用」，
+       緊接著的逐項表卻印四個「Superior 要 28 ✓」。四個綠勾勾讀起來就是「你考到最高級了」，
+       跟上面那句話正面打架，而且勾勾在版面上比那句話還顯眼。
+       數字本身是他成績單上的事實，不必藏；要拆掉的是「✓ ＝ 這張能用」這個暗示。
+       過期的那一支不算在內——那一級他當年真的拿到了，只是現在太舊，兩句話不衝突。 */
+    if(blocked.length){
+      h += '<p class="note"><b>底下只是讓你看看這些數字落在哪裡，不是判定。</b>'
+         + '上面那一條讓整張成績不算數——四項再高都一樣，'
+         + '打勾不代表這張拿得出去。</p>';
+    }
+    h += '<ul>' + rows + '</ul>';
+
+    const up = nextUp(g.test, g.level);
+    if(!g.level){
+      /* 連 Competent 都沒到的時候，上面每一列已經把差多少印出來了，
+         再列一次「還差」只是重複。這裡要講的是另一件事：Competent 雖然 0 分，
+         但它是門檻不是選項——很多人以為 0 分等於「可以不用管」。 */
+      h += '<p><b>Competent 拿 ' + E.points.competent + ' 分，但它不是可以跳過的一級</b>——'
+         + '四項都到 Competent 才進得了點數表。上面標 ✗ 的那幾項就是還要補的距離。</p>';
+    } else if(up){
+      const gap = shortOf(g.test[up.k], sc);
+      h += '<p>再上一級是 <b>' + up.n + '</b>（' + E.points[up.k] + ' 分）'
+         + (gap.length ? '，還差：' + gap.join("、") + '。<b>只差一項也是不算</b>——四項各自比，不能互補。'
+                       : '。')
+         + '</p>';
+    }
+    if(g.gone.length){
+      h += '<p class="note"><b>這張考試沒有 ' + g.gone.join("、") + ' 這一級。</b>'
+         + '官網那一頁上根本沒有這一列——不是你分數不夠，是這張考試對不到那一級。'
+         + '要拿更高的分數，得換一張考。</p>';
+    }
+
+    /* ---- 兩個時鐘 ----
+       ⚠️ 拿不出去的成績不該有時程表。這裡第一版寫錯過：判定印「這段期間的成績不能用」，
+          底下卻照印「這張成績能用到 2027-01-15（還有 4 個月）」跟整套邀請日換算——
+          同一個面板裡兩邊打架，而且看起來還是「有時間」的那一邊比較大聲。
+          第二次是同一個形狀換一個分支：判定印「四項還沒到 Competent」，底下照樣印
+          「還有 2 年 6 個月」跟邀請日區間，讀起來像「不急」，其實那張成績永遠不會變成 Competent。
+       判準統一成一個：這張成績現在拿不拿得出去。拿不出去就不排時程，只講理由。 */
+    const noClock = blocked.length ? "blocked" : !g.level ? "under" : "";
+    if(noClock === "blocked"){
+      h += '<p><strong>到期日與邀請日的換算，這裡一律不印。</strong>'
+         + '那是給「能用的成績」算的——這一張不在那個範圍裡，'
+         + '硬算出來的日期只會讓你以為手上還有時間。要有日期可以排，得先有一張能用的成績。</p>';
+    } else if(noClock === "under"){
+      /* 效期這個事實還是給——別的簽證類別門檻不一樣，那個日期對他們有用；
+         但不能用「還有多久」的句型包裝它，那是在對一張進不了點數表的成績倒數。 */
+      h += '<p><strong>這張成績的 ' + E.validYears + ' 年效期算到 <b class="num">' + fmtD(exp) + '</b>'
+         + (left < 0 ? '（已經過了）' : '') + '，但那不是你現在該看的數字。</strong>'
+         + '四項沒有全部到 Competent，它就進不了點數表——效期再長也一樣，'
+         + '往回推邀請日對它沒有意義。你要處理的是重考，不是倒數。</p>';
+    } else {
+      h += '<p><strong>這張成績能用到 <b class="num">' + fmtD(exp) + '</b>'
+         + (left < 0 ? '（已經過了 ' + human(exp, now) + '）' : '（還有 ' + human(now, exp) + '）')
+         + '</strong>。規則是<b>遞件那天</b>往回看 ' + E.validYears + ' 年之內考的才算，'
+         + '不是從你拿到成績單那天起算 ' + E.validYears + ' 年。</p>';
+      if(left >= 0 && left <= 90){
+        h += '<p class="note"><b>不到 3 個月就到期。</b>重考不是說考就考——考位要排、成績也要幾天才出來。'
+           + '如果你的目標日期在到期之後，現在就該去看考位，不是等成績過期才發現。</p>';
+      }
+      if(base.clamped){
+        h += '<p class="note">考試日是 ' + fmtD(td) + '，加 ' + E.validYears
+           + ' 年之後那個月沒有這一天，這裡夾到當月最後一天。官方沒有寫月底怎麼算，'
+           + '所以往前夾——<b>寧可早一天，也不要多報你剩下的時間</b>。</p>';
+      }
+      if(!isT1){
+        h += '<p class="note"><b>舊制成績另有一條絕對大限：' + E.oldExpiry + '。</b>'
+           + '官方腳註寫的是 <i>&ldquo;until 6 August 2028, inclusive&rdquo;</i>。'
+           + '很多人把它讀成「所有舊成績都能用到 2028」——不是。'
+           + (capped ? '你自己的 ' + E.validYears + ' 年比那條大限晚，所以以 ' + E.oldExpiry + ' 為準。'
+                     : '你自己的 ' + E.validYears + ' 年在 ' + fmtD(base.d)
+                       + ' 就到了，比那條大限早，所以以你自己的日期為準。')
+           + '</p>';
+      }
+    }
+
+    /* ---- 時鐘二：兩邊量的終點不一樣。只有「現在拿得出去」的成績才算得出邀請日 ---- */
+    if(noClock){
+      /* 理由上面已經講過了，這裡不再補一段——重複講會把版面拉長，反而稀釋掉那句話。 */
+    } else if(left < 0){
+      h += '<p><strong>邀請日的換算這裡跳過。</strong>這張成績的 ' + E.validYears
+         + ' 年已經走完了，往回推得到的只會是一個早就過去的日期——'
+         + '那不是時程表，是一扇已經關上的門。先去安排重考；'
+         + '拿到新成績之後技術評估那一邊的日期也要跟著重算一次。</p>';
+    } else {
+      const sa = saD;   /* 上面判 tone 的時候已經算過一次了，這裡不重算 */
+      const draw = (dlIn.value || "").trim();
+      let dd = null, ddOver = false, ddBad = false;
+      if(draw !== ""){
+        const n = Number(draw);
+        if(isFinite(n) && n >= 0){ dd = Math.floor(n); if(dd > E.inviteDays){ ddOver = true; dd = E.inviteDays; } }
+        else ddBad = true;
+      }
+
+      h += '<p><strong>換算成「最晚什麼時候要收到邀請」</strong>——英文的 ' + E.validYears
+         + ' 年量到<b>遞件</b>那天，技術評估的 ' + E.validYears + ' 年量到<b>收到邀請</b>那天。'
+         + '兩邊起算點不同、終點也不同，所以它們不會同時到期；'
+         + '邀請到遞件之間你花掉的每一天，都是從英文那一邊扣。</p>';
+
+      /* 底下每一個日期都是拿 inviteDays 往回推出來的，所以那個數字的出處要看得見。
+         原本只寫在 DATA 的註解裡——註解不是頁面，讀者沒有辦法質疑一個他看不到的東西。
+         連同適用範圍一起講：這句話是在 189 那一頁抓到的，190／491 兩頁上沒有同一句，
+         我沒查到就不能替它們背書。 */
+      h += '<p class="note">底下的日期全靠 <b class="num">' + E.inviteDays
+         + '</b> 天這個數字往回推。它的出處是 189 積分測驗那一頁：<i>&ldquo;You have '
+         + E.inviteDays + ' days from the date of your invitation to apply for the visa.&rdquo;</i>——'
+         + '<b>這句話我只在 189 那一頁查到。</b>190／491 走州提名，流程不一樣，'
+         + '那兩頁上找不到同一句話——你要走那兩條的話，這個天數請自己再確認一次。</p>';
+
+      const engNow = exp;                                /* 收到邀請當天就遞件 */
+      const engMax = shiftDays(exp, -E.inviteDays);      /* 用滿 189 的 60 天邀請期 */
+      const engCmp = dd === null ? engMax : shiftDays(exp, -dd);
+      /* ⚠️ 這個「最晚邀請日」算得出來，不代表它還在未來。
+         成績剩不到 60 天的時候，用滿邀請期的那個日期早就過去了，
+         而原本的寫法照印「最晚落在 2026-08-02 到 2026-10-01 之間」——
+         把一個過去的日期擺在「最晚」的位置，讀起來像還有得排。 */
+      const gone = dayGap(now, engCmp) < 0;
+      let engLine;
+      if(dd === null){
+        engLine = '英文這一邊：邀請日最晚落在 <b class="num">' + fmtD(engMax) + '</b> 到 <b class="num">'
+          + fmtD(engNow) + '</b> 之間，差別只在你收到邀請後隔幾天才遞件。'
+          + '<b>沒填就抓前面那個日期</b>——那是把 189 的 ' + E.inviteDays + ' 天邀請期用好用滿的情況。';
+        if(gone) engLine += '<b>但那個保守日期已經過去了</b>（今天 ' + fmtD(now) + '）——'
+          + '這張成績只剩 <b class="num">' + left + '</b> 天，'
+          + '就算現在收到邀請也用不滿 ' + E.inviteDays + ' 天的邀請期，'
+          + '收到之後要在 ' + left + ' 天內遞出去。';
+        if(ddBad) engLine += '（遞件天數那一格看不懂，當成沒填。）';
+      } else {
+        engLine = '英文這一邊：你填的是收到邀請後 <b class="num">' + dd + '</b> 天遞件，'
+          + '所以邀請日最晚是 <b class="num">' + fmtD(engCmp) + '</b>。';
+        if(gone) engLine += '<b>那一天已經過了</b>（今天 ' + fmtD(now) + '）——'
+          + '這張成績只剩 <b class="num">' + left + '</b> 天，'
+          + '隔 ' + dd + ' 天再遞件的話會撞到期日。';
+        if(dd === 0) engLine += '（0 天＝當天就送。這跟「留空」不是同一件事：'
+          + '留空是還不知道，0 是你確定當天送得出去。）';
+        if(ddOver) engLine += '<b>你填的天數超過 ' + E.inviteDays + ' 天</b>，'
+          + '但 189 的邀請期就是 ' + E.inviteDays + ' 天，過了邀請本身就失效——這裡照 '
+          + E.inviteDays + ' 天算。';
+      }
+
+      /* ⚠️ 英文那一邊已經有 `gone` 在守「算得出來 ≠ 還在未來」，技術評估這一邊當初沒有——
+         同一個形狀漏一半。核發日夠舊的話（例：2022-01-01），這裡會印出
+         「邀請日最晚是 2025-01-01」，一個十九個月前的日期擺在「最晚」的位置，
+         讀起來像還有得排。兩邊的守法要一致，不然守住的那一邊只會讓人更相信另一邊。
+         `saLatest` / `saGap` / `saGone` 現在在上面判 tone 的地方一起算，這裡直接用——
+         同一件事算兩次，就是這個站上抓了十七次的那個形狀本身。 */
+      let saLine;
+      if(!saLatest){
+        saLine = '技術評估這一邊：<b>你沒填核發日，所以這一邊沒有日期可以比。</b>'
+          + '它的 ' + E.validYears + ' 年量到<b>收到邀請</b>那天，跟英文量的終點不一樣——'
+          + '兩個都填進來，才看得出哪一扇門先關。';
+      } else if(saGone){
+        saLine = '技術評估這一邊：核發日 <b class="num">' + fmtD(sa) + '</b>，'
+          + '它的 ' + E.validYears + ' 年在 <b class="num">' + fmtD(saLatest.d)
+          + '</b> 就走完了——<b>那一天已經過了</b>（今天 ' + fmtD(now) + '）。'
+          + '這張評估現在收到邀請也不算數，得先重做一份；'
+          + '拿到新的核發日之後，這一區的日期要整個重算一次。';
+      } else {
+        saLine = '技術評估這一邊：核發日 <b class="num">' + fmtD(sa) + '</b>，邀請日最晚是 <b class="num">'
+          + fmtD(saLatest.d) + '</b>。官方原文：<i>&ldquo;a suitable skills assessment … '
+          + 'which has been obtained within the 60 day invitation period&rdquo;</i>，'
+          + '量的是<b>邀請日</b>不是遞件日。<b>評估書上如果自己寫了更短的效期，以短的為準。</b>';
+        if(saGap <= 90) saLine += '<b>而且只剩 <span class="num">' + saGap + '</span> 天。</b>'
+          + '技術評估重做要跑機構的流程，不是幾天的事——現在就該去問，不是等它過期。';
+      }
+      h += '<ul><li>' + engLine + '</li><li>' + saLine + '</li></ul>';
+
+      if(saLatest){
+        const diff = dayGap(engCmp, saLatest.d);   /* > 0 代表技術評估比較晚到期 */
+        if(saGone){
+          /* 已經關上的門不叫「先關」。這裡要講的是現況不是時程。
+             底下那句 dd===null 的補述在這一支會把同一個日期講第二次，所以就地收掉，
+             改成在自己這句話裡標明它是保守值——同一件事講兩次會把重點稀釋掉。 */
+          h += '<p class="note"><strong>技術評估那一邊已經關了。</strong>'
+             + '英文那一邊還開著，到 <b class="num">' + fmtD(engCmp) + '</b>'
+             + (dd === null ? '（保守值，因為你沒填遞件要隔幾天）' : '')
+             + '——但兩扇門要同時開著才遞得出去，'
+             + '所以現在沒有「最晚哪一天」可以排。先把評估重做出來，這一區的日期才有意義。</p>';
+        } else if(diff === 0){
+          /* 「先關的是：兩邊同一天」讀起來像在回答一個它沒回答的問題。
+             同一天就直接講同一天，不要套進「誰先關」那個句型。 */
+          h += '<p class="note"><strong>兩扇門同一天關：<b class="num">' + fmtD(engCmp) + '</b>。</strong>'
+             + '那天之後才收到邀請，兩邊同時不算數，沒有一邊可以撐著等另一邊。';
+        } else {
+          const first = diff > 0 ? "英文" : "技術評估";
+          h += '<p class="note"><strong>先關的是：' + first + '。</strong>'
+             + '兩邊差 <b class="num">' + Math.abs(diff) + '</b> 天。你能收到邀請的最晚日期是 <b class="num">'
+             + fmtD(diff > 0 ? engCmp : saLatest.d) + '</b>——那天之後才收到邀請，'
+             + first + '那一邊已經不算數了。';
+        }
+        /* saGone 那一支已經自己收尾了（它把保守值寫進自己的句子裡，
+           再補一次會把同一個日期講第二遍）。 */
+        if(!saGone){
+          if(dd === null) h += '（英文那一邊用的是保守值 ' + fmtD(engMax) + '，'
+            + '因為你沒填遞件要隔幾天。）';
+          h += '</p>';
+        }
+      }
+    }
+
+    /* 阻斷型的那幾條已經排在最前面了，這裡只印剩下的，不要重複印一次。
+       用補集而不是 `!blocked.length`——同一個日期可能同時命中一條阻斷、一條提醒，
+       用後者會把那條提醒一起吃掉。 */
+    const softWin = win.filter(w => w.kind !== "bad");
+    if(softWin.length){
+      let ws = "";
+      softWin.forEach(w => { ws += '<li>' + w.text + '</li>'; });
+      h += '<p><strong>你這個考試日期落在官方特別註記的區間裡：</strong></p><ul>' + ws + '</ul>';
+    }
+    if(dayGap(now, td) > 0){
+      h += '<p class="note">你填的考試日期還沒到（<b>' + fmtD(td) + '</b>）。'
+         + '上面照算，當成「如果那天考出這個成績」——但官方認的是成績單上的那一天。</p>';
+    }
+
+    h += '<p class="note"><strong>這裡算的是「哪一級、還剩多久」，不是「你會不會過」。</strong>'
+       + '點數要看 <a href="#pr">/pr</a> 的整張表；而且官方在這三頁上都寫了 '
+       + '<i>depending on the visa subclass</i>——各簽證類別對英文的要求與效期規定不完全一樣，'
+       + '遞件前務必回你那一類的頁面對一次。</p></div>';
+
+    box.className = "ans " + tone;
+    box.innerHTML = '<div class="verdict">' + verdict + '</div>' + h;
+  }
+
+  go.addEventListener("click", run);
+  dateIn.addEventListener("change", fillTests);
+  ["#edate","#el","#er","#ew","#es","#esa","#edelay"].forEach(id => {
     $(id).addEventListener("keydown", e => { if(e.key === "Enter") run(); });
   });
 })();

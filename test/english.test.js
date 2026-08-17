@@ -1,0 +1,548 @@
+#!/usr/bin/env node
+/* 英文區（/english）的回歸測試。
+ *
+ * 這一區為什麼特別容易錯：它同時處理**兩張門檻表**與**兩個效期時鐘**，
+ * 而這四樣東西的邊界日期彼此不同——
+ *   — 2025-08-07 換表（考試日在這天之前之後，對的是完全不同的門檻）
+ *   — 2028-08-06 舊制成績的絕對大限
+ *   — 成績本身的 3 年（量到**遞件**那天）
+ *   — 技術評估的 3 年（量到**收到邀請**那天）
+ * 網路上的中文懶人包幾乎都只講「IELTS 各 6 就有 Competent」，
+ * 上面四條沒有一條被講清楚，而每一條都足以讓一份遞件作廢。
+ *
+ * 這支測試釘的不只是算術，還有**兩種不可以回頭的呈現方式**：
+ *   （1）判定說不能用，內文不准照印到期日與邀請日換算；
+ *   （2）四項沒到 Competent 的成績不准用「還有 N 年」倒數。
+ * 這兩條都是實際發生過的——第一版兩樣都印了，斷言全綠，
+ * 是把面板印成純文字讀出來才看見的（test/render.js）。
+ *
+ * 跑法：node test/english.test.js
+ */
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+const HTML = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
+
+/* 與 settle.test.js／pr.test.js／flags.test.js 同一套切法，同樣刻意複製而不共用：
+   這幾支測試的存在理由就是彼此獨立，共用工具會讓「改一支壞三支」。 */
+function slice(startPattern) {
+  const i = HTML.indexOf(startPattern);
+  if (i < 0) throw new Error("在 index.html 找不到：" + startPattern);
+  const open = HTML.indexOf("{", i);
+  let depth = 0, inStr = null, esc = false;
+  for (let j = open; j < HTML.length; j++) {
+    const ch = HTML[j];
+    if (inStr) {
+      if (esc) { esc = false; continue; }
+      if (ch === "\\") { esc = true; continue; }
+      if (ch === inStr) inStr = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") { inStr = ch; continue; }
+    if (ch === "/" && HTML[j + 1] === "*") { j = HTML.indexOf("*/", j) + 1; continue; }
+    if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) return HTML.slice(i, j + 1); }
+  }
+  throw new Error("大括號沒有配對成功：" + startPattern);
+}
+function oneLine(needle) {
+  const i = HTML.indexOf(needle);
+  if (i < 0) throw new Error("在 index.html 找不到：" + needle);
+  return HTML.slice(i, HTML.indexOf("\n", i));
+}
+
+/* /english 共用 /pr 的日期工具（ymd／norm／dayGap／fmtD／human），
+   所以連著整段 tail 切——切一半會變成 ReferenceError 而不是紅字，很難查。 */
+const PR_HEAD = "/* ================= 年齡時鐘與點數";
+if (HTML.indexOf(PR_HEAD) < 0) throw new Error("找不到 PR／定居區塊");
+const tailBlock = HTML.slice(HTML.indexOf(PR_HEAD), HTML.lastIndexOf("</script>"));
+const ENG_HEAD = "(function english(){";
+if (tailBlock.indexOf(ENG_HEAD) < 0) throw new Error("找不到 /english 區塊");
+
+const SRC = [slice("const DATA = {"), oneLine("const esc = s =>"), oneLine("const el = (t,c,h) =>"), tailBlock].join(";\n");
+
+/* ---- 極簡假 DOM ---- */
+let NOW = [2026, 8, 17];
+const RealDate = Date;
+function FakeDate(...a) {
+  if (a.length === 0) return new RealDate(NOW[0], NOW[1] - 1, NOW[2]);
+  return new RealDate(...a);
+}
+FakeDate.UTC = RealDate.UTC;
+FakeDate.now = () => new RealDate(NOW[0], NOW[1] - 1, NOW[2]).getTime();
+
+function mkEl(tag) {
+  return {
+    tag, className: "", innerHTML: "", value: "", hidden: true, max: "",
+    dataset: {}, children: [], _h: {},
+    appendChild(c) { this.children.push(c); return c; },
+    setAttribute() {},
+    addEventListener(ev, fn) { this._h[ev] = fn; },
+    dispatchEvent(ev) { const f = this._h[ev && ev.type]; if (f) f(); },
+  };
+}
+const boxes = {};
+["#eans", "#ego", "#etest", "#edate", "#el", "#er", "#ew", "#es", "#esa", "#edelay", "#etbl"]
+  .forEach(k => { boxes[k] = mkEl("div"); });
+const sandbox = {
+  Math, Number, String, console, isFinite, parseFloat,
+  Date: FakeDate,
+  Event: function (t) { return { type: t }; },
+  document: { createElement: mkEl, querySelector() { return null; } },
+  $: sel => boxes[sel] || mkEl("div"),
+};
+vm.createContext(sandbox);
+vm.runInContext(SRC + ";\nglobalThis.DATA = DATA;\nglobalThis.dayGap = dayGap;\nglobalThis.ymd = ymd;", sandbox);
+
+const E = sandbox.DATA.eng;
+const dayGap = sandbox.dayGap;
+const ymd = sandbox.ymd;
+
+function flat(node) {
+  return (node.innerHTML || "") + node.children.map(flat).join("");
+}
+
+/* 一次操作 = 填日期 → 觸發換表 → 選考試 → 填四項 → 按鈕。
+   換表一定要在選考試之前，順序反了會被 fillTests() 覆蓋掉 value——
+   這正是畫面上的真實順序，測試不該偷跑。 */
+function run(o) {
+  if (o.now) NOW = o.now; else NOW = [2026, 8, 17];
+  boxes["#edate"].value = o.date || "";
+  const ch = boxes["#edate"]._h.change; if (ch) ch();
+  if (o.test) boxes["#etest"].value = o.test;
+  ["#el", "#er", "#ew", "#es"].forEach((k, i) => {
+    boxes[k].value = o.sc && o.sc[i] !== undefined && o.sc[i] !== null ? String(o.sc[i]) : "";
+  });
+  boxes["#esa"].value = o.sa || "";
+  boxes["#edelay"].value = o.delay === undefined ? "" : String(o.delay);
+  const box = boxes["#eans"];
+  box.className = ""; box.innerHTML = ""; box.hidden = true;
+  boxes["#ego"]._h.click();
+  return {
+    tone: box.className.replace("ans", "").trim(),
+    verdict: (box.innerHTML.match(/<div class="verdict">([\s\S]*?)<\/div>/) || [, ""])[1],
+    html: box.innerHTML,
+    hidden: box.hidden,
+  };
+}
+
+let pass = 0, fail = 0;
+function ok(name, cond, extra) {
+  if (cond) { pass++; console.log("✓ " + name); }
+  else { fail++; console.log("✗ " + name + (extra ? "\n    " + extra : "")); }
+}
+
+/* ================================================ 1. 資料自洽 */
+console.log("— 資料自洽 —");
+
+ok("兩張表的分界日對得上：t1.from 就是 cutover",
+  E.t1.from === E.cutover, "cutover=" + E.cutover + " t1.from=" + E.t1.from);
+ok("t2.until 恰好是 cutover 的前一天",
+  dayGap(ymd(E.t2.until), ymd(E.cutover)) === 1,
+  "until=" + E.t2.until + " cutover=" + E.cutover);
+
+let shapeBad = [];
+[["t1", E.t1], ["t2", E.t2]].forEach(([tn, tb]) => {
+  Object.keys(tb.tests).forEach(k => {
+    const t = tb.tests[k];
+    if (!t.name) shapeBad.push(tn + "." + k + " 沒有 name");
+    E.levels.forEach(lv => {
+      const th = t[lv.k];
+      if (th == null) return;                      /* 這張考試沒有這一級，合法 */
+      if (Array.isArray(th)) {
+        if (th.length !== 4) shapeBad.push(tn + "." + k + "." + lv.k + " 不是四項");
+        if (th.some(x => typeof x !== "number" || !isFinite(x)))
+          shapeBad.push(tn + "." + k + "." + lv.k + " 有非數字");
+      } else if (typeof th !== "string") {
+        shapeBad.push(tn + "." + k + "." + lv.k + " 既不是四項陣列也不是字母級");
+      }
+    });
+  });
+});
+ok("每張考試的每一級不是四項數字就是字母級", shapeBad.length === 0, shapeBad.join("、"));
+
+/* 門檻必須由低到高單調不減。抄表最常見的錯是把某一項抄反，
+   而抄反之後計算機仍然「算得出答案」——只是答案是錯的，不會有人發現。 */
+let mono = [];
+[["t1", E.t1], ["t2", E.t2]].forEach(([tn, tb]) => {
+  Object.keys(tb.tests).forEach(k => {
+    const t = tb.tests[k];
+    const chain = ["competent", "proficient", "superior"].map(x => t[x]).filter(Array.isArray);
+    for (let i = 1; i < chain.length; i++)
+      for (let j = 0; j < 4; j++)
+        if (chain[i][j] < chain[i - 1][j])
+          mono.push(tn + "." + k + " 第 " + E.parts[j] + " 項：" + chain[i - 1][j] + " → " + chain[i][j]);
+  });
+});
+ok("每張考試的門檻由 Competent → Proficient → Superior 單調不減", mono.length === 0, mono.join("、"));
+
+ok("levels 由高到低排，points 三級都有對應分數",
+  E.levels.map(l => l.k).join(",") === "superior,proficient,competent" &&
+  E.points.superior === 20 && E.points.proficient === 10 && E.points.competent === 0);
+ok("舊制表比新制表少三種考試（CELPIP／MET／LANGUAGECERT 不在上面）",
+  ["celpip", "met", "lc"].every(k => E.t1.tests[k] && !E.t2.tests[k]));
+ok("noCalc 裡的每一項都真的存在於某一張表",
+  E.noCalc.every(k => E.t1.tests[k] || E.t2.tests[k]), E.noCalc.join("、"));
+
+/* ================================================ 2. 換表 */
+console.log("\n— 換表（" + E.cutover + "）—");
+
+ok("cutover 當天走新制表（IELTS Academic 存在）",
+  run({ date: E.cutover, test: "ieltsA", sc: [7, 7, 7, 7] }).html.includes("Table 1"));
+ok("cutover 前一天走舊制表",
+  run({ date: E.t2.until, test: "ielts", sc: [7, 7, 7, 7] }).html.includes("Table 2"));
+
+/* 舊制表上沒有 ieltsA（它叫 ielts），換表之後 fillTests() 必須把 value 換掉，
+   不能靜默留著一個不存在的選項——/cost 的 ctrans 就是被這個咬過一次。 */
+run({ date: "2026-01-01", test: "ieltsA", sc: [7, 7, 7, 7] });        /* 先讓選單停在 ieltsA */
+boxes["#edate"].value = "2024-01-01";
+boxes["#edate"]._h.change();
+ok("換到舊制表之後，選單的 value 不會留在新制才有的考試上",
+  Object.keys(E.t2.tests).indexOf(boxes["#etest"].value) >= 0 ||
+  E.noCalc.indexOf(boxes["#etest"].value) < 0 && !!E.t2.tests[boxes["#etest"].value],
+  "換表後 value=" + boxes["#etest"].value);
+
+const wrongTbl = run({ date: "2024-03-01", test: "celpip", sc: [9, 9, 10, 9] });
+ok("硬選一個舊制表沒有的考試 → 走「這張表上沒有這個考試」，不靜默改判",
+  wrongTbl.tone === "bad" && wrongTbl.verdict.includes("沒有這個考試"),
+  wrongTbl.verdict);
+ok("那條路要說明舊制表只有幾種考試，不是只說「錯了」",
+  wrongTbl.html.includes(String(Object.keys(E.t2.tests).length) + " 種考試"));
+
+ok("選單不列 OET（字母級不進計算機）",
+  boxes["#etest"].innerHTML.indexOf('value="oet"') < 0);
+
+/* ================================================ 3. 沒填 / 填不全 */
+console.log("\n— 沒填 / 填不全 —");
+
+const blank = run({});
+ok("什麼都沒填 → 先要考試日期，不是先罵分數", blank.tone === "warn" && blank.verdict.includes("考試日期"));
+ok("答案框一定先取消 hidden", blank.hidden === false);
+
+const half = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7] });
+ok("四項只填兩項 → 判不出級別", half.tone === "warn" && half.verdict.includes("四項"));
+ok("而且要講出「不能拿其他三項推」", half.html.includes("不能拿其他三項推"));
+ok("負數當成沒填", run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, -1] }).verdict.includes("四項"));
+ok("看不懂的字當成沒填", run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, "七"] }).verdict.includes("四項"));
+ok("千分位逗號當成沒填（成績單上不會有逗號）",
+  run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, "7,0"] }).verdict.includes("四項"));
+
+/* ================================================ 4. 級別判定 */
+console.log("\n— 級別判定 —");
+
+const prof = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7] });
+ok("IELTS A 7/7/7/7 → Proficient 10 分", prof.verdict.includes("Proficient") && prof.verdict.includes("10 分"));
+ok("判定裡的級別與分數之間有間隔，不會黏成「Proficient10 分」",
+  !/Proficient\d/.test(prof.verdict), prof.verdict);
+
+const sup = run({ date: "2026-02-17", test: "ieltsA", sc: [8, 8, 8, 8] });
+ok("IELTS A 8/8/8/8 → Superior 20 分", sup.verdict.includes("Superior") && sup.verdict.includes("20 分"));
+
+/* 四項各自比、不能互補：三項爆表、一項差 0.5，仍然只是下面那一級。 */
+const noAvg = run({ date: "2026-02-17", test: "ieltsA", sc: [9, 9, 7.5, 9] });
+ok("三項 9 分、寫作 7.5 → 還是 Proficient（不看平均、不能互補）",
+  noAvg.verdict.includes("Proficient"), noAvg.verdict);
+ok("而且要指名差在哪一項、差多少", noAvg.html.includes("寫 差 0.5"));
+
+const comp = run({ date: "2026-02-17", test: "ieltsA", sc: [6, 6, 6, 6] });
+ok("IELTS A 6/6/6/6 → Competent，tone 是 warn 不是 ok",
+  comp.verdict.includes("Competent") && comp.tone === "warn", comp.tone + " / " + comp.verdict);
+
+const under = run({ date: "2026-02-17", test: "ieltsA", sc: [5, 5.5, 5, 6] });
+ok("四項沒到 Competent → bad", under.tone === "bad" && under.verdict.includes("還沒到 Competent"));
+ok("沒到 Competent 時不再重複列一次「還差」（上面每一列已經標了 ✗）",
+  !under.html.includes("再上一級是"), "多印了「再上一級是」");
+ok("要講清楚 Competent 是門檻不是選項", under.html.includes("不是可以跳過的一級"));
+
+const met = run({ date: "2026-02-17", test: "met", sc: [70, 70, 80, 70] });
+ok("MET 到 Proficient 就沒有更高的了", met.verdict.includes("Proficient"));
+ok("而且要講明「這張考試沒有 Superior 這一級」",
+  met.html.includes("沒有 Superior 這一級"), met.html.slice(0, 200));
+ok("MET 頂級之後不會再印「再上一級是」", !met.html.includes("再上一級是"));
+
+/* 每一張考試都要能在自己的門檻上剛好判到那一級——抄表抄錯會在這裡整批紅。 */
+let exact = [];
+Object.keys(E.t1.tests).forEach(k => {
+  if (E.noCalc.indexOf(k) >= 0) return;
+  E.levels.forEach(lv => {
+    const th = E.t1.tests[k][lv.k];
+    if (!Array.isArray(th)) return;
+    const r = run({ date: "2026-02-17", test: k, sc: th });
+    if (!r.verdict.includes(lv.n)) exact.push(k + " 剛好 " + lv.n + " 的門檻卻判成「" + r.verdict + "」");
+  });
+});
+ok("新制表每張考試、每一級，剛好踩在門檻上都判得到那一級", exact.length === 0, exact.join("\n    "));
+
+/* 門檻減一分就要掉下來。只驗最低那一級（Competent），掉下去就是 null。 */
+let offByOne = [];
+Object.keys(E.t1.tests).forEach(k => {
+  if (E.noCalc.indexOf(k) >= 0) return;
+  const th = E.t1.tests[k].competent;
+  if (!Array.isArray(th)) return;
+  for (let i = 0; i < 4; i++) {
+    const sc = th.slice(); sc[i] = sc[i] - 0.5;
+    const r = run({ date: "2026-02-17", test: k, sc: sc });
+    if (!r.verdict.includes("還沒到 Competent")) offByOne.push(k + " 的" + E.parts[i] + "少 0.5 卻還算 Competent");
+  }
+});
+ok("Competent 門檻任何一項少 0.5 就掉下來（四項各自比）", offByOne.length === 0, offByOne.join("\n    "));
+
+/* ================================================ 5. 有效期 */
+console.log("\n— 有效期（" + E.validYears + " 年）—");
+
+const exp3 = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7] });
+ok("考試日 + 3 年就是到期日", exp3.html.includes("2029-02-17"));
+ok("要講清楚是量到「遞件那天」，不是拿成績那天起算",
+  exp3.html.includes("遞件那天") && exp3.html.includes("不是從你拿到成績單那天"));
+
+const leap = run({ date: "2024-02-29", test: "ielts", sc: [7, 7, 7, 7] });
+ok("2024-02-29 加 3 年夾到 2027-02-28（往前夾，不多報剩餘時間）",
+  leap.html.includes("2027-02-28"), leap.html.slice(0, 400));
+ok("夾過就要說出來，不能靜默改日期", leap.html.includes("夾到當月最後一天"));
+
+const near = run({ date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65] });
+ok("剩不到 3 個月 → tone 降成 warn", near.tone === "warn", near.tone);
+ok("而且要提醒考位要排、成績要等", near.html.includes("考位"));
+
+const dead = run({ date: "2022-08-17", test: "pte", sc: [65, 65, 65, 65] });
+ok("已經過期 → bad，判定要說「已經過期」", dead.tone === "bad" && dead.verdict.includes("已經過期"));
+
+/* ---- 舊制大限：證明 capped 那一支碰不到，而不是假設它碰不到 ---- */
+let cappedHit = null;
+{
+  const cap = ymd(E.oldExpiry);
+  let d = ymd("2000-01-01");
+  const last = ymd(E.t2.until);
+  while (dayGap(d, last) >= 0) {
+    const y = d[0] + E.validYears;
+    const lastDay = new Date(Date.UTC(y, d[1], 0)).getUTCDate();
+    const plus = [y, d[1], Math.min(d[2], lastDay)];
+    if (dayGap(cap, plus) > 0) { cappedHit = d.join("-") + " + 3 年 = " + plus.join("-") + "，晚於 " + E.oldExpiry; break; }
+    /* 往後一天 */
+    const nx = new Date(Date.UTC(d[0], d[1] - 1, d[2] + 1));
+    d = [nx.getUTCFullYear(), nx.getUTCMonth() + 1, nx.getUTCDate()];
+  }
+}
+ok("逐日掃 2000-01-01～" + E.t2.until + "：沒有任何一天的 3 年會晚過 " + E.oldExpiry
+  + "（所以 capped 是死支，突變它等於等價突變，不要寫那條突變）",
+  cappedHit === null, cappedHit);
+
+ok("舊制成績一律要印出那條絕對大限與官方腳註原文",
+  dead.html.includes(E.oldExpiry) && dead.html.includes("inclusive"));
+ok("而且要糾正「所有舊成績都能用到 2028」這個誤讀",
+  dead.html.includes("很多人把它讀成"));
+ok("新制成績不印那條大限（那是舊制專屬的）", !exp3.html.includes(E.oldExpiry));
+
+/* ================================================ 6. 不承認 / 特別註記區間 */
+console.log("\n— 官方特別註記的區間 —");
+
+const bad1 = run({ date: "2024-01-15", test: "toefl", sc: [30, 30, 30, 30] });
+ok("TOEFL 落在不承認區間 → bad，判定就說不能用",
+  bad1.tone === "bad" && bad1.verdict.includes("不能用"), bad1.verdict);
+ok("理由排在最前面，不是掉到最下面才講",
+  bad1.html.indexOf("不被承認") < bad1.html.indexOf("聽："), "不承認的說明排在逐項表格後面");
+
+/* ⚠️ 這四條是第一版真的印出來過的東西：判定寫「不能用」，內文照印到期日與整套邀請日換算。
+   斷言全綠、golden 也綠——因為兩邊都在同一個 innerHTML 裡，沒有任何一條斷言在比它們一致。 */
+ok("不能用的成績不准有到期日", !bad1.html.includes("這張成績能用到"), "又印了到期日");
+ok("不能用的成績不准做邀請日換算", !bad1.html.includes("最晚什麼時候要收到邀請"), "又印了邀請日換算");
+ok("不能用的成績不准出現「還有 N 年／個月」的倒數", !/還有 \d/.test(bad1.html), "又印了倒數");
+ok("要明講「這裡不印那些日期」以及為什麼", bad1.html.includes("要有日期可以排"));
+/* 逐項表照印，但四個 ✓ 不能讀成「你考到 Superior 了」——判定明明說整張不算數。 */
+ok("不能用的成績，逐項表前面要先拆掉「✓ ＝ 這張能用」的暗示",
+  bad1.html.includes("不是判定") && bad1.html.includes("打勾不代表這張拿得出去"),
+  "四個綠勾勾旁邊沒有任何一句話擋著");
+ok("那句話要排在逐項表之前，不是之後",
+  bad1.html.indexOf("打勾不代表") < bad1.html.indexOf("聽："));
+ok("過期的成績不套這句話（那一級他當年真的拿到了，兩句話不衝突）",
+  !dead.html.includes("打勾不代表這張拿得出去"));
+
+const bad1w = run({ date: "2024-01-15", test: "toefl", sc: [30, 30, 30, 30], sa: "2026-01-01", delay: 10 });
+ok("就算兩個時鐘都填了，不能用的成績照樣不印時鐘",
+  !bad1w.html.includes("先關的是") && !bad1w.html.includes("技術評估這一邊"));
+
+const soft = run({ date: "2024-06-01", test: "c1", sc: [200, 200, 200, 200] });
+ok("只認紙筆版那條是提醒不是阻斷 → tone 不是 bad", soft.tone !== "bad", soft.tone);
+ok("提醒型的區間排在下面，用「特別註記」的句型", soft.html.includes("特別註記的區間"));
+ok("提醒型不影響到期日的計算", soft.html.includes("2027-06-01"));
+ok("不承認的那條不會重複印兩次（阻斷型排在最前面就不再進下面的清單）",
+  (bad1.html.match(/不被承認/g) || []).length === 1);
+
+/* 區間的兩端都要含在內。TOEFL 那條是 2023-07-26 ～ 2024-05-04。 */
+const w = E.windows.filter(x => x.kind === "bad")[0];
+ok("不承認區間的起日當天就算在內",
+  run({ date: w.from, test: w.test, sc: [30, 30, 30, 30] }).tone === "bad");
+ok("不承認區間的迄日當天還算在內",
+  run({ date: w.to, test: w.test, sc: [30, 30, 30, 30] }).tone === "bad");
+{
+  const before = new Date(Date.UTC(ymd(w.from)[0], ymd(w.from)[1] - 1, ymd(w.from)[2] - 1));
+  const bstr = before.toISOString().slice(0, 10);
+  const r = run({ date: bstr, test: w.test, sc: [30, 30, 30, 30] });
+  ok("起日前一天不在區間內（" + bstr + "）", r.tone !== "bad" || !r.verdict.includes("不能用"), r.verdict);
+}
+
+/* ================================================ 7. 四項沒到 Competent 不准倒數 */
+console.log("\n— 沒到 Competent 就不排時程 —");
+
+ok("沒到 Competent → 不印「這張成績能用到」的倒數句型",
+  !under.html.includes("這張成績能用到"), "又用倒數句型包裝一張進不了點數表的成績");
+ok("沒到 Competent → 不做邀請日換算",
+  !under.html.includes("最晚什麼時候要收到邀請"));
+ok("但效期這個事實還是要給（別的簽證類別門檻不一樣）",
+  under.html.includes("2029-02-17") && under.html.includes("效期"));
+ok("而且要明說那不是現在該看的數字", under.html.includes("不是你現在該看的數字"));
+
+const underClocks = run({ date: "2026-02-17", test: "ieltsA", sc: [5, 5, 5, 5], sa: "2026-01-01", delay: 10 });
+ok("沒到 Competent 時，就算兩個時鐘都填了也不印",
+  !underClocks.html.includes("先關的是") && !underClocks.html.includes("兩扇門同一天關"));
+
+/* ================================================ 8. 邀請日換算 */
+console.log("\n— 邀請日換算（189 的 " + E.inviteDays + " 天邀請期）—");
+
+ok("留空 → 給區間，並說明保守值是用滿邀請期",
+  prof.html.includes("2028-12-19") && prof.html.includes("用好用滿"));
+
+const d0 = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: 0 });
+ok("填 0 天 → 邀請日就是到期日本身", d0.html.includes("2029-02-17"));
+ok("而且要說明 0 跟留空不是同一件事", d0.html.includes("留空是還不知道"));
+
+const d90 = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: 90 });
+ok("填超過 " + E.inviteDays + " 天 → 夾到 " + E.inviteDays + " 天並說明邀請本身會失效",
+  d90.html.includes("超過 " + E.inviteDays + " 天") && d90.html.includes("2028-12-19"));
+
+const dbad = run({ date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: "abc" });
+ok("遞件天數看不懂 → 當成沒填並講出來", dbad.html.includes("看不懂"));
+
+/* ⚠️ 算得出來不等於還在未來。成績剩不到 60 天時，用滿邀請期的那個日期早就過去了。 */
+ok("保守邀請日已經過去時要講出來，不能擺在「最晚」的位置裝作還有得排",
+  near.html.includes("已經過去了") && near.html.includes("45 天"), near.html.slice(-600));
+const gone2 = run({ date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65], delay: 60 });
+ok("填了具體天數而那一天也過了，同樣要講", gone2.html.includes("那一天已經過了"));
+
+/* ================================================ 9. 兩個時鐘誰先關 */
+console.log("\n— 兩個時鐘 —");
+
+const engFirst = run({ date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2026-06-17", delay: 30 });
+ok("英文先關", engFirst.html.includes("先關的是：英文") && engFirst.html.includes("2028-08-02"));
+
+const saFirst = run({ date: "2026-06-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2024-02-17" });
+ok("技術評估先關", saFirst.html.includes("先關的是：技術評估") && saFirst.html.includes("2027-02-17"));
+ok("沒填遞件天數時要標注英文那邊用的是保守值", saFirst.html.includes("保守值"));
+
+const same = run({ date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2025-09-01", delay: 0 });
+ok("同一天關 → 不套用「先關的是」句型", !same.html.includes("先關的是"), same.html.slice(-400));
+ok("同一天關 → 直接講同一天", same.html.includes("兩扇門同一天關"));
+
+/* ⚠️ 英文那一邊的「算得出來 ≠ 還在未來」守住了，技術評估那一邊當初漏掉——
+   同一個形狀只守一半，比兩邊都不守更危險：守住的那一邊會讓人更相信另一邊。 */
+const saDead = run({ date: "2026-06-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2022-01-01" });
+ok("技評的 3 年已經走完 → 不把那個過去的日期擺在「最晚」的位置",
+  !saDead.html.includes("邀請日最晚是 <b class=\"num\">2025-01-01"), saDead.html.slice(-700));
+ok("而且要明說那一天已經過了、要重做",
+  saDead.html.includes("那一天已經過了") && saDead.html.includes("得先重做一份"));
+ok("技評已經關了就不套「先關的是」句型（關上的門不叫先關）",
+  !saDead.html.includes("先關的是") && saDead.html.includes("技術評估那一邊已經關了"));
+ok("而且要講清楚兩扇門要同時開著才遞得出去",
+  saDead.html.includes("兩扇門要同時開著"));
+
+const saNear = run({ date: "2026-06-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2023-08-20", delay: 10 });
+ok("技評剩不到 3 個月 → 比照英文那一邊提醒（重做要跑機構流程）",
+  saNear.html.includes("只剩 <span class=\"num\">3</span> 天") && saNear.html.includes("跑機構的流程"),
+  saNear.html.slice(-700));
+ok("技評還很久 → 不亂加急迫提醒", !saFirst.html.includes("跑機構的流程"));
+
+/* ⚠️ 第十七次同一個形狀，這次說謊的是面板最上面那兩個訊號。
+   內文寫著「技術評估那一邊已經關了」，顏色是綠的、判定印「Proficient　10 分」——
+   顏色跟判定是第一眼看到的東西，內文在最底下。這幾條把上下兩截綁在一起。 */
+ok("技評過期 → 判定不准只印「Proficient 10 分」就結束",
+  saDead.verdict.includes("技術評估已過期"), saDead.verdict);
+ok("而且不准是綠的（兩扇門要同時開著才遞得出去）", saDead.tone === "warn", saDead.tone);
+ok("但也不降到 bad——他的英文成績本身沒問題，重做評估就能接著走",
+  saDead.tone !== "bad" && saDead.verdict.includes("Proficient"), saDead.verdict);
+ok("技評剩不到 3 個月 → 顏色也要跟著降，不能只寫在內文",
+  saNear.tone === "warn", saNear.tone);
+ok("但還沒過期就不加「已過期」那句（剩 3 天不等於過了）",
+  !saNear.verdict.includes("技術評估已過期"), saNear.verdict);
+ok("技評還很久 → 顏色與判定都不受影響",
+  saFirst.tone === "ok" && !saFirst.verdict.includes("技術評估"), saFirst.tone + " / " + saFirst.verdict);
+ok("沒填核發日 → 不因為「沒填」就降色（那是還沒做評估，不是評估過期）",
+  prof.tone === "ok" && !prof.verdict.includes("技術評估"), prof.tone + " / " + prof.verdict);
+/* 成績本身就拿不出去的時候，判定要講的是成績，不是評估——
+   在「這段期間的成績不能用」後面再接一句技評，會讓人以為評估才是主因。 */
+ok("成績本身不能用時，判定不摻技評那一句",
+  !run({ date: "2024-01-15", test: "toefl", sc: [30, 30, 30, 30], sa: "2022-01-01" })
+    .verdict.includes("技術評估已過期"));
+
+ok("沒填技術評估核發日 → 明說這一邊沒有日期可以比，不留白",
+  prof.html.includes("沒填核發日"));
+ok("要講清楚兩邊量的終點不一樣（遞件 vs 收到邀請）",
+  prof.html.includes("量到<b>遞件</b>那天") && prof.html.includes("量到<b>收到邀請</b>那天"));
+ok("技術評估那一邊要附官方原文與「以短的為準」",
+  saFirst.html.includes("60 day invitation period") && saFirst.html.includes("以短的為準"));
+
+/* 已過期的成績不做邀請日換算——往回推只會得到一個早就過去的日期。 */
+ok("已過期 → 不做邀請日換算", !dead.html.includes("最晚什麼時候要收到邀請"));
+ok("已過期 → 但到期日本身還是要印（那是他要知道的事實）", dead.html.includes("2025-08-17"));
+ok("已過期 → 要明說換算跳過的理由", dead.html.includes("一扇已經關上的門"));
+
+/* ================================================ 10. 字母級的出口 */
+console.log("\n— 字母級（舊制 OET）—");
+{
+  /* noCalc 把 OET 擋在選單外，所以正常操作到不了這裡。但 grade() 回的
+     {letter:true} 沒有 level 也沒有 gone，如果 run() 沒有出口就是**拋例外**，
+     而拋在 click handler 裡的例外會讓面板停在上一次的結果——靜默停格。 */
+  boxes["#edate"].value = "2024-01-01";
+  boxes["#edate"]._h.change();
+  boxes["#etest"].value = "oet";
+  ["#el", "#er", "#ew", "#es"].forEach(k => { boxes[k].value = "350"; });
+  boxes["#esa"].value = ""; boxes["#edelay"].value = "";
+  const box = boxes["#eans"];
+  box.className = ""; box.innerHTML = ""; box.hidden = true;
+  let threw = null;
+  try { boxes["#ego"]._h.click(); } catch (e) { threw = e.message; }
+  ok("硬選字母級的舊制 OET 不會拋例外（拋了就是面板靜默停格）", threw === null, threw);
+  ok("而且要講得出話，不是空白", box.innerHTML.includes("字母級"), box.innerHTML.slice(0, 200));
+}
+
+/* ================================================ 11. 門檻總表（開檔就渲染） */
+console.log("\n— 門檻總表 —");
+const tbl = flat(boxes["#etbl"]);
+ok("總表列出新制表的每一張考試",
+  Object.keys(E.t1.tests).every(k => tbl.includes(E.t1.tests[k].name)),
+  Object.keys(E.t1.tests).filter(k => !tbl.includes(E.t1.tests[k].name)).join("、"));
+ok("總表右欄是 Competent 門檻，四項用 / 分隔",
+  tbl.includes(E.t1.tests.ieltsA.competent.join(" / ")));
+ok("MET 在總表上就標明沒有 Superior", tbl.includes("這張考試沒有這一級"));
+ok("總表要說明舊制表少了哪三種考試", tbl.includes("沒有 CELPIP、MET、LANGUAGECERT"));
+ok("總表要重申四項各自比、不看平均", tbl.includes("四項各自比"));
+ok("官方把 LANGUAGECERT 拼錯這件事要留在頁面上", tbl.includes("LANGUGECERT"));
+
+/* ================================================ 12. 版面與事實 */
+console.log("\n— 版面 —");
+ok("nav 有 /english 的入口", /href="#english"/.test(HTML));
+ok("section#english 存在且掛載點都在",
+  /<section class="tool" id="english">/.test(HTML) &&
+  ["eans", "etbl", "epass", "eflags", "englishsrc"].every(id => HTML.includes('id="' + id + '"')));
+ok("八個輸入欄位都在",
+  ["edate", "etest", "el", "er", "ew", "es", "esa", "edelay"].every(id => HTML.includes('id="' + id + '"')));
+ok("要講清楚分數不會離開瀏覽器", HTML.includes("分數只留在你自己的瀏覽器裡"));
+ok("台灣護照沒有免試路這件事要留著", HTML.includes("台灣護照沒有免試路"));
+ok("線上版考試不被承認的清單要在頁面上",
+  ["IELTS Online", "TOEFL iBT – Home Edition", "OET@Home"].every(s => HTML.includes(s)));
+ok("depending on the visa subclass 這個但書要留著", HTML.includes("depending on the visa subclass"));
+/* 這一條刻意驗**渲染後的面板**而不是原始碼：原文是用字串串接組出來的，
+   在原始碼裡查不到完整那一句。而且註解裡有不算數——讀者看不到註解，
+   看不到就沒辦法質疑一個他被要求相信的數字。 */
+ok("189 的 " + E.inviteDays + " 天邀請期在面板上有官方原文接地",
+  prof.html.includes("You have " + E.inviteDays + " days from the date of your invitation to apply for the visa."),
+  "面板上找不到那句原文");
+ok("而且要標明這句話只在 189 那一頁查得到，190／491 沒有替它背書",
+  prof.html.includes("只在 189 那一頁查到") && prof.html.includes("190／491"));
+ok("拿不出去的成績連這段出處說明都不印（它屬於邀請日換算的一部分）",
+  !bad1.html.includes("You have " + E.inviteDays + " days") &&
+  !under.html.includes("You have " + E.inviteDays + " days"));
+
+console.log("\n" + (fail === 0 ? "全數通過" : "有失敗") + "：" + pass + " 過 / " + fail + " 失敗");
+process.exit(fail === 0 ? 0 : 1);

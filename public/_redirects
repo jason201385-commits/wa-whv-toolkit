@@ -11,6 +11,9 @@
 /after      /#after      302
 /landing    /#landing    302
 /ask        /#ask        302
+/pr         /#pr         302
+/english    /#english    302
+/settle     /#settle     302
 
 # 常見別名（有人會憑印象打）
 /visa       /#regional   302
@@ -29,3 +32,9 @@
 /scammed    /#after      302
 /start      /#landing    302
 /tfn        /#landing    302
+/points     /#pr         302
+/189        /#pr         302
+/eng        /#english    302
+/ielts      /#english    302
+/pte        /#english    302
+/toefl      /#english    302

@@ -173,7 +173,7 @@ for (const k of srcArrays) {
 }
 is(bare, 0, "沒有網址的來源");
 is(undated, 0, "日期格式不對的來源");
-is(srcArrays.length, 10, "有來源清單的區塊數");
+is(srcArrays.length, 11, "有來源清單的區塊數");
 
 console.log("\n" + (fail === 0 ? "全數通過" : "有失敗") + "：" + pass + " 過 / " + fail + " 失敗");
 process.exit(fail === 0 ? 0 : 1);

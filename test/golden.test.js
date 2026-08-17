@@ -66,6 +66,10 @@ function oneLine(needle) {
    而那張表的重點正好是「哪個金額對到哪一條路」。 */
 const plain = h => h
   .replace(/<\/t[dh]>/g, "　│　").replace(/<\/tr>/g, "\n")
+  /* `.kv .n` 的 CSS 是 display:block，畫面上它自己一行。攤平時不補這個斷行的話，
+     門檻總表會變成「IELTS AcademicProficient 7 / 7…」——名稱跟門檻黏在一起，
+     快照就讀不出來了，而快照的全部價值就是讀得出來。 */
+  .replace(/<span class="n">/g, "\n")
   .replace(/<\/li>|<\/p>|<\/div>/g, "\n").replace(/<br\s*\/?>/g, "\n")
   .replace(/<[^>]+>/g, "").replace(/&ldquo;|&rdquo;/g, '"').replace(/&mdash;/g, "—")
   .split("\n").map(l => l.trim()).filter(Boolean).join("\n");
@@ -312,6 +316,117 @@ function head(kind, label) {
   /* 還沒出發、在台灣先規劃的人。輸入框的 max 會擋掉未來日期（見 index.html 的 b.max），
      所以 UI 上走不到這一格——但演算法不該因此爆掉，快照留著當防線。 */
   scene("離台日填未來（還沒出發，先規劃）", "2027-01-01", "");
+})();
+
+/* ═══════════════════════════ /english ═══════════════════════════
+   這一區的快照值特別高，因為它最容易壞的方式**斷言抓不到**：
+   判定說「這張成績不能用」，同一個 innerHTML 底下卻照印到期日、倒數、
+   整套邀請日換算。兩邊都在同一段字串裡，任何比對單一欄位的斷言都會全綠。
+   把面板印成純文字擺在這裡，改壞的時候一眼就看得到多出來的那幾行。
+   日期同樣全部寫絕對值——相對日期會讓快照每天長不一樣。 */
+(function () {
+  const PR_HEAD = "/* ================= 年齡時鐘與點數";
+  const tailBlock = HTML.slice(HTML.indexOf(PR_HEAD), HTML.lastIndexOf("</script>"));
+  const SRC = [slice("const DATA = {"), oneLine("const esc = s =>"),
+    oneLine("const el = (t,c,h) =>"), tailBlock].join(";\n");
+
+  const NOW = [2026, 8, 17];
+  const RealDate = Date;
+  function FakeDate(...a) {
+    if (a.length === 0) return new RealDate(NOW[0], NOW[1] - 1, NOW[2]);
+    return new RealDate(...a);
+  }
+  FakeDate.UTC = RealDate.UTC;
+  FakeDate.now = () => new RealDate(NOW[0], NOW[1] - 1, NOW[2]).getTime();
+  FakeDate.prototype = RealDate.prototype;
+
+  function mkEl(tag) {
+    return {
+      tag, className: "", innerHTML: "", value: "", hidden: true, max: "",
+      dataset: {}, children: [], _h: {},
+      appendChild(c) { this.children.push(c); return c; },
+      setAttribute() {},
+      addEventListener(ev, fn) { this._h[ev] = fn; },
+      dispatchEvent(ev) { const f = this._h[ev && ev.type]; if (f) f(); },
+    };
+  }
+  const boxes = {};
+  ["#eans", "#ego", "#etest", "#edate", "#el", "#er", "#ew", "#es", "#esa", "#edelay", "#etbl"]
+    .forEach(k => { boxes[k] = mkEl("div"); });
+  const sb = {
+    Math, Number, String, console, isFinite, parseFloat, Date: FakeDate,
+    Event: function (t) { return { type: t }; },
+    document: { createElement: mkEl, querySelector() { return null; } },
+    $: s => boxes[s] || mkEl("div"),
+  };
+  vm.createContext(sb);
+  vm.runInContext(SRC, sb);
+
+  function flat(n) {
+    const kids = n.children.map(flat);
+    const inner = (n.innerHTML || "") + (n.tag === "li" ? kids.join("　│　") : kids.join(""));
+    return (n.tag === "li" || n.tag === "p") ? inner + "\n" : inner;
+  }
+
+  head("/english", "門檻總表（開檔就渲染，不必按按鈕）");
+  put(plain(flat(boxes["#etbl"])));
+
+  /* 順序＝畫面上的真實順序：填日期 → 換表 → 才選考試。
+     反過來的話 fillTests() 會把 value 蓋掉，快照就不是使用者看到的東西。 */
+  function scene(label, o) {
+    boxes["#edate"].value = o.date || "";
+    const ch = boxes["#edate"]._h.change; if (ch) ch();
+    if (o.test) boxes["#etest"].value = o.test;
+    ["#el", "#er", "#ew", "#es"].forEach((k, i) => {
+      boxes[k].value = o.sc && o.sc[i] !== undefined ? String(o.sc[i]) : "";
+    });
+    boxes["#esa"].value = o.sa || "";
+    boxes["#edelay"].value = o.delay === undefined ? "" : String(o.delay);
+    const b = boxes["#eans"];
+    b.className = ""; b.innerHTML = ""; b.hidden = true;
+    boxes["#ego"]._h.click();
+    head("/english", label);
+    put("輸入：考試日=" + (o.date || "（空）") + "　考試=" + (o.test || "（預設）")
+      + "　四項=" + (o.sc ? o.sc.join("/") : "（空）")
+      + "　技評核發日=" + (o.sa || "（空）")
+      + "　遞件隔幾天=" + (o.delay === undefined ? "（空）" : o.delay)
+      + "　假今天=" + NOW.join("-"));
+    put("tone：" + b.className.replace("ans", "").trim() + "　hidden：" + b.hidden);
+    put("──── 畫面 ────");
+    put(plain(b.innerHTML));
+  }
+
+  scene("什麼都沒填", {});
+  scene("四項只填兩項", { date: "2026-02-17", test: "ieltsA", sc: [7, 7] });
+  scene("新制・Proficient・兩個時鐘都沒填", { date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7] });
+  scene("新制・Superior", { date: "2026-02-17", test: "ieltsA", sc: [8, 8, 8, 8] });
+  scene("新制・剛好 Competent", { date: "2026-02-17", test: "ieltsA", sc: [6, 6, 6, 6] });
+  /* 三項 9 分、寫作差 0.5——「不看平均、不能互補」這句話的具體長相。 */
+  scene("三項爆表・寫作差 0.5", { date: "2026-02-17", test: "ieltsA", sc: [9, 9, 7.5, 9] });
+  /* ⚠️ 這一格是那個 bug 的現場：判定寫「還沒到 Competent」，
+     舊版底下照印「這張成績能用到 2029-02-17（還有 2 年 6 個月）」跟整套邀請日換算。 */
+  scene("四項沒到 Competent（不准倒數、不准算邀請日）",
+    { date: "2026-02-17", test: "ieltsA", sc: [5, 5.5, 5, 6], sa: "2026-01-01", delay: 10 });
+  scene("MET 到頂（這張考試沒有 Superior）", { date: "2026-02-17", test: "met", sc: [70, 70, 80, 70] });
+  /* ⚠️ 同一個形狀的另一個分支：判定寫「不能用」，舊版底下照印到期日與邀請日。 */
+  scene("落在不承認區間（不准印任何日期）",
+    { date: "2024-01-15", test: "toefl", sc: [30, 30, 30, 30], sa: "2026-01-01", delay: 10 });
+  scene("落在提醒型區間（只認紙筆版）", { date: "2024-06-01", test: "c1", sc: [200, 200, 200, 200] });
+  scene("舊制表・硬選一個表上沒有的考試", { date: "2024-03-01", test: "celpip", sc: [9, 9, 10, 9] });
+  scene("2/29 考的・加三年夾到 2/28", { date: "2024-02-29", test: "ielts", sc: [7, 7, 7, 7] });
+  /* ⚠️ 第三個形狀：算得出「最晚邀請日」不代表它還在未來。
+     成績只剩 45 天時，用滿 60 天邀請期的那個日期早就過去了。 */
+  scene("剩不到 3 個月・保守邀請日已成過去式", { date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65] });
+  scene("已經過期（不做邀請日換算）", { date: "2022-08-17", test: "pte", sc: [65, 65, 65, 65] });
+  scene("兩個時鐘・英文先關", { date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2026-06-17", delay: 30 });
+  scene("兩個時鐘・技術評估先關", { date: "2026-06-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2024-02-17" });
+  scene("兩扇門同一天關", { date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2025-09-01", delay: 0 });
+  /* ⚠️ 第四個形狀，也是同一個：英文那一邊守了「算得出來 ≠ 還在未來」，
+     技術評估那一邊當初沒守——核發日 2022-01-01 會印出「邀請日最晚是 2025-01-01」。 */
+  scene("技評的 3 年早就走完（不准擺在「最晚」的位置）",
+    { date: "2026-06-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2022-01-01" });
+  scene("技評剩不到 3 個月", { date: "2026-06-17", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2023-08-20", delay: 10 });
+  scene("遞件天數填超過 60 天", { date: "2026-02-17", test: "ieltsA", sc: [7, 7, 7, 7], delay: 90 });
 })();
 
 /* ═══════════════════════════ 比對 ═══════════════════════════ */

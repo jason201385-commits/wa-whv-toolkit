@@ -33,6 +33,10 @@ function oneLine(n) { const i = HTML.indexOf(n); return HTML.slice(i, HTML.index
    ——而那張表的重點正好是「哪個金額對到哪一條路」。 */
 const plain = h => h
   .replace(/<\/t[dh]>/g, "　│　").replace(/<\/tr>/g, "\n")
+  /* `.kv .n` 的 CSS 是 display:block，畫面上它自己一行。攤平時不補這個斷行，
+     門檻總表會變成「IELTS AcademicProficient 7 / 7…」——名稱跟門檻黏在一起。
+     這支的全部用途就是讓人讀，讀不出來就等於沒印。 */
+  .replace(/<span class="n">/g, "\n")
   .replace(/<\/li>|<\/p>|<\/div>/g, "\n").replace(/<br\s*\/?>/g, "\n")
   .replace(/<[^>]+>/g, "").replace(/&ldquo;|&rdquo;/g, '"').replace(/&mdash;/g, "—")
   .split("\n").map(l => l.trim()).filter(Boolean).join("\n");
@@ -141,4 +145,75 @@ const daysAgo = n => { const d = new Date(TODAY); d.setDate(d.getDate() - n); re
   show("只填 PR 核准日（6 天前）", "", daysAgo(6));
   show("兩個都填，都還在倒數", monthsAgo(18), daysAgo(6));
   show("兩個都過期了（離台 40 個月、PR 8 個月前）", monthsAgo(40), monthsAgo(8));
+})();
+
+/* ================= /english =================
+   /english 的 IIFE 跟 /settle 同在一段 tail 裡（它共用 ymd／dayGap／human），
+   所以這裡切的是同一段程式碼，只是換一組掛載點來看它自己的輸出。 */
+(function () {
+  const tail = HTML.slice(HTML.indexOf("/* ================= 年齡時鐘與點數"), HTML.lastIndexOf("</script>"));
+  const SRC = [slice("const DATA = {"), oneLine("const esc = s =>"), oneLine("const el = (t,c,h) =>"), tail].join(";\n");
+
+  function mkEl(tag) {
+    return { tag, className: "", innerHTML: "", value: "", hidden: true, max: "", dataset: {}, children: [], _h: {},
+      appendChild(c) { this.children.push(c); return c; }, setAttribute() {},
+      addEventListener(ev, fn) { this._h[ev] = fn; }, dispatchEvent(ev) { const f = this._h[ev && ev.type]; if (f) f(); } };
+  }
+  const boxes = {};
+  ["#eans", "#ego", "#etest", "#edate", "#el", "#er", "#ew", "#es", "#esa", "#edelay", "#etbl"]
+    .forEach(k => { boxes[k] = mkEl("div"); });
+  const sb = { Math, Number, String, console, isFinite, parseFloat, Date,
+    Event: function (t) { return { type: t }; },
+    document: { createElement: mkEl, querySelector() { return null; } },
+    $: s => boxes[s] || mkEl("div") };
+  vm.createContext(sb); vm.runInContext(SRC, sb);
+
+  function flat(n) {
+    const kids = n.children.map(flat);
+    const inner = (n.innerHTML || "") + (n.tag === "li" ? kids.join("　│　") : kids.join(""));
+    return (n.tag === "li" || n.tag === "p") ? inner + "\n" : inner;
+  }
+  console.log("\n═══ /english　門檻總表（開檔就渲染） ═══");
+  console.log(plain(flat(boxes["#etbl"])));
+
+  /* 每一格都要單獨看一次：選單換表、四項沒填滿、剛好差一項、過期、
+     兩個時鐘誰先關——文案在其中一種狀態下讀起來會怪，是常見的退化方式。 */
+  function show(label, o) {
+    boxes["#edate"].value = o.date || "";
+    boxes["#edate"]._h.change && boxes["#edate"]._h.change();   /* 換表 */
+    if (o.test) boxes["#etest"].value = o.test;
+    ["#el", "#er", "#ew", "#es"].forEach((k, i) => { boxes[k].value = o.sc ? String(o.sc[i]) : ""; });
+    boxes["#esa"].value = o.sa || "";
+    boxes["#edelay"].value = o.delay === undefined ? "" : String(o.delay);
+    const b = boxes["#eans"]; b.className = ""; b.innerHTML = ""; b.hidden = true;
+    boxes["#ego"]._h.click();
+    console.log("\n═══ /english　" + label + "　[" + b.className.replace("ans", "").trim() + "] ═══");
+    console.log(plain(b.innerHTML));
+  }
+  show("什麼都沒填", {});
+  show("四項只填了兩項", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, "", ""] });
+  show("IELTS A 7/7/7/7・沒填技術評估", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7] });
+  show("IELTS A 8/8/7.5/8・寫作差 0.5 就 Superior", { date: monthsAgo(6), test: "ieltsA", sc: [8, 8, 7.5, 8] });
+  show("MET 頂到 Proficient 就沒有更高的了", { date: monthsAgo(6), test: "met", sc: [70, 70, 80, 70] });
+  show("PTE 舊制・成績已過期（4 年前）", { date: monthsAgo(48), test: "pte", sc: [65, 65, 65, 65] });
+  show("TOEFL 落在 2023-07-26～2024-05-04 不承認區間", { date: "2024-01-15", test: "toefl", sc: [30, 30, 30, 30] });
+  show("C1 舊制・落在只認紙筆版的區間", { date: "2024-06-01", test: "c1", sc: [200, 200, 200, 200] });
+  /* ⚠️ 這一格本來寫 monthsAgo(30)，那是 2024 年、落在舊制表，而舊制表上沒有 ieltsA，
+        於是它一路走進「這張表上沒有這個考試」——標籤寫著要看兩個時鐘，實際上一個都沒印。
+        要看兩個時鐘就得用新制表的日期（≥ 2025-08-07）。 */
+  show("兩個時鐘都填・英文先關", { date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(2), delay: 30 });
+  show("兩個時鐘都填・技術評估先關", { date: monthsAgo(2), test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(30) });
+  show("兩扇門剛好同一天關", { date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: "2025-09-01", delay: 0 });
+  /* 這兩格看的是技術評估那半邊的「算得出來 ≠ 還在未來」。英文那一邊本來就有守，
+     技評那一邊漏到 2026-08-17 才補——只守一半比兩邊都不守更危險，
+     因為守住的那一邊會讓人更相信另一邊。 */
+  show("技術評估的 3 年早就走完（不准擺在「最晚」的位置）",
+    { date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(55) });
+  show("技術評估剩不到 3 個月（重做要跑機構流程）",
+    { date: "2025-09-01", test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(34), delay: 10 });
+  show("舊制成績剩不到 3 個月就到期", { date: "2023-10-01", test: "pte", sc: [65, 65, 65, 65] });
+  show("遞件天數填 0（跟留空不一樣）", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(6), delay: 0 });
+  show("遞件天數填 90（超過 60 天邀請期）", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(6), delay: 90 });
+  show("四項連 Competent 都沒到", { date: monthsAgo(6), test: "ieltsA", sc: [5, 5.5, 5, 6] });
+  show("換到舊制表之後選了新制才有的 CELPIP", { date: "2024-03-01", test: "celpip", sc: [9, 9, 10, 9] });
 })();

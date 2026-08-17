@@ -68,6 +68,7 @@ test/
   pr.test.js          年齡時鐘與點數試算的回歸測試（官方點數表逐格對照）
   settle.test.js      定居兩個時鐘的回歸測試（換照費用、期限算術、四句不准退版的事實）
   flags.test.js       旗標對帳：標了「待核」的資料一定要真的印得出「待核」
+  english.test.js     英文門檻與兩個時鐘的回歸測試（新舊兩張表、效期、邀請日換算）
   mutate.js           突變測試：故意改壞 index.html 一個字，看測試會不會紅
   render.js           把答案面板印成純文字給人讀（唯讀）
 ```
@@ -92,15 +93,16 @@ node test/cost.test.js
 node test/pr.test.js
 node test/settle.test.js
 node test/flags.test.js
+node test/english.test.js
 ```
 
-零相依套件，合計 608 個案例（時薪 28、生活成本 388、點數 71、定居 106、旗標對帳 15）。五支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
+零相依套件，合計 725 個案例（時薪 28、生活成本 388、點數 71、定居 106、旗標對帳 15、英文 117）。六支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
 
-另外四支不算進上面的數字，因為它們驗的不是網站，是**上面那五支到底有沒有在測東西**：
+另外四支不算進上面的數字，因為它們驗的不是網站，是**上面那六支到底有沒有在測東西**：
 
 ```bash
-node test/golden.test.js   # 快照：36 個場景的答案面板逐字比對（含剪貼簿那一份）
-node test/mutate.js        # 突變測試：改壞一個字，看測試會不會紅（目前 53 條全被抓到）
+node test/golden.test.js   # 快照：57 個場景的答案面板逐字比對（含剪貼簿那一份）
+node test/mutate.js        # 突變測試：改壞一個字，看測試會不會紅（目前 70 條全被抓到）
 node test/render.js        # 把答案面板印成純文字，用眼睛讀一遍（唯讀）
 node test/counts.js        # 對帳：這兩份 README 寫的數字跟實際跑出來的對不對得上
 ```
@@ -116,7 +118,7 @@ node test/counts.js        # 對帳：這兩份 README 寫的數字跟實際跑�
 在「PR 已核准」那個狀態下根本不存在的倒數；`/cost` 的「這筆 有機會整筆免掉」中間有個孤兒空格。
 **改完文案跑一次，然後真的把它讀完**；只跑不讀等於沒跑。
 
-**動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`；動過 `checkAge()`、點數試算或 `DATA.pr` 一定要跑 `pr.test.js`；動過 `/settle` 的任何日期算術或文案、或 `DATA.settle` 一定要跑 `settle.test.js`；動過任何 renderer 或加了新的來源清單一定要跑 `flags.test.js`。**
+**動過 `checkRate()` 或 `DATA.wage` 一定要跑 `wage.test.js`；動過 `checkCost()`、`whmTaxCents()`、`comparePrice()` 或 `DATA.cost` 一定要跑 `cost.test.js`；動過 `checkAge()`、點數試算或 `DATA.pr` 一定要跑 `pr.test.js`；動過 `/settle` 的任何日期算術或文案、或 `DATA.settle` 一定要跑 `settle.test.js`；動過 `/english` 的門檻、效期、邀請日換算或 `DATA.eng` 一定要跑 `english.test.js`；動過任何 renderer 或加了新的來源清單一定要跑 `flags.test.js`。**
 
 前四支對應的是會主動對使用者說出改變他行為的話的路徑：
 

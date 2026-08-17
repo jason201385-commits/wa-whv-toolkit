@@ -10,7 +10,7 @@
  * 它不猜也不改：只把**跑出來的數字**跟**README 寫的數字**擺在一起，對不上就 exit 1。
  * 要改的是 README，不是這支。
  *
- * 跑法：node test/counts.js      （會依序跑完六支測試，約十幾秒）
+ * 跑法：node test/counts.js      （會依序跑完七支測試，約十幾秒）
  */
 "use strict";
 const fs = require("fs");
@@ -59,7 +59,7 @@ function runSuite(name) {
   return out;
 }
 
-/* -------------------------------------------------- 五支斷言型測試的案例數 */
+/* -------------------------------------------------- 六支斷言型測試的案例數 */
 console.log("— 各支案例數 —");
 const SUITES = [
   { file: "wage",   re: /wage\.test\.js\s+時薪判定的回歸測試（(\d+) 個案例）/ },
@@ -67,6 +67,7 @@ const SUITES = [
   { file: "pr",     re: /pr\.test\.js\s+年齡時鐘與點數試算的回歸測試（(\d+) 個案例）/ },
   { file: "settle", re: /settle\.test\.js\s+定居兩個時鐘與換照費用的回歸測試（(\d+) 個案例）/ },
   { file: "flags",  re: /flags\.test\.js\s+旗標對帳（(\d+) 個案例）/ },
+  { file: "english", re: /english\.test\.js\s+英文門檻與兩個時鐘的回歸測試（(\d+) 個案例）/ },
 ];
 let total = 0;
 for (const s of SUITES) {
