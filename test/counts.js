@@ -122,10 +122,58 @@ if (g !== null) {
    而 test/ 底下有四支不算進案例數的工具（golden、mutate、render、counts），
    少描述的那兩支就是這一條原本看不到的東西。 */
 console.log("\n— 檔案樹 —");
-const files = fs.readdirSync(__dirname).filter(f => f.endsWith(".js")).sort();
-for (const [where, src] of [["public/README.md", README], ["README.md", ROOT_README]]) {
-  const missing = files.filter(f => !src.includes(f));
-  ok("test/ 底下每一支都寫進 " + where + " 了", missing.length ? "少了 " + missing.join("、") : 0, 0);
+/* 掃 test/ 底下**每一個檔**，不是只掃 .js：golden.txt 是 golden.test.js 的預期輸出，
+   一份沒有人描述的 1300 行快照，接手的人不會知道它是要用眼睛讀的。 */
+const files = fs.readdirSync(__dirname).sort();
+/* public/README.md 有真的檔案樹（縮排兩格 + 檔名 + 說明），所以對它要求樹狀條目，
+   不是全檔 includes——`node test/foo.js` 這種指令列在別的地方出現過就會讓
+   includes 通過，於是「有沒有描述它」跟「有沒有提到它」被混成同一件事。 */
+{
+  const missing = files.filter(f =>
+    !new RegExp("^ {2}" + f.replace(/\./g, "\\.") + " {2,}\\S", "m").test(README));
+  ok("test/ 底下每一支都在 public/README.md 的檔案樹裡",
+     missing.length ? "少了 " + missing.join("、") : 0, 0);
+}
+/* 根 README 也有一棵樹（在它第二個 ``` 區塊裡），所以用同一個門檻。
+   2026-08-17 之前這裡是全檔 includes，於是 golden.test.js 與 counts.js
+   靠著下面「怎麼跑」那幾行的 `node test/xxx.js` 指令通過了檢查——
+   **被指令提到，跟被描述過，是兩件事**，而檔案樹要的是後者。 */
+{
+  const missing = files.filter(f =>
+    !new RegExp("^ {2}" + f.replace(/\./g, "\\.") + " {2,}\\S", "m").test(ROOT_README));
+  ok("test/ 底下每一支都在 README.md 的檔案樹裡",
+     missing.length ? "少了 " + missing.join("、") : 0, 0);
+}
+
+/* -------------------------------------------------- 區塊清單有沒有漏 */
+/* 根 README 開頭那個 ``` 區塊是「這個站有哪幾段」的門面，而它是手打的。
+   2026-08-17 實測：`/english` 上線之後那份清單從頭到尾沒被加上去，
+   還留著「十一個區塊」——站上是十二個。數字對帳守得住案例數，
+   守不住「有一整段不見了」，因為那一段的測試案例全都好好的。
+   分母用 _redirects：那是部署真的會生效的檔，不是敘述。 */
+console.log("\n— 區塊清單 —");
+{
+  const REDIR = fs.readFileSync(path.join(ROOT, "public", "_redirects"), "utf8");
+  const real = [...REDIR.matchAll(/^\/([a-z]+)\s+\/#([a-z]+)\s/gm)]
+    .filter(m => m[1] === m[2]).map(m => m[1]);
+  const block = ROOT_README.split("```")[1] || "";
+  const listed = [...block.matchAll(/^\/([a-z]+)/gm)].map(m => m[1]);
+  if (real.length < 5) fail++, console.log("✗ 從 _redirects 只挖到 " + real.length + " 個區塊，這條等於沒在對");
+  else {
+    const miss = real.filter(x => !listed.includes(x));
+    const extra = listed.filter(x => !real.includes(x));
+    ok("根 README 的區塊清單", miss.length || extra.length
+      ? (miss.length ? "少列 " + miss.join("、") : "") + (extra.length ? " 多列 " + extra.join("、") : "")
+      : real.length, real.length);
+    /* 清單旁邊那句「N 個區塊」是另一個手打的數字，會跟清單各自腐壞。 */
+    const CN = "零一二三四五六七八九十";
+    const w = (ROOT_README.match(/([一二三四五六七八九十]+)個區塊/) || [])[1];
+    const n = w === undefined ? null
+      : w.length === 1 ? CN.indexOf(w)
+      : w[0] === "十" ? 10 + CN.indexOf(w[1])
+      : CN.indexOf(w[0]) * 10 + (w[2] ? CN.indexOf(w[2]) : 0);
+    ok("根 README 寫的「N 個區塊」", real.length, n);
+  }
 }
 
 console.log("\n" + (fail === 0 ? "全數通過：" : "") + pass + " 過 / " + fail + " 失敗");

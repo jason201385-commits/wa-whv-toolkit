@@ -350,9 +350,24 @@ function head(kind, label) {
       dispatchEvent(ev) { const f = this._h[ev && ev.type]; if (f) f(); },
     };
   }
+  /* `#etest` 要當成真的 <select>：指定選項以外的值會靜默變成 ""。
+     假 DOM 用普通屬性的話，快照拍到的是「測試塞進去的值」而不是「使用者看得到的值」，
+     於是換表把 IELTS 改判成 C1 這種事，快照裡永遠不會出現。 */
+  function mkSelect() {
+    const e = mkEl("select");
+    let v = "";
+    Object.defineProperty(e, "value", {
+      get() { return v; },
+      set(x) {
+        const opts = [...String(e.innerHTML).matchAll(/value="([^"]*)"/g)].map(m => m[1]);
+        v = opts.indexOf(String(x)) >= 0 ? String(x) : "";
+      },
+    });
+    return e;
+  }
   const boxes = {};
   ["#eans", "#ego", "#etest", "#edate", "#el", "#er", "#ew", "#es", "#esa", "#edelay", "#etbl"]
-    .forEach(k => { boxes[k] = mkEl("div"); });
+    .forEach(k => { boxes[k] = k === "#etest" ? mkSelect() : mkEl("div"); });
   const sb = {
     Math, Number, String, console, isFinite, parseFloat, Date: FakeDate,
     Event: function (t) { return { type: t }; },
@@ -371,12 +386,18 @@ function head(kind, label) {
   head("/english", "門檻總表（開檔就渲染，不必按按鈕）");
   put(plain(flat(boxes["#etbl"])));
 
-  /* 順序＝畫面上的真實順序：填日期 → 換表 → 才選考試。
-     反過來的話 fillTests() 會把 value 蓋掉，快照就不是使用者看到的東西。 */
+  /* 順序＝畫面上的真實順序：填日期 → 換表 → 才選考試（#edate 在 markup 裡就排在 #etest 前面）。
+     ⚠️ 但**這個順序剛好是安全的那一個**，只跑它等於沒在測換表。
+     真正會出事的是「填完之後回頭改日期」——年份打錯很常見，而改日期會重跑 fillTests()，
+     使用者沒有做任何選擇動作，選的考試就被換掉了。`o.redate` 就是那條路。 */
   function scene(label, o) {
+    /* 每個場景都當成重新開一次頁面：選單的 value 與 dataset.was 會跨場景殘留，
+       不清掉的話調換兩個場景的順序就會讓快照變樣，而那種差異查不出原因。 */
+    boxes["#etest"].innerHTML = ""; boxes["#etest"].value = ""; boxes["#etest"].dataset.was = "";
     boxes["#edate"].value = o.date || "";
     const ch = boxes["#edate"]._h.change; if (ch) ch();
     if (o.test) boxes["#etest"].value = o.test;
+    if (o.redate) { boxes["#edate"].value = o.redate; if (ch) ch(); }
     ["#el", "#er", "#ew", "#es"].forEach((k, i) => {
       boxes[k].value = o.sc && o.sc[i] !== undefined ? String(o.sc[i]) : "";
     });
@@ -386,7 +407,8 @@ function head(kind, label) {
     b.className = ""; b.innerHTML = ""; b.hidden = true;
     boxes["#ego"]._h.click();
     head("/english", label);
-    put("輸入：考試日=" + (o.date || "（空）") + "　考試=" + (o.test || "（預設）")
+    put("輸入：考試日=" + (o.date || "（空）")
+      + (o.redate ? "→改成 " + o.redate : "") + "　考試=" + (o.test || "（沒選）")
       + "　四項=" + (o.sc ? o.sc.join("/") : "（空）")
       + "　技評核發日=" + (o.sa || "（空）")
       + "　遞件隔幾天=" + (o.delay === undefined ? "（空）" : o.delay)
@@ -412,7 +434,17 @@ function head(kind, label) {
   scene("落在不承認區間（不准印任何日期）",
     { date: "2024-01-15", test: "toefl", sc: [30, 30, 30, 30], sa: "2026-01-01", delay: 10 });
   scene("落在提醒型區間（只認紙筆版）", { date: "2024-06-01", test: "c1", sc: [200, 200, 200, 200] });
-  scene("舊制表・硬選一個表上沒有的考試", { date: "2024-03-01", test: "celpip", sc: [9, 9, 10, 9] });
+  /* ⚠️ 換表的三種下場，全部走「填完再回頭改日期」——**不是硬塞 value**。
+     真的 <select> 選不到不存在的選項，硬塞出來的那條路使用者走不到，
+     快照拍下來只是在替一條死路背書。舊版這三格都是硬塞的，而兩張表的第一個
+     選項剛好都是 c1，所以「IELTS 被靜默改判成劍橋 C1」在舊快照裡看不出來。 */
+  scene("改日期換到舊制表・那張表沒有這個考試（CELPIP）",
+    { date: "2026-03-01", test: "celpip", redate: "2024-03-01", sc: [9, 9, 10, 9] });
+  scene("改日期換到新制表・IELTS 被拆成兩張（成績沒作廢，要重選）",
+    { date: "2024-03-01", test: "ielts", redate: "2026-03-01", sc: [7, 7, 7, 7] });
+  scene("改日期換到舊制表・ieltsA 要合併回 ielts 照常算分",
+    { date: "2026-03-01", test: "ieltsA", redate: "2024-03-01", sc: [7, 7, 7, 7] });
+  scene("完全沒選考試種類", { date: "2026-03-01", sc: [7, 7, 7, 7] });
   scene("2/29 考的・加三年夾到 2/28", { date: "2024-02-29", test: "ielts", sc: [7, 7, 7, 7] });
   /* ⚠️ 第三個形狀：算得出「最晚邀請日」不代表它還在未來。
      成績只剩 45 天時，用滿 60 天邀請期的那個日期早就過去了。 */

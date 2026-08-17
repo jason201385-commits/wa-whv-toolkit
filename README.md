@@ -19,10 +19,11 @@
 /landing   剛落地：TFN、Medicare、稅
 /ask       在群裡問之前，先問對問題
 /pr        留下來：年齡時鐘與技術移民點數試算
+/english   英文哪一級：成績單對回官方那張表（換表當天分界、成績效期兩個時鐘）
 /settle    定居的兩個時鐘：離台日算戶籍與健保，PR 核准日算駕照與超級年金
 ```
 
-十一個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
+十二個區塊各自的內容與設計理由在 [`public/README.md`](public/README.md)。
 
 ---
 
@@ -69,9 +70,13 @@ test/
   settle.test.js      定居兩個時鐘的回歸測試（換照費用、期限算術、四句不准退版的事實）
   flags.test.js       旗標對帳：標了「待核」的資料一定要真的印得出「待核」
   english.test.js     英文門檻與兩個時鐘的回歸測試（新舊兩張表、效期、邀請日換算）
+  golden.test.js      整段面板的純文字快照比對（含剪貼簿那一份），69 個場景
+  golden.txt          上面那 69 個場景的預期輸出，1339 行。**這份要用眼睛讀**：
+                      它是唯一一個「話說得對不對」看得出來的地方，diff 變了就要逐行看過
   contrast.test.js    對比度對帳：色票從 index.html 現挖，兩個主題逐組算 WCAG AA
   mutate.js           突變測試：故意改壞 index.html 一個字，看測試會不會紅
   render.js           把答案面板印成純文字給人讀（唯讀）
+  counts.js           對帳：這兩份 README 寫的數字與清單，跟實際跑出來的對不對得上
 ```
 
 沒有 `package.json`，因為沒有相依套件。要跑的只有 Node（測試用）跟一個瀏覽器。
@@ -97,13 +102,13 @@ node test/flags.test.js
 node test/english.test.js
 ```
 
-零相依套件，合計 756 個案例（時薪 28、生活成本 388、點數 71、定居 106、旗標對帳 15、英文 148）。六支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
+零相依套件，合計 764 個案例（時薪 28、生活成本 388、點數 71、定居 106、旗標對帳 15、英文 156）。六支都**直接從 `index.html` 挖出 `DATA` 與要測的函式用 `vm` 跑**，所以測到的一定是正式版程式碼，不是抄一份出來的副本（抄出來的副本會在你改了 `index.html` 之後繼續騙你說全過）。
 
 另外五支不算進上面的數字。其中四支驗的不是網站，是**上面那六支到底有沒有在測東西**；
 `contrast.test.js` 驗的是另一件斷言碰不到的東西——顏色：
 
 ```bash
-node test/golden.test.js   # 快照：66 個場景的答案面板逐字比對（含剪貼簿那一份）
+node test/golden.test.js   # 快照：69 個場景的答案面板逐字比對（含剪貼簿那一份）
 node test/mutate.js        # 突變測試：改壞一個字，看測試會不會紅（目前 76 條全被抓到）
 node test/render.js        # 把答案面板印成純文字，用眼睛讀一遍（唯讀）
 node test/counts.js        # 對帳：這兩份 README 寫的數字跟實際跑出來的對不對得上

@@ -83,9 +83,27 @@ function mkEl(tag) {
     dispatchEvent(ev) { const f = this._h[ev && ev.type]; if (f) f(); },
   };
 }
+/* `#etest` 一定要當成真的 <select> 來假造，不能用上面那個「value 是普通屬性」的 div。
+   真的 <select> **不接受選項以外的值**：指定一個選單上沒有的 value，它會靜默變成 ""。
+   假 DOM 少了這一條的代價不是漏測，是**反向背書**——測試可以在 fillTests() 跑完之後
+   直接把 value 塞成任何字串，於是 index.html 那條「這張表上沒有這個考試」在測試裡
+   走得到、在瀏覽器裡永遠走不到，而「換表把 IELTS 靜默改判成 C1」在這裡看不出來。
+   2026-08-17 QA 抓到的原話：修 fillTests 而不同時修這裡，下一輪會原地退化。 */
+function mkSelect() {
+  const e = mkEl("select");
+  let v = "";
+  Object.defineProperty(e, "value", {
+    get() { return v; },
+    set(x) {
+      const opts = [...String(e.innerHTML).matchAll(/value="([^"]*)"/g)].map(m => m[1]);
+      v = opts.indexOf(String(x)) >= 0 ? String(x) : "";
+    },
+  });
+  return e;
+}
 const boxes = {};
 ["#eans", "#ego", "#etest", "#edate", "#el", "#er", "#ew", "#es", "#esa", "#edelay", "#etbl"]
-  .forEach(k => { boxes[k] = mkEl("div"); });
+  .forEach(k => { boxes[k] = k === "#etest" ? mkSelect() : mkEl("div"); });
 const sandbox = {
   Math, Number, String, console, isFinite, parseFloat,
   Date: FakeDate,
@@ -120,13 +138,21 @@ const plain = h => String(h)
   .split("\n").map(l => l.trim()).filter(Boolean).join("\n");
 
 /* 一次操作 = 填日期 → 觸發換表 → 選考試 → 填四項 → 按鈕。
-   換表一定要在選考試之前，順序反了會被 fillTests() 覆蓋掉 value——
-   這正是畫面上的真實順序，測試不該偷跑。 */
+   markup 裡 #edate 在 #etest 前面（861 vs 863），所以這是畫面上的真實順序。
+   ⚠️ 但**這個順序剛好是安全的那一個**，而測試只跑安全順序，等於沒在測換表。
+   真正會出事的是「填完之後回頭改日期」——年份打錯很常見，而改日期會重跑
+   fillTests()，使用者沒有做任何選擇動作，選的考試就被換掉了。
+   `o.redate` 就是那條路：先照正常順序填完，再改一次日期，然後才按按鈕。 */
 function run(o) {
   if (o.now) NOW = o.now; else NOW = [2026, 8, 17];
+  /* 每個情境都當成重新開一次頁面。選單的 value 與 dataset.was **會跨情境殘留**，
+     不清掉的話「上一個情境選了什麼」會改變這一個情境的判定，
+     於是調換兩個情境的順序就會有紅的——那種紅查不出原因。 */
+  boxes["#etest"].innerHTML = ""; boxes["#etest"].value = ""; boxes["#etest"].dataset.was = "";
   boxes["#edate"].value = o.date || "";
   const ch = boxes["#edate"]._h.change; if (ch) ch();
   if (o.test) boxes["#etest"].value = o.test;
+  if (o.redate) { boxes["#edate"].value = o.redate; if (ch) ch(); }
   ["#el", "#er", "#ew", "#es"].forEach((k, i) => {
     boxes[k].value = o.sc && o.sc[i] !== undefined && o.sc[i] !== null ? String(o.sc[i]) : "";
   });
@@ -210,22 +236,54 @@ ok("cutover 當天走新制表（IELTS Academic 存在）",
 ok("cutover 前一天走舊制表",
   run({ date: E.t2.until, test: "ielts", sc: [7, 7, 7, 7] }).html.includes("Table 2"));
 
-/* 舊制表上沒有 ieltsA（它叫 ielts），換表之後 fillTests() 必須把 value 換掉，
-   不能靜默留著一個不存在的選項——/cost 的 ctrans 就是被這個咬過一次。 */
-run({ date: "2026-01-01", test: "ieltsA", sc: [7, 7, 7, 7] });        /* 先讓選單停在 ieltsA */
-boxes["#edate"].value = "2024-01-01";
-boxes["#edate"]._h.change();
-ok("換到舊制表之後，選單的 value 不會留在新制才有的考試上",
-  Object.keys(E.t2.tests).indexOf(boxes["#etest"].value) >= 0 ||
-  E.noCalc.indexOf(boxes["#etest"].value) < 0 && !!E.t2.tests[boxes["#etest"].value],
-  "換表後 value=" + boxes["#etest"].value);
+/* ---- 換表時「原本選的那一張」的三種下場 ----
+   這一組是 2026-08-17 QA 的核心：原本只斷言「換表後的 value 是舊表上的某一個 key」，
+   而**兩張表的第一個 key 都是 c1**，所以 `c1` 滿足那條斷言——
+   一個把 IELTS 考生改判成劍橋 C1 的 bug，在那條斷言底下是綠的。
+   斷言要指名「應該變成哪一個」，不能只問「是不是合法值」。 */
+{
+  /* ① 有等價的 → 對映過去。ieltsA 在舊表就是那一格 ielts，不是別的東西。 */
+  const eq = run({ date: "2026-01-01", test: "ieltsA", redate: "2024-01-01", sc: [7, 7, 7, 7] });
+  ok("換到舊制表：ieltsA 要對映成 ielts，不是落到表上的第一項",
+    boxes["#etest"].value === "ielts", "換表後 value=" + boxes["#etest"].value);
+  ok("對映過去之後照常算分（不是走錯誤訊息）",
+    !eq.verdict.includes("沒有這個考試") && eq.html.includes("Table 2"), eq.verdict);
 
-const wrongTbl = run({ date: "2024-03-01", test: "celpip", sc: [9, 9, 10, 9] });
-ok("硬選一個舊制表沒有的考試 → 走「這張表上沒有這個考試」，不靜默改判",
-  wrongTbl.tone === "bad" && wrongTbl.verdict.includes("沒有這個考試"),
-  wrongTbl.verdict);
-ok("那條路要說明舊制表只有幾種考試，不是只說「錯了」",
-  wrongTbl.html.includes(String(Object.keys(E.t2.tests).length) + " 種考試"));
+  /* ② 新表把它拆開了 → 不准替人挑一張，但也不准說「沒有這個考試」。 */
+  const sp = run({ date: "2024-01-01", test: "ielts", redate: "2026-01-01", sc: [7, 7, 7, 7] });
+  ok("換到新制表：ielts 不會被靜默改判成 c1", boxes["#etest"].value !== "c1",
+    "換表後 value=" + boxes["#etest"].value);
+  ok("而且要說「拆成兩種請重選」，不能說「這張表上沒有 IELTS」（那是假的）",
+    sp.verdict.includes("分成兩種") && !sp.verdict.includes("沒有這個考試"), sp.verdict);
+  ok("拆開那條路要明講成績沒作廢，否則讀者會以為整張成績不能用",
+    sp.html.includes("沒有作廢"));
+  ok("拆開是「要重選」不是「你不合格」，語氣不該用 bad", sp.tone === "warn", sp.tone);
+
+  /* ③ 新表真的沒有 → 既有的那條「這張表上沒有這個考試」。
+       注意這裡走的是**改日期**，不是硬塞 value：瀏覽器上選不到不存在的選項，
+       所以硬塞出來的那條路是測試自己造的，不是使用者走得到的。 */
+  const wrongTbl = run({ date: "2026-03-01", test: "celpip", redate: "2024-03-01", sc: [9, 9, 10, 9] });
+  ok("換到舊制表：CELPIP 走「這張表上沒有這個考試」，不靜默改判",
+    wrongTbl.tone === "bad" && wrongTbl.verdict.includes("沒有這個考試"), wrongTbl.verdict);
+  ok("那條路要說明舊制表只有幾種考試，不是只說「錯了」",
+    wrongTbl.html.includes(String(Object.keys(E.t2.tests).length) + " 種考試"));
+
+  /* ④ 什麼都沒選 → 第三句話。這是初始狀態，以前被「預設選第一項」蓋住了。 */
+  const none = run({ date: "2026-03-01", sc: [7, 7, 7, 7] });
+  ok("完全沒選考試種類時要說「還沒選」，不是拿第一項幫他算",
+    none.verdict.includes("還沒選"), none.verdict);
+
+  /* ⑤ 選單本身：不存在的選項不准留在 DOM 上。 */
+  ok("換表之後選單上不會出現另一張表才有的考試",
+    boxes["#etest"].innerHTML.indexOf('value="ielts"') < 0 ||
+    boxes["#etest"].innerHTML.indexOf('value="ieltsA"') < 0,
+    boxes["#etest"].innerHTML.slice(0, 120));
+
+  /* ⑥ splitInto 是資料，會跟表一起腐壞——對照表指到不存在的 key 就完全失效。 */
+  ok("splitInto 的每一項都指得到真的存在的 key",
+    Object.keys(E.splitInto).every(k => E.t2.tests[k] &&
+      E.splitInto[k].every(v => E.t1.tests[v])), Object.keys(E.splitInto).join("、"));
+}
 
 ok("選單不列 OET（字母級不進計算機）",
   boxes["#etest"].innerHTML.indexOf('value="oet"') < 0);
@@ -656,8 +714,14 @@ console.log("\n— 字母級（舊制 OET）—");
   /* noCalc 把 OET 擋在選單外，所以正常操作到不了這裡。但 grade() 回的
      {letter:true} 沒有 level 也沒有 gone，如果 run() 沒有出口就是**拋例外**，
      而拋在 click handler 裡的例外會讓面板停在上一次的結果——靜默停格。 */
+  boxes["#etest"].innerHTML = ""; boxes["#etest"].value = ""; boxes["#etest"].dataset.was = "";
   boxes["#edate"].value = "2024-01-01";
   boxes["#edate"]._h.change();
+  /* 選單現在會擋掉選項以外的值（跟真的 <select> 一樣），而 noCalc 把 oet 濾掉了，
+     所以這裡沒辦法用「塞 value」進去——那條路使用者也走不到。
+     但要驗的東西沒有消失：**noCalc 是資料**，哪天有人把 oet 拿掉，
+     這段程式就會被真的走到。所以這裡明講是在模擬那一天，手動把選項補回選單。 */
+  boxes["#etest"].innerHTML += '<option value="oet">OET</option>';
   boxes["#etest"].value = "oet";
   ["#el", "#er", "#ew", "#es"].forEach(k => { boxes[k].value = "350"; });
   boxes["#esa"].value = ""; boxes["#edelay"].value = "";

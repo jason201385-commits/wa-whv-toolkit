@@ -26,13 +26,18 @@
 
   --ok:#2C7A46;
   --ok-soft:#E4F3E7;
-  --ok-line:#8FC8A3;
+  /* 三個 -line 只用在「這個框有狀態」的邊界(.ans.ok/.warn/.bad 與 .pending),
+     所以吃 WCAG 1.4.11 的 3:1 非文字門檻,不是一般細線。原本淺色 1.81–2.15、
+     深色 2.13–3.01 全都不及格——底色跟 --card 又只差 1.0–1.17,等於整個答案框
+     沒有可見邊界。這裡只調亮度、保留色相,並由 contrast.test.js §3c 釘住。
+     --line / --line-soft 不動:那些是裝飾性細線,拉到 3:1 會毀掉整體的柔和感。 */
+  --ok-line:#51A46E;
   --warn:#8A5A12;
   --warn-soft:#FBEFD9;
-  --warn-line:#E2BB78;
+  --warn-line:#C18929;
   --bad:#B02A18;
   --bad-soft:#FCE9E4;
-  --bad-line:#E4A093;
+  --bad-line:#D97967;
 
   --shadow:0 1px 2px rgba(96,74,48,.06),0 14px 32px -24px rgba(96,74,48,.5);
   --cjk:"PingFang TC","Microsoft JhengHei","Noto Sans TC","Hiragino Sans TC",sans-serif;
@@ -53,21 +58,21 @@
     --accent-ink:#08282B;
     --ok:#7FD69F;
     --ok-soft:#1C3426;
-    --ok-line:#3F7C57;
+    --ok-line:#407D58;
     --warn:#EDBE74;
     --warn-soft:#342816;
-    --warn-line:#7C612E;
+    --warn-line:#8B6D33;
     --bad:#F7A395;
     --bad-soft:#38211D;
-    --bad-line:#8C4439;
+    --bad-line:#B15648;
     --shadow:0 1px 2px rgba(0,0,0,.38),0 14px 32px -24px rgba(0,0,0,.8);
   }
 }
 :root[data-theme="dark"]{
   --paper:#221D18;--card:#2C2621;--sunk:#352E28;--ink:#F7F0E6;--ink-2:#D8CCBC;--muted:#A89A88;
   --line:#43392F;--line-soft:#38312A;--accent:#6FD3DC;--accent-ink:#08282B;
-  --ok:#7FD69F;--ok-soft:#1C3426;--ok-line:#3F7C57;--warn:#EDBE74;--warn-soft:#342816;--warn-line:#7C612E;
-  --bad:#F7A395;--bad-soft:#38211D;--bad-line:#8C4439;
+  --ok:#7FD69F;--ok-soft:#1C3426;--ok-line:#407D58;--warn:#EDBE74;--warn-soft:#342816;--warn-line:#8B6D33;
+  --bad:#F7A395;--bad-soft:#38211D;--bad-line:#B15648;
   --shadow:0 1px 2px rgba(0,0,0,.38),0 14px 32px -24px rgba(0,0,0,.8);
 }
 
@@ -80,6 +85,11 @@ body{
   padding-bottom:env(safe-area-inset-bottom);
 }
 .wrap{max-width:760px;margin:0 auto;padding:0 18px}
+/* 這條兜底非有不可：內文連結一個 class 都沒帶,而 .navgrid a / .calls a.tel /
+   .srclist a / footer a 全是脈絡選擇器,吃不到寫在 d: 欄位裡的那些連結。
+   少了它,深色模式會退回瀏覽器預設的 #0000EE,對比只剩 1.4——而中招的
+   剛好是出事當下要點的那幾個(cyber.gov.au 報案、TIS 131 450、AFCA)。 */
+a{color:var(--accent)}
 
 /* ============ header ============ */
 .top{padding:26px 0 18px;border-bottom:1px solid var(--line)}
@@ -133,6 +143,9 @@ input[type=text],input[type=number],select{
   background:var(--paper);color:var(--ink);
 }
 select{font-family:var(--cjk);font-size:16px}
+/* opacity:1 不能省——Firefox 的預設 placeholder 已經帶 opacity,
+   不歸零的話會在 --muted 上再乘一次,又掉回 AA 以下 */
+input::placeholder{color:var(--muted);opacity:1}
 /* [tabindex] 一定要在裡面：圖卡預覽區是 role="tabpanel" tabindex="0"，
    靠鍵盤 Tab 進去時如果沒有外框，使用者就不知道焦點跑到哪裡了 */
 input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{
@@ -221,7 +234,10 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,su
   padding:9px 11px;border-radius:9px;background:var(--sunk);font-size:14.5px;line-height:1.5}
 .catlist .mk{font-family:var(--mono);font-weight:700;font-size:13px}
 .catlist li.yes .mk{color:var(--ok)}
-.catlist li.no{opacity:.62}
+/* 不用 opacity 降階:opacity 會把文字連同背景一起稀釋,疊完只剩 4.26,
+   而 contrast.test.js 只看 token 對 token,對這種「把 token 稀釋掉」的繞路是全盲的。
+   改成明確指定 --muted,現有的 PAIRS 就守得到(--muted on --sunk = 4.90 淺 / 4.86 深)。 */
+.catlist li.no .mk,.catlist li.no .n{color:var(--muted)}
 .catlist li.no .n{text-decoration:line-through;text-decoration-color:var(--line)}
 .catlist .w{display:block;margin-top:3px;font-size:12.5px;color:var(--muted);text-decoration:none}
 
@@ -1963,6 +1979,12 @@ const DATA = {
       { k:"competent",  n:"Competent" }
     ],
     noCalc: ["oet"],
+    /* 2025-08-07 換表時，舊表的一格 IELTS 被拆成 Academic 與 General Training。
+       這是換表當天真的發生的事，不是資料結構長得不一樣而已——所以寫成一張明確的
+       對照表，給 fillTests() 換表時對映用，也給「這張表上沒有這個考試」那段文案用。
+       ⚠️ 只能往「拆開 → 合併」的方向自動對映。反過來程式不准挑：
+       Academic 跟 General Training 是兩張不同的成績單，猜哪一張等於替人作答。 */
+    splitInto: { ielts: ["ieltsA", "ieltsG"] },
     t1: {
       from: "2025-08-07",
       tests: {
@@ -4096,16 +4118,40 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
 
   if(!box || !go) return;
 
-  /* 選單跟著考試日換表。Table 2 少了三種考試，換過去之後原本選的那一張可能整個
-     不存在——這時候一定要換成新表的第一項，不能靜默留著舊的 value。
-     （/cost 的 ctrans 就是被一個不存在的選項靜默落回預設值咬過一次。） */
+  /* 選單跟著考試日換表。換過去之後原本選的那一張可能不在新表上，這時候有三種情況，
+     必須分開處理——**不能全部落到 keys[0]**：
+
+       ① 新表也有同一張                    → 留著
+       ② 新表有等價的那一張（ieltsA/ieltsG
+          在舊表就是一格 ielts）            → 對映過去
+       ③ 新表根本沒有（CELPIP / MET /
+          LANGUAGECERT 只在新表上）         → 清空，讓 run() 走下面那條
+                                             「這張表上沒有這個考試」
+
+     原本第 ③ 種跟第 ② 種都寫成 `keys[0]`，而**兩張表的 keys[0] 都是 c1（C1 Advanced）**，
+     所以「考 IELTS 的人改一次日期」會被靜默改判成劍橋 C1，然後被告知差一百多分。
+     觸發不需要任何奇怪操作：#edate 在 #etest 前面，正序是安全的，
+     但**年份打錯回頭改**就會踩到——改日期會重跑這支，使用者沒有做任何選擇動作。
+     （/cost 的 ctrans 也被同一個形狀咬過一次：不存在的選項靜默落回預設值。） */
+  const mergeTo = {};   /* 拆開的那幾張 → 舊表合併成一格的那個 key */
+  Object.keys(E.splitInto).forEach(k =>
+    E.splitInto[k].forEach(v => { mergeTo[v] = k; }));
+
   function fillTests(){
     const tb = tableFor(dateVal());
     const keys = Object.keys(tb.tests).filter(k => E.noCalc.indexOf(k) < 0);
-    const prev = sel.value;
-    sel.innerHTML = keys.map(k =>
-      '<option value="' + esc(k) + '">' + esc(tb.tests[k].name) + '</option>').join("");
-    sel.value = keys.indexOf(prev) >= 0 ? prev : keys[0];
+    /* 清空過之後 sel.value 是空的，要靠 was 記得他原本選的是哪一張——
+       日期改回來時才還得了原，也才知道下面該說哪一句。 */
+    const prev = sel.value || sel.dataset.was || "";
+    const want = keys.indexOf(prev) >= 0 ? prev
+               : keys.indexOf(mergeTo[prev]) >= 0 ? mergeTo[prev]
+               : "";
+    if(prev) sel.dataset.was = prev;
+    sel.innerHTML = (want ? ""
+        : '<option value="" disabled selected>—— 請選考試種類 ——</option>')
+      + keys.map(k =>
+        '<option value="' + esc(k) + '">' + esc(tb.tests[k].name) + '</option>').join("");
+    sel.value = want;
   }
   fillTests();
   (function(){
@@ -4179,15 +4225,32 @@ $("#bday").addEventListener("keydown", e => { if(e.key === "Enter") checkAge(); 
     /* ⚠️ 不可以在這裡 switch 已知代碼然後 default 落到某一張表。
        換表之後選單上不存在的考試，要走「這張表沒有這個考試」那條路，不能靜默改判。 */
     if(!tb.tests[key]){
-      box.className = "ans bad";
-      box.innerHTML = '<div class="verdict">這張表上沒有這個考試</div><div class="detail">'
-        + '<p>你填的考試日期是 <b class="num">' + fmtD(td) + '</b>，適用的是 <b>'
-        + (isT1 ? "Table 1（" + E.t1.from + " 起）" : "Table 2（" + E.t2.until + " 以前）")
-        + '</b>，而那張表上沒有你選的這一張。'
-        + (isT1 ? '' : '舊制那張表只有 ' + Object.keys(E.t2.tests).length
-            + ' 種考試，<b>CELPIP、MET、LANGUAGECERT 都不在上面</b>——那不是分數不夠，'
-            + '是整張成績不能拿來證明英文能力。')
-        + '把上面的考試種類重選一次。</p></div>';
+      const was = (sel.dataset && sel.dataset.was) || "";
+      const whichTbl = '<b>' + (isT1 ? "Table 1（" + E.t1.from + " 起）"
+                                     : "Table 2（" + E.t2.until + " 以前）") + '</b>';
+      /* 三種走到這裡的路，說的不是同一件事，所以文案不能共用一句。
+         最容易寫錯的是中間那種：新表**有** IELTS，只是拆成兩張，
+         這時候印「這張表上沒有 IELTS」是假的，而且會讓人以為成績作廢。 */
+      const splitNow = E.splitInto[was] && E.splitInto[was].every(k => tb.tests[k]);
+      box.className = "ans " + (splitNow || !was ? "warn" : "bad");
+      box.innerHTML = '<div class="verdict">'
+        + (splitNow ? "這張表把 IELTS 分成兩種，請選你考的那一張"
+           : !was    ? "還沒選考試種類"
+           :           "這張表上沒有這個考試") + '</div><div class="detail">'
+        + '<p>你填的考試日期是 <b class="num">' + fmtD(td) + '</b>，適用的是 ' + whichTbl + '，'
+        + (splitNow
+            ? '而它把 IELTS 拆成 <b>'
+              + E.splitInto[was].map(k => esc(tb.tests[k].name)).join('</b> 與 <b>') + '</b> 兩欄。'
+              + '<b>你的成績沒有作廢</b>，只是要照成績單上寫的那一種重選一次'
+              + '（成績單抬頭會寫 Academic 或 General Training）。'
+          : !was
+            ? '請先在上面選一個考試種類，四項分數才知道要對哪一欄。'
+            : '而那張表上沒有你選的這一張。'
+              + (isT1 ? '' : '舊制那張表只有 ' + Object.keys(E.t2.tests).length
+                  + ' 種考試，<b>CELPIP、MET、LANGUAGECERT 都不在上面</b>——那不是分數不夠，'
+                  + '是整張成績不能拿來證明英文能力。')
+              + '把上面的考試種類重選一次。')
+        + '</p></div>';
       return;
     }
 

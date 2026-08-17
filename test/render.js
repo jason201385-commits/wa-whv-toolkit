@@ -159,9 +159,24 @@ const daysAgo = n => { const d = new Date(TODAY); d.setDate(d.getDate() - n); re
       appendChild(c) { this.children.push(c); return c; }, setAttribute() {},
       addEventListener(ev, fn) { this._h[ev] = fn; }, dispatchEvent(ev) { const f = this._h[ev && ev.type]; if (f) f(); } };
   }
+  /* `#etest` 要當成真的 <select>：指定選項以外的值會靜默變成 ""。
+     用普通屬性的假 DOM 印出來的是「這支塞進去的值」，不是使用者看得到的值，
+     於是這份「用眼睛讀」的輸出會替一條瀏覽器上走不到的路背書。 */
+  function mkSelect() {
+    const e = mkEl("select");
+    let v = "";
+    Object.defineProperty(e, "value", {
+      get() { return v; },
+      set(x) {
+        const opts = [...String(e.innerHTML).matchAll(/value="([^"]*)"/g)].map(m => m[1]);
+        v = opts.indexOf(String(x)) >= 0 ? String(x) : "";
+      },
+    });
+    return e;
+  }
   const boxes = {};
   ["#eans", "#ego", "#etest", "#edate", "#el", "#er", "#ew", "#es", "#esa", "#edelay", "#etbl"]
-    .forEach(k => { boxes[k] = mkEl("div"); });
+    .forEach(k => { boxes[k] = k === "#etest" ? mkSelect() : mkEl("div"); });
   const sb = { Math, Number, String, console, isFinite, parseFloat, Date,
     Event: function (t) { return { type: t }; },
     document: { createElement: mkEl, querySelector() { return null; } },
@@ -179,9 +194,14 @@ const daysAgo = n => { const d = new Date(TODAY); d.setDate(d.getDate() - n); re
   /* 每一格都要單獨看一次：選單換表、四項沒填滿、剛好差一項、過期、
      兩個時鐘誰先關——文案在其中一種狀態下讀起來會怪，是常見的退化方式。 */
   function show(label, o) {
+    /* 每一格當成重新開一次頁面：選單的 value 與 dataset.was 會跨格殘留。 */
+    boxes["#etest"].innerHTML = ""; boxes["#etest"].value = ""; boxes["#etest"].dataset.was = "";
     boxes["#edate"].value = o.date || "";
     boxes["#edate"]._h.change && boxes["#edate"]._h.change();   /* 換表 */
     if (o.test) boxes["#etest"].value = o.test;
+    /* `o.redate` ＝ 填完之後回頭改日期（年份打錯很常見）。畫面上 #edate 排在 #etest 前面，
+       所以正序是安全的那一個，只跑正序等於沒在看換表。 */
+    if (o.redate) { boxes["#edate"].value = o.redate; boxes["#edate"]._h.change && boxes["#edate"]._h.change(); }
     ["#el", "#er", "#ew", "#es"].forEach((k, i) => { boxes[k].value = o.sc ? String(o.sc[i]) : ""; });
     boxes["#esa"].value = o.sa || "";
     boxes["#edelay"].value = o.delay === undefined ? "" : String(o.delay);
@@ -215,7 +235,15 @@ const daysAgo = n => { const d = new Date(TODAY); d.setDate(d.getDate() - n); re
   show("遞件天數填 0（跟留空不一樣）", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(6), delay: 0 });
   show("遞件天數填 90（超過 60 天邀請期）", { date: monthsAgo(6), test: "ieltsA", sc: [7, 7, 7, 7], sa: monthsAgo(6), delay: 90 });
   show("四項連 Competent 都沒到", { date: monthsAgo(6), test: "ieltsA", sc: [5, 5.5, 5, 6] });
-  show("換到舊制表之後選了新制才有的 CELPIP", { date: "2024-03-01", test: "celpip", sc: [9, 9, 10, 9] });
+  /* 換表的三種下場，全部走「填完再回頭改日期」——不是硬塞 value。
+     真的 <select> 選不到不存在的選項，硬塞出來的那條路使用者走不到。 */
+  show("改日期換到舊制表・那張表沒有 CELPIP",
+    { date: "2026-03-01", test: "celpip", redate: "2024-03-01", sc: [9, 9, 10, 9] });
+  show("改日期換到新制表・IELTS 被拆成兩張（成績沒作廢，要重選）",
+    { date: "2024-03-01", test: "ielts", redate: "2026-03-01", sc: [7, 7, 7, 7] });
+  show("改日期換到舊制表・ieltsA 合併回 ielts 照常算分",
+    { date: "2026-03-01", test: "ieltsA", redate: "2024-03-01", sc: [7, 7, 7, 7] });
+  show("完全沒選考試種類", { date: "2026-03-01", sc: [7, 7, 7, 7] });
   /* 這兩格是「排不出日期 ≠ 來不及」。英文剩不到 60 天的時候，往回推的邀請日已成過去式，
      而結論句原本照樣寫「先關的是：英文，最晚 <過去的日期>」——
      讀起來像門關了，實際上成績還能用。方向是「誤以為來不及」，代價是白花錢重考。 */
