@@ -564,6 +564,32 @@ if (st.stdout.trim()) {
   console.log("   已還原成 HEAD 的版本，繼續。");
 }
 
+/* 標的字串裡的換行一律寫成 `\n`，這裡按檔案實際用的換行字元翻譯過去。
+
+   2026-08-17 才發現這件事，而它安靜了很久：public/index.html 整份是 CRLF，
+   於是**任何跨行的標的都永遠比不中**——`"…{\n      tone = …"` 對上的是 `"…{\r\n      tone = …"`。
+   當時清單裡 6 條標的含換行，就正好是 6 條回報「找不到標的」，一條不多一條不少。
+   它偽裝成「文案改過了」（檔頭本來就寫著這種情況要改標的），
+   所以每次看到都會被當成待辦欠債，而不是「這個機制對跨行標的整類失效」。
+   分辨兩者的方法很便宜：**看失效的那幾條有沒有共同的形狀**。有，就不是文案的問題。 */
+const EOL = ORIG.includes("\r\n") ? "\r\n" : "\n";
+const eol = (s) => EOL === "\n" ? s : s.split("\n").join(EOL);
+
+/* 全清單的標的檢查，**刻意不受 --from/--to 影響**：
+   「哪幾條在空轉」是整份清單的性質，不是這一段的性質。
+   分段跑的時候尤其需要——只跑第 1–20 條的人，沒有理由要等到某天有人跑完整輪，
+   才知道第 89 條早就沒在測東西。只做字串比對、不跑測試，92 條不到一秒。 */
+const stale = M.map((m, i) => [i + 1, m]).filter(([, [, from]]) => ORIG.split(eol(from)).length - 1 !== 1);
+if (stale.length) {
+  console.log("⚠️ 全清單 " + M.length + " 條裡，有 " + stale.length + " 條的標的對不上——那幾條是空轉的：");
+  for (const [n, [name, from]] of stale) {
+    const h = ORIG.split(eol(from)).length - 1;
+    console.log("   #" + n + "  " + (h === 0 ? "找不到標的" : "標的出現 " + h + " 次") + "：" + name);
+  }
+} else {
+  console.log("全清單 " + M.length + " 條的標的都在，而且各只出現一次。");
+}
+
 const SUITES =["settle", "cost", "pr", "flags", "wage", "english", "golden"];
 
 /* 夾到清單範圍內，並記住「使用者到底有沒有指定範圍」——
@@ -583,8 +609,10 @@ console.log("共 " + M.length + " 條突變，這一輪跑第 " + lo + "–" + h
 
 let missed = 0;
 try {
-  for (const [name, from, to] of SLICE) {
-    /* 找不到標的通常代表文案改過了——那條突變本身要跟著改，不是把它刪掉。 */
+  for (const [name, rawFrom, rawTo] of SLICE) {
+    const from = eol(rawFrom), to = eol(rawTo);
+    /* 找不到標的通常代表文案改過了——那條突變本身要跟著改，不是把它刪掉。
+       但先確認它不是整類失效（見上面 EOL 那段）：**同時失效的那幾條有沒有共同形狀。** */
     const hits = ORIG.split(from).length - 1;
     if (hits === 0) { console.log("？ 找不到標的：" + name + "  ←— 突變本身寫錯了"); missed++; continue; }
     /* 標的出現不只一次時，split().join() 會把每一處都改掉——那就不是「改壞一個字」，
